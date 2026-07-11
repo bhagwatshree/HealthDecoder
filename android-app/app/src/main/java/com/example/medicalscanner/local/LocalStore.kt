@@ -1,0 +1,298 @@
+package com.example.medicalscanner.local
+
+import android.content.Context
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import com.example.medicalscanner.local.db.MedicalDatabase
+import com.example.medicalscanner.local.db.ReportSummary
+import com.example.medicalscanner.model.MedLogEntry
+import com.example.medicalscanner.model.MedicalReport
+import com.example.medicalscanner.model.PendingTest
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.reflect.TypeToken
+import java.io.File
+
+/**
+ * On-device store for all medical records, backed by Room/SQLite. Everything lives under
+ * a single folder (filesDir/records) so the whole dataset can be zipped for backup in
+ * one step:
+ *
+ *   records/
+ *     medical_records.db  – SQLite database (reports, pending tests, med logs, FTS index)
+ *     images/<id>.jpg     – captured report images
+ *     sources/…           – preserved original imports (PDF/Word/images)
+ *
+ * Legacy JSON files (reports.json, pending_tests.json, med_logs.json) from older builds
+ * are imported into the database on first open and renamed to *.imported as a fallback.
+ *
+ * All calls do synchronous IO — invoke them from Dispatchers.IO.
+ */
+object LocalStore {
+
+    private val gson: Gson = GsonBuilder().setLenient().create()
+
+    @Volatile
+    private var database: MedicalDatabase? = null
+
+    // ── Folder / file layout ────────────────────────────────────────────────
+    fun recordsDir(context: Context): File =
+        File(context.filesDir, "records").apply { if (!exists()) mkdirs() }
+
+    fun imagesDir(context: Context): File =
+        File(recordsDir(context), "images").apply { if (!exists()) mkdirs() }
+
+    fun sourcesDir(context: Context): File =
+        File(recordsDir(context), "sources").apply { if (!exists()) mkdirs() }
+
+    // ── Database lifecycle ──────────────────────────────────────────────────
+    private fun db(context: Context): MedicalDatabase {
+        database?.let { return it }
+        synchronized(this) {
+            database?.let { return it }
+            val dbFile = File(recordsDir(context), "medical_records.db")
+            val instance = Room.databaseBuilder(
+                context.applicationContext,
+                MedicalDatabase::class.java,
+                dbFile.absolutePath
+            )
+                // Single-file journal: the .db is always complete after each commit,
+                // which keeps BackupManager's zip snapshots consistent.
+                .setJournalMode(RoomDatabase.JournalMode.TRUNCATE)
+                .addMigrations(MedicalDatabase.MIGRATION_1_2)
+                .build()
+            importLegacyJson(context, instance)
+            database = instance
+            return instance
+        }
+    }
+
+    /**
+     * Closes the database and drops the singleton. MUST be called before the records
+     * folder is replaced or wiped (backup restore, clear-all-data), otherwise the open
+     * connection would keep writing into deleted/replaced files.
+     */
+    fun closeDatabase() {
+        synchronized(this) {
+            database?.close()
+            database = null
+        }
+    }
+
+    // ── Legacy JSON import (one-time migration from the file-based store) ───
+    private fun <T> readLegacyList(file: File, type: java.lang.reflect.Type): List<T> {
+        if (!file.exists()) return emptyList()
+        return try {
+            val text = file.readText()
+            if (text.isBlank()) emptyList()
+            else gson.fromJson<List<T>>(text, type) ?: emptyList()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    private fun importLegacyJson(context: Context, db: MedicalDatabase) {
+        val dir = recordsDir(context)
+        val reportsFile = File(dir, "reports.json")
+        val pendingFile = File(dir, "pending_tests.json")
+        val logsFile = File(dir, "med_logs.json")
+        if (!reportsFile.exists() && !pendingFile.exists() && !logsFile.exists()) return
+
+        try {
+            db.runInTransaction {
+                readLegacyList<MedicalReport>(
+                    reportsFile, object : TypeToken<List<MedicalReport>>() {}.type
+                ).takeIf { it.isNotEmpty() }?.let { db.reportDao().insertAll(it) }
+
+                readLegacyList<PendingTest>(
+                    pendingFile, object : TypeToken<List<PendingTest>>() {}.type
+                ).takeIf { it.isNotEmpty() }?.let { db.pendingTestDao().insertAll(it) }
+
+                readLegacyList<MedLogEntry>(
+                    logsFile, object : TypeToken<List<MedLogEntry>>() {}.type
+                ).takeIf { it.isNotEmpty() }?.let { db.medLogDao().insertAll(it) }
+            }
+            // Keep the originals as a fallback, renamed so the import never re-runs.
+            for (f in listOf(reportsFile, pendingFile, logsFile)) {
+                if (f.exists()) f.renameTo(File(dir, f.name + ".imported"))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    // ── Reports ─────────────────────────────────────────────────────────────
+    fun getReports(context: Context): MutableList<MedicalReport> =
+        db(context).reportDao().getAll().toMutableList()
+
+    fun getReport(context: Context, id: String): MedicalReport? =
+        db(context).reportDao().getById(id)
+
+    /** Light rows (no OCR text / analysis JSON) for list screens. */
+    fun getReportSummaries(context: Context): List<ReportSummary> =
+        db(context).reportDao().getSummaries()
+
+    /** Full-text search over patient, type, comments, and extracted OCR text. */
+    fun searchReports(context: Context, query: String): List<ReportSummary> {
+        val ftsQuery = query.trim()
+            .split(Regex("\\s+"))
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { "\"${it.replace("\"", "")}\"*" }
+        if (ftsQuery.isBlank()) return getReportSummaries(context)
+        return try {
+            db(context).reportDao().search(ftsQuery)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    /** Most recent earlier report of the same patient and category (for comparisons). */
+    fun findPreviousReport(
+        context: Context,
+        patient: String?,
+        category: String,
+        beforeDate: String,
+        excludeId: String
+    ): MedicalReport? =
+        db(context).reportDao().findPrevious(patient ?: "", category, beforeDate, excludeId)
+
+    fun upsertReport(context: Context, report: MedicalReport) {
+        db(context).reportDao().upsert(report)
+    }
+
+    // ── Duplicate detection ─────────────────────────────────────────────────
+    /** SHA-256 hex digest, used to fingerprint scanned pages / imported files. */
+    fun sha256(bytes: ByteArray): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString("") { "%02x".format(it) }
+
+    /** Existing report that already contains ANY of these page/file hashes (exact re-scan). */
+    fun findReportByAnyHash(context: Context, hashes: Collection<String>): MedicalReport? {
+        if (hashes.isEmpty()) return null
+        val set = hashes.toSet()
+        val id = db(context).reportDao().getAllPageHashes()
+            .firstOrNull { row -> row.pageHashes.any { it in set } }?.id
+            ?: return null
+        return getReport(context, id)
+    }
+
+    /**
+     * Existing report that looks like the same document scanned again: same patient,
+     * date, and category, with near-identical extracted text (>= 85% token overlap).
+     */
+    fun findContentDuplicate(
+        context: Context,
+        patient: String,
+        date: String,
+        category: String,
+        extractedText: String
+    ): MedicalReport? {
+        val newTokens = tokenize(extractedText)
+        if (newTokens.isEmpty()) return null
+        return db(context).reportDao().findByPatientDateCategory(patient, date, category)
+            .firstOrNull { candidate ->
+                val existing = tokenize(candidate.extractedText ?: "")
+                existing.isNotEmpty() && jaccard(newTokens, existing) >= 0.85
+            }
+    }
+
+    /**
+     * Finds reports ALREADY in the store that duplicate an earlier report — same patient,
+     * date, and category with near-identical text, or sharing a page-file hash. Returns
+     * the NEWER copies (by createdAt), which are the safe ones to delete; the original
+     * of each group is always kept.
+     */
+    fun findStoredDuplicates(context: Context): List<MedicalReport> {
+        val all = db(context).reportDao().getAll().sortedBy { it.createdAt }
+        val kept = mutableListOf<MedicalReport>()
+        val duplicates = mutableListOf<MedicalReport>()
+        for (report in all) {
+            val tokens = tokenize(report.extractedText ?: "")
+            val isDup = kept.any { earlier ->
+                val sameSlot = (earlier.patientName ?: "").equals(report.patientName ?: "", true) &&
+                    earlier.reportDate == report.reportDate &&
+                    (earlier.reportCategory ?: "") == (report.reportCategory ?: "")
+                if (!sameSlot) return@any false
+                val earlierTokens = tokenize(earlier.extractedText ?: "")
+                val textMatch = tokens.isNotEmpty() && earlierTokens.isNotEmpty() &&
+                    jaccard(tokens, earlierTokens) >= 0.85
+                // Hash match alone is NOT enough: sibling reports saved from one
+                // multi-report scan share their page files on purpose. Only treat a
+                // shared hash as a duplicate when neither report has readable text.
+                val hashOnlyMatch = tokens.isEmpty() && earlierTokens.isEmpty() &&
+                    report.pageHashes.isNotEmpty() &&
+                    report.pageHashes.any { it in earlier.pageHashes }
+                textMatch || hashOnlyMatch
+            }
+            if (isDup) duplicates.add(report) else kept.add(report)
+        }
+        return duplicates
+    }
+
+    private fun tokenize(text: String): Set<String> =
+        text.lowercase().split(Regex("[^a-z0-9]+")).filter { it.length > 1 }.toSet()
+
+    private fun jaccard(a: Set<String>, b: Set<String>): Double {
+        val intersection = a.count { it in b }
+        val union = a.size + b.size - intersection
+        return if (union == 0) 0.0 else intersection.toDouble() / union
+    }
+
+    fun deleteReport(context: Context, id: String) {
+        val removed = db(context).reportDao().getById(id)
+        db(context).reportDao().deleteById(id)
+        // Remove associated page images and preserved source files inside our records
+        // folder — but only files no sibling report (from the same scan) still uses.
+        val paths = (removed?.imagePaths?.takeIf { it.isNotEmpty() } ?: listOfNotNull(removed?.imagePath)) +
+            (removed?.sourceFiles?.map { it.path } ?: emptyList())
+        for (path in paths) {
+            try {
+                if (path.isBlank()) continue
+                if (db(context).reportDao().countOtherReportsUsingPath(path, id) > 0) continue
+                val f = File(path)
+                if (f.exists() && f.absolutePath.startsWith(recordsDir(context).absolutePath)) f.delete()
+            } catch (_: Exception) { }
+        }
+    }
+
+    // ── Pending tests ───────────────────────────────────────────────────────
+    fun getPendingTests(context: Context): MutableList<PendingTest> =
+        db(context).pendingTestDao().getAll().toMutableList()
+
+    fun upsertPendingTest(context: Context, test: PendingTest) {
+        db(context).pendingTestDao().upsert(test)
+    }
+
+    fun deletePendingTest(context: Context, id: String) {
+        db(context).pendingTestDao().deleteById(id)
+    }
+
+    // ── Medication logs ─────────────────────────────────────────────────────
+    fun getMedLogs(context: Context, patientName: String, medicineName: String): List<MedLogEntry> =
+        db(context).medLogDao().getFor(patientName, medicineName)
+
+    fun addMedLog(context: Context, entry: MedLogEntry) {
+        db(context).medLogDao().insert(entry)
+    }
+
+    // ── Image storage ───────────────────────────────────────────────────────
+    /** Copies raw image bytes into the records/images folder and returns the absolute path. */
+    fun saveImage(context: Context, id: String, bytes: ByteArray): String {
+        val file = File(imagesDir(context), "$id.jpg")
+        file.writeBytes(bytes)
+        return file.absolutePath
+    }
+
+    /** Preserves an original imported file (PDF/Word/image) so the user can download it later. */
+    fun saveSourceFile(context: Context, reportId: String, index: Int, name: String, bytes: ByteArray): String {
+        val safe = name.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "file" }
+        val file = File(sourcesDir(context), "${reportId}_${index}_$safe")
+        file.writeBytes(bytes)
+        return file.absolutePath
+    }
+
+    /** Utility for generating record IDs without external dependencies. */
+    fun newId(): String = java.util.UUID.randomUUID().toString()
+}

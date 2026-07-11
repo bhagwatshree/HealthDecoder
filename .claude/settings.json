@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(cd d:\\\\Medical\\\\android-app; .\\\\gradlew.bat :app:compileDebugKotlin --offline -q 2>&1 | Select-String -Pattern \"\\\\.kt:\" | Select-Object -First 25; Write-Output \"EXITCODE=$LASTEXITCODE\")",
+      "PowerShell(cd d:\\\\Medical\\\\android-app; .\\\\gradlew.bat :app:assembleDebug --offline -q 2>&1 | Select-String -Pattern \"error:\" | Select-Object -First 10; Write-Output \"EXITCODE=$LASTEXITCODE\")",
+      "PowerShell(cd d:\\\\Medical\\\\android-app; .\\\\gradlew.bat :app:assembleDebug --offline -q 2>&1 | Select-String -Pattern \"\\\\.kt:|error:\" | Select-Object -First 15; Write-Output \"EXITCODE=$LASTEXITCODE\")",
+      "Bash(curl -s \"https://repo.maven.apache.org/maven2/com/google/devtools/ksp/com.google.devtools.ksp.gradle.plugin/maven-metadata.xml\")",
+      "Bash(curl -s \"https://dl.google.com/android/maven2/androidx/room/room-runtime/maven-metadata.xml\")",
+      "Bash(curl -s \"https://repo.maven.apache.org/maven2/com/google/devtools/ksp/com.google.devtools.ksp.gradle.plugin/maven-metadata.xml\" -o /tmp/ksp-meta.xml)",
+      "Read(//tmp/**)",
+      "Bash(tail -c 1500 /tmp/ksp-meta.xml)",
+      "Bash(./gradlew.bat :app:assembleDebug --console=plain -q)",
+      "Bash(./gradlew.bat :app:assembleDebug --console=plain)",
+      "Bash(./gradlew.bat :app:testDebugUnitTest --console=plain)",
+      "Bash(node --check migrate.js)",
+      "Bash(node -e ' *)",
+      "Bash(node migrate.js)",
+      "PowerShell($cs = Get-CimInstance Win32_ComputerSystem; \"HypervisorPresent: $\\($cs.HypervisorPresent\\)\"; $cpu = Get-CimInstance Win32_Processor; \"VirtualizationFirmwareEnabled: $\\($cpu.VirtualizationFirmwareEnabled\\)\"; \"CPU: $\\($cpu.Name\\)\"; systeminfo | Select-String -Pattern \"Hyper-V\")",
+      "Bash(./gradlew.bat :app:assembleDebug :app:testDebugUnitTest --console=plain)",
+      "Bash(./gradlew.bat :app:testDebugUnitTest :app:assembleDebug --console=plain)",
+      "Bash(node --check /d/Medical/backend/server.js)",
+      "WebFetch(domain:ai.google.dev)",
+      "Bash(xargs -I{} grep -liE \"login|auth|user|sso|oauth|apikey|api_key\" {})"
+    ]
+  }
+}

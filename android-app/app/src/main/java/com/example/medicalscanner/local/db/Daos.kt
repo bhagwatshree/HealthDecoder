@@ -1,0 +1,116 @@
+package com.example.medicalscanner.local.db
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import com.example.medicalscanner.model.MedLogEntry
+import com.example.medicalscanner.model.MedicalReport
+import com.example.medicalscanner.model.PendingTest
+
+// All queries are blocking; LocalStore is only ever called from Dispatchers.IO.
+
+@Dao
+interface ReportDao {
+
+    @Query("SELECT * FROM reports ORDER BY COALESCE(reportDate, createdAt) DESC")
+    fun getAll(): List<MedicalReport>
+
+    @Query("SELECT * FROM reports WHERE id = :id LIMIT 1")
+    fun getById(id: String): MedicalReport?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun upsert(report: MedicalReport)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertAll(reports: List<MedicalReport>)
+
+    @Query("DELETE FROM reports WHERE id = :id")
+    fun deleteById(id: String)
+
+    @Query("SELECT COUNT(*) FROM reports")
+    fun count(): Int
+
+    @Query(
+        """SELECT id, patientName, reportDate, reportType, reportCategory, imagePath, createdAt
+           FROM reports ORDER BY COALESCE(reportDate, createdAt) DESC"""
+    )
+    fun getSummaries(): List<ReportSummary>
+
+    /** Full-text search over patient name, report type, comments, and OCR text. */
+    @Query(
+        """SELECT r.id, r.patientName, r.reportDate, r.reportType, r.reportCategory, r.imagePath, r.createdAt
+           FROM reports r JOIN reports_fts fts ON r.rowid = fts.rowid
+           WHERE reports_fts MATCH :ftsQuery
+           ORDER BY COALESCE(r.reportDate, r.createdAt) DESC"""
+    )
+    fun search(ftsQuery: String): List<ReportSummary>
+
+    /**
+     * How many OTHER reports still reference this image/source file. Reports saved from
+     * one multi-report scan share their page files, so files are only deleted when the
+     * last report using them goes.
+     */
+    @Query(
+        """SELECT COUNT(*) FROM reports
+           WHERE id != :excludeId AND (
+             imagePath = :path
+             OR imagePaths LIKE '%' || :path || '%'
+             OR sourceFiles LIKE '%' || :path || '%')"""
+    )
+    fun countOtherReportsUsingPath(path: String, excludeId: String): Int
+
+    /** id + page hashes of every report, for exact duplicate-file detection. */
+    @Query("SELECT id, pageHashes FROM reports")
+    fun getAllPageHashes(): List<ReportHashRow>
+
+    /** Candidate reports for content-level duplicate detection. */
+    @Query(
+        """SELECT * FROM reports
+           WHERE patientName = :patient COLLATE NOCASE
+             AND reportDate = :date AND reportCategory = :category"""
+    )
+    fun findByPatientDateCategory(patient: String, date: String, category: String): List<MedicalReport>
+
+    /** Most recent earlier report of the same patient and category (for comparisons). */
+    @Query(
+        """SELECT * FROM reports
+           WHERE id != :excludeId AND patientName = :patient AND reportCategory = :category
+             AND COALESCE(reportDate, '') < :beforeDate
+           ORDER BY COALESCE(reportDate, createdAt) DESC LIMIT 1"""
+    )
+    fun findPrevious(patient: String, category: String, beforeDate: String, excludeId: String): MedicalReport?
+}
+
+@Dao
+interface PendingTestDao {
+
+    @Query("SELECT * FROM pending_tests ORDER BY createdAt DESC")
+    fun getAll(): List<PendingTest>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun upsert(test: PendingTest)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertAll(tests: List<PendingTest>)
+
+    @Query("DELETE FROM pending_tests WHERE id = :id")
+    fun deleteById(id: String)
+}
+
+@Dao
+interface MedLogDao {
+
+    @Query(
+        """SELECT * FROM med_logs
+           WHERE patientName = :patientName AND medicineName = :medicineName
+           ORDER BY takenAt DESC"""
+    )
+    fun getFor(patientName: String, medicineName: String): List<MedLogEntry>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insert(entry: MedLogEntry)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertAll(entries: List<MedLogEntry>)
+}

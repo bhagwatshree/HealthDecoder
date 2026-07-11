@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Camera capture temp files are created in context.cacheDir (see ScanScreen.createCameraTempUri) -->
+    <cache-path name="camera_captures" path="." />
+    <files-path name="app_files" path="." />
+    <external-cache-path name="external_cache" path="." />
+    <external-files-path name="external_files" path="." />
+</paths>
