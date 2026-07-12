@@ -132,4 +132,12 @@ interface ProcessedEmailDao {
 
     @Query("DELETE FROM processed_emails")
     fun deleteAll()
+
+    /** Reports a background scan (EmailScanWorker) downloaded but nobody has reviewed yet —
+     *  ScanScreen surfaces these as the same import/skip dialog the "Check Email" button uses. */
+    @Query("SELECT * FROM processed_emails WHERE pendingLocalPath IS NOT NULL ORDER BY processedAt DESC")
+    fun getPending(): List<ProcessedEmail>
+
+    @Query("UPDATE processed_emails SET pendingLocalPath = NULL WHERE messageId = :messageId")
+    fun clearPending(messageId: String)
 }

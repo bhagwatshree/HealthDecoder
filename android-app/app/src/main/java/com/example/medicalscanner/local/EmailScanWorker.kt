@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.WorkerParameters
 import com.example.medicalscanner.MainActivity
 import com.example.medicalscanner.ai.OcrEngine
@@ -49,13 +50,15 @@ class EmailScanWorker(
          *  that just ended (1); a manually-triggered scan covers 2 to also catch anything the
          *  previous day's run might have missed. */
         const val KEY_LOOKBACK_DAYS = "lookback_days"
+        /** Output data key: how many new reports this run found (readable via WorkInfo). */
+        const val KEY_FOUND_COUNT = "found_count"
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        if (!AppSettings.isEmailConsentGranted(context)) {
-            return@withContext Result.success()
-        }
-
+        // Having a linked email at all already required a deliberate action (OAuth link or
+        // entering IMAP credentials) — that's the real consent gate. isEmailConsentGranted only
+        // controls whether the *recurring* daily alarm is armed (see EmailScanReminderManager);
+        // a manually-triggered scan (Scan Now / ScanScreen) should still run without it.
         val email = AppSettings.getLinkedEmail(context) ?: return@withContext Result.success()
         val type = AppSettings.getLinkedEmailType(context) ?: return@withContext Result.success()
         val lookbackDays = inputData.getInt(KEY_LOOKBACK_DAYS, 1)
@@ -68,7 +71,7 @@ class EmailScanWorker(
             if (newReportsCount > 0) {
                 showNotification(newReportsCount)
             }
-            Result.success()
+            Result.success(Data.Builder().putInt(KEY_FOUND_COUNT, newReportsCount).build())
         } catch (e: Exception) {
             e.printStackTrace()
             Result.failure()

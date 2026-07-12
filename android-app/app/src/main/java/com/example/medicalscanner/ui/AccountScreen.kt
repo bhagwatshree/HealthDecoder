@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import com.example.medicalscanner.auth.BiometricHelper
 import com.example.medicalscanner.local.AppSettings
+import com.example.medicalscanner.local.LocalStore
 import com.example.medicalscanner.local.SecureKeyManager
 import com.example.medicalscanner.model.KeyAssignment
 import com.example.medicalscanner.model.UserAccount
@@ -38,7 +39,10 @@ import com.example.medicalscanner.network.AccountSync
 import com.example.medicalscanner.network.NetworkModule
 import com.example.medicalscanner.network.httpCode
 import com.example.medicalscanner.network.apiErrorMessage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
@@ -476,6 +480,7 @@ fun AccountScreen(
                             var scanHour by remember { mutableStateOf(AppSettings.getEmailScanHour(context)) }
                             var scanMinute by remember { mutableStateOf(AppSettings.getEmailScanMinute(context)) }
                             var showScanTimePicker by remember { mutableStateOf(false) }
+                            var searchPromptInput by remember { mutableStateOf(AppSettings.getEmailSearchPrompt(context)) }
 
                             fun rescheduleDailyScan() {
                                 com.example.medicalscanner.reminder.EmailScanReminderManager.scheduleDaily(context, scanHour, scanMinute)
@@ -542,8 +547,25 @@ fun AccountScreen(
                                 )
                             }
 
+                            Text("Hospital Search Prompt (Optional)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            OutlinedTextField(
+                                value = searchPromptInput,
+                                onValueChange = { searchPromptInput = it },
+                                label = { Text("e.g. Apollo, Metropolis, Fortis") },
+                                placeholder = { Text("Leave blank to search all reports") },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            Text(
+                                "Translates this intent using AI to target specific lab emails.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+
                             TextButton(
                                 onClick = {
+                                    AppSettings.setEmailSearchPrompt(context, searchPromptInput)
                                     val request = androidx.work.OneTimeWorkRequestBuilder<com.example.medicalscanner.local.EmailScanWorker>()
                                         .setInputData(
                                             androidx.work.Data.Builder()
@@ -551,17 +573,44 @@ fun AccountScreen(
                                                 .build()
                                         )
                                         .build()
-                                    androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
+                                    val workManager = androidx.work.WorkManager.getInstance(context)
+                                    workManager.enqueueUniqueWork(
                                         "ManualEmailScanWork",
                                         androidx.work.ExistingWorkPolicy.REPLACE,
                                         request
                                     )
                                     android.widget.Toast.makeText(context, "Scanning inbox for new reports…", android.widget.Toast.LENGTH_SHORT).show()
+                                    coroutineScope.launch {
+                                        val info = workManager.getWorkInfoByIdFlow(request.id).first { it != null && it.state.isFinished }
+                                        val message = when (info?.state) {
+                                            androidx.work.WorkInfo.State.SUCCEEDED -> {
+                                                val count = info.outputData.getInt(com.example.medicalscanner.local.EmailScanWorker.KEY_FOUND_COUNT, 0)
+                                                if (count > 0) "Found $count new report(s) — check your notifications." else "No new reports found in the last 2 days."
+                                            }
+                                            else -> "Scan failed. Check your email settings and try again."
+                                        }
+                                        android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+                                    }
                                 },
-                                enabled = emailConsent && !AppSettings.getLinkedEmail(context).isNullOrBlank(),
+                                enabled = !AppSettings.getLinkedEmail(context).isNullOrBlank(),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text("Scan Now (last 2 days)")
+                            }
+
+                            TextButton(
+                                onClick = {
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        LocalStore.getDatabase(context).processedEmailDao().deleteAll()
+                                        withContext(Dispatchers.Main) {
+                                            android.widget.Toast.makeText(context, "Email scan history cleared — reports can be re-detected.", android.widget.Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                },
+                                enabled = !AppSettings.getLinkedEmail(context).isNullOrBlank(),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Clear Email Scan History", color = MaterialTheme.colorScheme.error)
                             }
 
                             Spacer(modifier = Modifier.height(8.dp))
@@ -572,7 +621,6 @@ fun AccountScreen(
                             var imapPortInput by remember { mutableStateOf(AppSettings.getImapPort(context).toString()) }
                             var imapPasswordInput by remember { mutableStateOf(SecureKeyManager.getImapPassword(context) ?: "") }
                             var oauthTokenInput by remember { mutableStateOf(SecureKeyManager.getEmailToken(context) ?: "") }
-                            var searchPromptInput by remember { mutableStateOf(AppSettings.getEmailSearchPrompt(context)) }
 
                             Text("Email Provider", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -657,22 +705,6 @@ fun AccountScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("Hospital Search Prompt (Optional)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                            OutlinedTextField(
-                                value = searchPromptInput,
-                                onValueChange = { searchPromptInput = it },
-                                label = { Text("e.g. Apollo, Metropolis, Fortis") },
-                                placeholder = { Text("Leave blank to search all reports") },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp)
-                            )
-                            Text(
-                                "Translates this intent using AI to target specific lab emails.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
 
                             Spacer(modifier = Modifier.height(12.dp))
                             Button(

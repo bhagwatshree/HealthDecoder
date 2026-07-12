@@ -3,6 +3,7 @@ package com.example.medicalscanner.network
 import android.util.Base64
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.logging.HttpLoggingInterceptor
 import org.json.JSONObject
 import java.io.IOException
 import java.net.URLEncoder
@@ -23,6 +24,7 @@ object GmailApiClient {
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
         .build()
 
     /** A PDF attachment located on a message, ready to download. */

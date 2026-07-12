@@ -91,7 +91,26 @@ fun ScanScreen(
     var emailResultReportName by remember { mutableStateOf("") }
     var emailResultLocalPath by remember { mutableStateOf("") }
     var emailResultMessageId by remember { mutableStateOf("") }
-    
+    // Reports EmailScanWorker (background/Scan Now) downloaded but nobody has reviewed yet —
+    // shown as a list below (see "Found in email" card) so the user analyzes them one at a
+    // time, at their own pace, rather than an auto-popping dialog.
+    var pendingEmailQueue by remember { mutableStateOf<List<ProcessedEmail>>(emptyList()) }
+
+    // ON_RESUME (not LaunchedEffect(Unit)) so this re-checks every time the screen comes back
+    // into view — e.g. after "Scan Now" finds something while the user was on AccountScreen —
+    // not just the first time ScanScreen is composed.
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+        coroutineScope.launch {
+            val pending = withContext(Dispatchers.IO) {
+                LocalStore.getDatabase(context).processedEmailDao().getPending()
+            }
+            if (pending.isNotEmpty()) {
+                pendingEmailQueue = pending
+            }
+        }
+    }
+
+
     // ML Kit Local OCR results
     var localOcrText by remember { mutableStateOf("") }
     var localOcrRunning by remember { mutableStateOf(false) }
@@ -916,6 +935,69 @@ fun ScanScreen(
                     Icon(imageVector = Icons.Default.Email, contentDescription = "Scan from Email")
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Import from Linked Email", fontWeight = FontWeight.Bold)
+                }
+
+                // Reports a background scan (Scan Now / the 7 PM daily alarm) already downloaded
+                // but nobody has reviewed yet — one row per report, analyzed one at a time.
+                if (pendingEmailQueue.isNotEmpty()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "Found in email (${pendingEmailQueue.size})",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            pendingEmailQueue.forEach { pending ->
+                                val localPath = pending.pendingLocalPath
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        pending.attachmentName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.weight(1f).padding(end = 8.dp),
+                                        maxLines = 1
+                                    )
+                                    Row {
+                                        TextButton(onClick = {
+                                            pendingEmailQueue = pendingEmailQueue.filter { it.messageId != pending.messageId }
+                                            coroutineScope.launch(Dispatchers.IO) {
+                                                LocalStore.getDatabase(context).processedEmailDao().insert(
+                                                    ProcessedEmail(
+                                                        messageId = pending.messageId,
+                                                        attachmentName = pending.attachmentName,
+                                                        processedAt = System.currentTimeMillis()
+                                                    )
+                                                )
+                                            }
+                                            try { localPath?.let { File(it).delete() } } catch (_: Exception) {}
+                                        }) { Text("Skip") }
+                                        Button(onClick = {
+                                            if (localPath == null) return@Button
+                                            pendingEmailQueue = pendingEmailQueue.filter { it.messageId != pending.messageId }
+                                            importSelectedFiles(listOf(Uri.fromFile(File(localPath))))
+                                            coroutineScope.launch(Dispatchers.IO) {
+                                                LocalStore.getDatabase(context).processedEmailDao().insert(
+                                                    ProcessedEmail(
+                                                        messageId = pending.messageId,
+                                                        attachmentName = pending.attachmentName,
+                                                        processedAt = System.currentTimeMillis()
+                                                    )
+                                                )
+                                            }
+                                            android.widget.Toast.makeText(context, "Report added to scan preview.", android.widget.Toast.LENGTH_SHORT).show()
+                                        }) { Text("Analyze") }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Indicator when a Word/text document's text has been attached

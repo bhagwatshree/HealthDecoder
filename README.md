@@ -80,6 +80,18 @@ scanning for report attachments) both need a Google Cloud OAuth setup — full w
 **[backend/GOOGLE_SIGNIN_SETUP.md](backend/GOOGLE_SIGNIN_SETUP.md)**. Skip it and both features
 stay hidden/inert; email/password and phone-OTP login work regardless.
 
+Once linked (Account screen → Email Report Scanner), the app looks for PDF report attachments
+in recent inbox mail (subject keywords + `has:attachment` — see `EmailScanWorker.kt`) via the
+Gmail API (`GmailApiClient.kt`) or plain IMAP for the "Other" provider option:
+
+- **"Scan Now"** checks the last 2 days on demand.
+- A daily background check (default 7 PM, configurable via the "Scan time" row) covers the
+  prior day automatically.
+- Either way, anything found shows up as a card on the **Scan screen** ("Found in email") —
+  review and tap **Analyze** per report, at your own pace; nothing auto-imports.
+- **"Clear Email Scan History"** resets the dedup tracking, in case you need report emails
+  re-detected (e.g. while testing).
+
 ## Android app
 
 1. Place a `google-services.json` (from your Firebase project) at `android-app/app/google-services.json`
