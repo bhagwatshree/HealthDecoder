@@ -1,8 +1,10 @@
-# Medical Scanner
+# HealthDecoder
 
 A medical report/prescription scanner: an Android app that photographs reports and prescriptions,
 a serverless backend that extracts structured data via Gemini vision (with optional Sarvam AI for
 Indic OCR/translation), and account-based access with phone-OTP or email/password login.
+
+Repo: [github.com/bhagwatshree/HealthDecoder](https://github.com/bhagwatshree/HealthDecoder)
 
 ## Repo structure
 
@@ -11,8 +13,8 @@ backend/        Express API, deployed as a single AWS Lambda (see backend/DEPLOY
 android-app/    Kotlin/Compose Android app
 ```
 
-The local-only cost dashboard (AWS/Gemini/Sarvam/Firebase spend) is a separate project at
-`D:\Medical_Admin_Dashboard`, not part of this repo.
+The local-only cost dashboard (AWS/Gemini/Sarvam/Firebase spend) lives in its own repo:
+[github.com/bhagwatshree/Health_Decoder_Admin](https://github.com/bhagwatshree/Health_Decoder_Admin).
 
 ## Prerequisites
 
