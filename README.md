@@ -96,3 +96,28 @@ Every Gemini/Sarvam/Firebase call the backend makes is logged (provider, operati
 estimated cost) to the `api_usage_events` table — see `backend/usageTracker.js` and
 `backend/pricing.js`. Point the separate dashboard project at the same `DATABASE_URL` to see
 spend broken down by provider/operation/model, plus a CloudWatch-based AWS cost estimate.
+
+## Security
+
+- **On-device database encryption** — the local medical records database (Room/SQLite) is
+  encrypted at rest with SQLCipher. The passphrase is a random 256-bit key generated on first
+  launch and stored in `EncryptedSharedPreferences`, backed by the Android Keystore (hardware-backed
+  where the device supports it) — see `SecureKeyManager.kt` / `LocalStore.kt`.
+- **Passwords** are hashed with bcrypt (`backend/auth.js`), never stored or logged in plain text.
+- **Sessions** are stateless JWTs (`JWT_SECRET`-signed), sent as a bearer token and verified on
+  every authenticated request; a stale/invalid token (e.g. after account deletion) forces the app
+  back to the login screen automatically.
+- **Phone-OTP login** never trusts the client's claim of a verified number — the backend
+  independently re-verifies the Firebase ID token server-side (`verifyPhoneIdToken` in `auth.js`)
+  before treating a phone number as confirmed.
+- **User-supplied API keys** (if attached to an account) are encrypted at rest with AES-256-GCM
+  (`encrypt`/`decrypt` in `auth.js`), keyed by `ENCRYPTION_KEY`, not stored in plaintext.
+- **Biometric login** (fingerprint) is opt-in and only unlocks a token already issued by a real
+  password/OTP login — it's a local convenience shortcut, not a separate auth mechanism.
+- **Transport**: the deployed backend is only reachable over HTTPS (API Gateway's default
+  endpoint); there is no plain-HTTP path in production.
+- **Secrets stay out of git**: `backend/.env`, `backend/samconfig.toml` (holds the real deploy
+  parameters — DB URL, API keys, JWT/encryption secrets, Firebase service account), and
+  `android-app/app/google-services.json` are all gitignored. Never commit these.
+- **Medical disclaimer**: the app requires the user to acknowledge (once) that it is not a
+  medical device and does not provide medical advice before first use.
