@@ -188,4 +188,69 @@ object AppSettings {
     fun setThemeMode(context: Context, mode: String) {
         prefs(context).edit().putString(KEY_THEME_MODE, mode).apply()
     }
+
+    // ── Email Scanning Configurations ────────────────────────────────────────
+    private const val KEY_EMAIL_CONSENT = "email_consent_granted"
+    private const val KEY_LINKED_EMAIL = "linked_email_address"
+    private const val KEY_LINKED_EMAIL_TYPE = "linked_email_type"
+    private const val KEY_IMAP_HOST = "linked_imap_host"
+    private const val KEY_IMAP_PORT = "linked_imap_port"
+    private const val KEY_EMAIL_SEARCH_PROMPT = "email_search_prompt"
+    private const val KEY_EMAIL_SCAN_HOUR = "email_scan_hour"
+    private const val KEY_EMAIL_SCAN_MINUTE = "email_scan_minute"
+
+    fun isEmailConsentGranted(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_EMAIL_CONSENT, false)
+
+    fun setEmailConsentGranted(context: Context, granted: Boolean) {
+        prefs(context).edit().putBoolean(KEY_EMAIL_CONSENT, granted).apply()
+    }
+
+    fun getLinkedEmail(context: Context): String? =
+        prefs(context).getString(KEY_LINKED_EMAIL, null)?.takeIf { it.isNotBlank() }
+
+    fun setLinkedEmail(context: Context, email: String?) {
+        prefs(context).edit().putString(KEY_LINKED_EMAIL, email).apply()
+    }
+
+    fun getLinkedEmailType(context: Context): String? =
+        prefs(context).getString(KEY_LINKED_EMAIL_TYPE, null)?.takeIf { it.isNotBlank() }
+
+    fun setLinkedEmailType(context: Context, type: String?) {
+        prefs(context).edit().putString(KEY_LINKED_EMAIL_TYPE, type).apply()
+    }
+
+    fun getImapHost(context: Context): String =
+        prefs(context).getString(KEY_IMAP_HOST, "imap.gmail.com") ?: "imap.gmail.com"
+
+    fun setImapHost(context: Context, host: String) {
+        prefs(context).edit().putString(KEY_IMAP_HOST, host).apply()
+    }
+
+    fun getImapPort(context: Context): Int =
+        prefs(context).getInt(KEY_IMAP_PORT, 993)
+
+    fun setImapPort(context: Context, port: Int) {
+        prefs(context).edit().putInt(KEY_IMAP_PORT, port).apply()
+    }
+
+    fun getEmailScanHour(context: Context): Int =
+        prefs(context).getInt(KEY_EMAIL_SCAN_HOUR, 19)
+
+    fun getEmailScanMinute(context: Context): Int =
+        prefs(context).getInt(KEY_EMAIL_SCAN_MINUTE, 0)
+
+    fun setEmailScanTime(context: Context, hour: Int, minute: Int) {
+        prefs(context).edit()
+            .putInt(KEY_EMAIL_SCAN_HOUR, hour)
+            .putInt(KEY_EMAIL_SCAN_MINUTE, minute)
+            .apply()
+    }
+
+    fun getEmailSearchPrompt(context: Context): String =
+        prefs(context).getString(KEY_EMAIL_SEARCH_PROMPT, "") ?: ""
+
+    fun setEmailSearchPrompt(context: Context, prompt: String) {
+        prefs(context).edit().putString(KEY_EMAIL_SEARCH_PROMPT, prompt).apply()
+    }
 }

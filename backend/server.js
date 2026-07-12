@@ -7,11 +7,17 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import db from './db.js';
 import { scanMedicalReport, generateReportComparison, generateHealthInsights, generateChatResponse, generateDetailedAnalysis, generateMedicineInfo, generateSpeech } from './ocr.js';
-import { hashPassword, verifyPassword, signToken, requireAuth, encrypt, publicUser, verifyPhoneIdToken, isPhoneAuthConfigured } from './auth.js';
+import { hashPassword, verifyPassword, signToken, requireAuth, encrypt, decrypt, publicUser, verifyPhoneIdToken, isPhoneAuthConfigured, verifyGoogleSignInIdToken, isGoogleAuthConfigured } from './auth.js';
+import crypto from 'crypto';
+
 import { resolveKeysForUser, peekAssignmentForUser } from './keyPool.js';
 import { runWithUsageContext, trackFirebaseVerify } from './usageTracker.js';
+import jwt from 'jsonwebtoken';
 
 dotenv.config();
+
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-insecure-secret-change-me';
+
 
 // Helpers for paths in ES Modules. Named __srcFilename/__srcDirname (not __filename/__dirname)
 // because the Lambda bundle (see template.yaml's esbuild Banner) injects its own top-level
@@ -199,6 +205,56 @@ app.post('/api/auth/login-phone', async (req, res) => {
   }
 });
 
+// Native "Sign in with Google": the device already picked an account and produced a Firebase
+// ID token via Credential Manager + FirebaseAuth.signInWithCredential — no browser, no OAuth
+// client secret. This only proves identity (email); it never requests Gmail scope/refresh
+// tokens — that's a separate, deliberately browser-based flow (see /api/auth/google below),
+// needed only when a user opts into email scanning.
+app.post('/api/auth/google-signin', async (req, res) => {
+  try {
+    const { idToken } = req.body || {};
+    if (!idToken) {
+      return res.status(400).json({ error: 'Google ID token is required.' });
+    }
+    if (!isGoogleAuthConfigured()) {
+      return res.status(501).json({ error: 'Google sign-in is not configured on this server yet.' });
+    }
+
+    let email, firstName, lastName;
+    try {
+      ({ email, firstName, lastName } = await verifyGoogleSignInIdToken(String(idToken)));
+      trackFirebaseVerify(null, true);
+    } catch (error) {
+      trackFirebaseVerify(null, false);
+      return res.status(401).json({ error: 'Google sign-in verification failed. Please try again.' });
+    }
+
+    const existing = await db.query('SELECT * FROM users WHERE email = $1 OR google_email = $1', [email]);
+    let user = existing.rows[0];
+
+    if (!user) {
+      const msisdnHash = crypto.createHash('md5').update(email).digest('hex').substring(0, 10);
+      const dummyMsisdn = `google_${msisdnHash}`;
+      const dummyPasswordHash = await hashPassword(crypto.randomBytes(16).toString('hex'));
+
+      const inserted = await db.query(
+        `INSERT INTO users (first_name, last_name, date_of_birth, gender, email, msisdn, password_hash, google_email)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [firstName, lastName, '2000-01-01', 'prefer_not_to_say', email, dummyMsisdn, dummyPasswordHash, email]
+      );
+      user = inserted.rows[0];
+    } else if (!user.google_email) {
+      await db.query('UPDATE users SET google_email = $1 WHERE id = $2', [email, user.id]);
+      user.google_email = email;
+    }
+
+    res.json({ token: signToken(user), user: publicUser(user) });
+  } catch (error) {
+    console.error('Google sign-in failed:', error);
+    res.status(500).json({ error: 'Failed to sign in with Google.' });
+  }
+});
+
 app.get('/api/auth/me', requireAuth, (req, res) => {
   res.json(publicUser(req.user));
 });
@@ -261,6 +317,241 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Failed to change password.' });
   }
 });
+
+// Helper to get Google redirect URI dynamically
+const getGoogleRedirectUri = (req) => {
+  const host = req.get('host');
+  const protocol = req.protocol === 'https' || host.includes('execute-api') || host.includes('ngrok') ? 'https' : 'http';
+  return `${protocol}://${host}/api/auth/google/callback`;
+};
+
+// 1. Redirect user to Google for authentication
+app.get('/api/auth/google', (req, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    return res.status(400).send(`
+      <html>
+        <body style="font-family: sans-serif; padding: 40px; text-align: center; background-color: #f8f9fa;">
+          <div style="max-width: 500px; margin: auto; padding: 30px; border-radius: 12px; background: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h2 style="color: #d32f2f; margin-top: 0;">Google OAuth Not Configured</h2>
+            <p style="color: #495057; font-size: 15px; line-height: 1.6;">
+              Please configure the Google OAuth client credentials on the server. Add the following variables to your <code>.env</code> file:
+            </p>
+            <pre style="background: #e9ecef; padding: 12px; border-radius: 6px; text-align: left; font-size: 14px;">GOOGLE_CLIENT_ID=your_client_id<br>GOOGLE_CLIENT_SECRET=your_client_secret</pre>
+            <p style="color: #6c757d; font-size: 13px;">Once added, restart your server and try again.</p>
+            <button onclick="window.close()" style="margin-top: 15px; padding: 10px 24px; font-size: 15px; font-weight: bold; color: white; background: #007bff; border: none; border-radius: 6px; cursor: pointer;">Close Window</button>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+
+  const state = req.query.state || 'login';
+  const redirectUri = getGoogleRedirectUri(req);
+  // gmail.readonly (not the full https://mail.google.com/ IMAP scope) — narrower scope means
+  // Google's standard verification is enough; IMAP access needs the "restricted" mail.google.com
+  // scope, which additionally requires a paid third-party security assessment. The tradeoff is
+  // that email scanning must go through the Gmail REST API instead of raw IMAP — see
+  // GmailApiClient.kt / EmailScanWorker.kt on the Android side.
+  const scope = 'openid email profile https://www.googleapis.com/auth/gmail.readonly';
+  
+  const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?` + 
+    `client_id=${clientId}&` +
+    `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+    `response_type=code&` +
+    `scope=${encodeURIComponent(scope)}&` +
+    `access_type=offline&` +
+    `prompt=consent&` +
+    `state=${encodeURIComponent(state)}`;
+
+  res.redirect(googleAuthUrl);
+});
+
+// 2. Google Redirect Callback Handler
+app.get('/api/auth/google/callback', async (req, res) => {
+  try {
+    const { code, state } = req.query;
+    if (!code) {
+      return res.status(400).send('Authorization code not provided from Google.');
+    }
+
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const redirectUri = getGoogleRedirectUri(req);
+
+    // Exchange authorization code for tokens
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code'
+      })
+    });
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error('Failed to exchange Google OAuth code:', errorText);
+      return res.status(tokenResponse.status).send(`Failed to authenticate with Google: ${errorText}`);
+    }
+
+    const tokens = await tokenResponse.json();
+    const idToken = tokens.id_token;
+    if (!idToken) {
+      return res.status(400).send('No ID token received from Google.');
+    }
+
+    // Decode ID token payload (no network request needed, safely decode base64)
+    const payloadParts = idToken.split('.');
+    if (payloadParts.length < 2) {
+      return res.status(400).send('Invalid ID token format.');
+    }
+    const idTokenPayload = JSON.parse(Buffer.from(payloadParts[1], 'base64').toString('utf8'));
+    
+    const email = idTokenPayload.email?.toLowerCase();
+    if (!email) {
+      return res.status(400).send('Google did not return an email address.');
+    }
+
+    const givenName = idTokenPayload.given_name || 'Google';
+    const familyName = idTokenPayload.family_name || 'User';
+    const encryptedRefreshToken = tokens.refresh_token ? encrypt(tokens.refresh_token) : null;
+
+    let targetUser = null;
+
+    // Check if we are linking an account or logging in
+    if (state && state.startsWith('link|')) {
+      const jwtToken = state.split('|')[1];
+      let loggedInUser = null;
+      try {
+        const payload = jwt.verify(jwtToken, JWT_SECRET);
+        const result = await db.query('SELECT * FROM users WHERE id = $1', [payload.sub]);
+        loggedInUser = result.rows[0];
+      } catch (e) {
+        return res.status(401).send('Session expired. Please log in again from the app settings page before linking Google.');
+      }
+
+      if (!loggedInUser) {
+        return res.status(401).send('User not found.');
+      }
+
+      // Link the Google account details
+      const updateQuery = encryptedRefreshToken 
+        ? 'UPDATE users SET google_email = $1, google_refresh_token = $2 WHERE id = $3 RETURNING *'
+        : 'UPDATE users SET google_email = $1 WHERE id = $2 RETURNING *';
+      
+      const updateParams = encryptedRefreshToken
+        ? [email, encryptedRefreshToken, loggedInUser.id]
+        : [email, loggedInUser.id];
+      
+      const updateResult = await db.query(updateQuery, updateParams);
+      targetUser = updateResult.rows[0];
+
+      // Redirect back to app linking callback
+      const appLinkUrl = `medicalscanner://oauth2-link?google_email=${encodeURIComponent(email)}&google_access_token=${encodeURIComponent(tokens.access_token)}`;
+      return res.redirect(appLinkUrl);
+    }
+
+    // Default: Login flow
+    // Find if user already exists (by email, or by google_email)
+    const existingUserRes = await db.query(
+      'SELECT * FROM users WHERE email = $1 OR google_email = $1',
+      [email]
+    );
+
+    if (existingUserRes.rows.length > 0) {
+      targetUser = existingUserRes.rows[0];
+      // Update Google refresh token if we got a new one during this authentication
+      if (encryptedRefreshToken) {
+        await db.query(
+          'UPDATE users SET google_email = $1, google_refresh_token = $2 WHERE id = $3',
+          [email, encryptedRefreshToken, targetUser.id]
+        );
+      }
+    } else {
+      // Create new user (automatically generate details)
+      const dummyDob = '2000-01-01';
+      const dummyGender = 'prefer_not_to_say';
+      // derive msisdn: unique string, max 20 chars
+      const msisdnHash = crypto.createHash('md5').update(email).digest('hex').substring(0, 10);
+      const dummyMsisdn = `google_${msisdnHash}`;
+      const dummyPassword = crypto.randomBytes(16).toString('hex');
+      const dummyPasswordHash = await hashPassword(dummyPassword);
+
+      const insertRes = await db.query(
+        `INSERT INTO users (first_name, last_name, date_of_birth, gender, email, msisdn, password_hash, google_email, google_refresh_token)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+        [givenName, familyName, dummyDob, dummyGender, email, dummyMsisdn, dummyPasswordHash, email, encryptedRefreshToken]
+      );
+      targetUser = insertRes.rows[0];
+    }
+
+    const appSessionToken = signToken(targetUser);
+    
+    // Redirect back to the android app
+    const appUrl = `medicalscanner://oauth2?` + 
+      `token=${encodeURIComponent(appSessionToken)}&` +
+      `email=${encodeURIComponent(targetUser.email)}&` +
+      `google_email=${encodeURIComponent(email)}&` +
+      `google_access_token=${encodeURIComponent(tokens.access_token)}`;
+
+    res.redirect(appUrl);
+  } catch (error) {
+    console.error('Google OAuth callback failed:', error);
+    res.status(500).send(`Authentication failed: ${error.message}`);
+  }
+});
+
+// 3. Authenticated endpoint to fetch a refreshed access token for the linked Gmail account
+app.get('/api/auth/google/token', requireAuth, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user.google_refresh_token) {
+      return res.status(400).json({ error: 'No Google account linked to this user.' });
+    }
+
+    const decryptedRefreshToken = decrypt(user.google_refresh_token);
+    if (!decryptedRefreshToken) {
+      return res.status(500).json({ error: 'Failed to decrypt refresh token.' });
+    }
+
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      return res.status(500).json({ error: 'Google OAuth client credentials are not configured on the server.' });
+    }
+
+    // Request fresh access token from Google
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: decryptedRefreshToken,
+        grant_type: 'refresh_token'
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to refresh Google access token:', errorText);
+      return res.status(response.status).json({ error: `Failed to refresh Google access token: ${errorText}` });
+    }
+
+    const data = await response.json();
+    res.json({ access_token: data.access_token });
+  } catch (error) {
+    console.error('Failed to refresh Google access token:', error);
+    res.status(500).json({ error: 'Internal server error while refreshing token.' });
+  }
+});
+
+
 
 // Issues the Gemini/Sarvam key the phone should use right now, and accounts for free-tier
 // usage. Call once per app session (or once/day) rather than before every AI call.

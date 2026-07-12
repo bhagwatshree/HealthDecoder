@@ -73,6 +73,13 @@ Phone-based signup/login verifies a Firebase Phone Auth ID token server-side. To
 
 Leave it blank to skip phone auth entirely — email/password signup and login work regardless.
 
+### Google Sign-In & Gmail scanning (optional)
+
+"Continue with Google" login (native, on-device) and "Link Google Account" (Gmail inbox
+scanning for report attachments) both need a Google Cloud OAuth setup — full walkthrough in
+**[backend/GOOGLE_SIGNIN_SETUP.md](backend/GOOGLE_SIGNIN_SETUP.md)**. Skip it and both features
+stay hidden/inert; email/password and phone-OTP login work regardless.
+
 ## Android app
 
 1. Place a `google-services.json` (from your Firebase project) at `android-app/app/google-services.json`
@@ -117,7 +124,7 @@ spend broken down by provider/operation/model, plus a CloudWatch-based AWS cost 
 - **Transport**: the deployed backend is only reachable over HTTPS (API Gateway's default
   endpoint); there is no plain-HTTP path in production.
 - **Secrets stay out of git**: `backend/.env`, `backend/samconfig.toml` (holds the real deploy
-  parameters — DB URL, API keys, JWT/encryption secrets, Firebase service account), and
-  `android-app/app/google-services.json` are all gitignored. Never commit these.
+  parameters — DB URL, API keys, JWT/encryption secrets, Firebase service account, Google OAuth
+  client secret), and `android-app/app/google-services.json` are all gitignored. Never commit these.
 - **Medical disclaimer**: the app requires the user to acknowledge (once) that it is not a
   medical device and does not provide medical advice before first use.

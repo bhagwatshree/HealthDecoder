@@ -3,6 +3,7 @@ package com.example.medicalscanner.reminder
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.example.medicalscanner.local.AppSettings
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -10,6 +11,13 @@ class BootReceiver : BroadcastReceiver() {
             intent.action == "android.intent.action.QUICKBOOT_POWERON") {
             MedicineReminderManager.scheduleAll(context)
             AppointmentReminderManager.scheduleAll(context)
+            if (AppSettings.isEmailConsentGranted(context)) {
+                EmailScanReminderManager.scheduleDaily(
+                    context,
+                    AppSettings.getEmailScanHour(context),
+                    AppSettings.getEmailScanMinute(context)
+                )
+            }
         }
     }
 }

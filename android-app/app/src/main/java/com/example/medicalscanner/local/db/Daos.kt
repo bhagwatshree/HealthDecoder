@@ -7,6 +7,7 @@ import androidx.room.Query
 import com.example.medicalscanner.model.MedLogEntry
 import com.example.medicalscanner.model.MedicalReport
 import com.example.medicalscanner.model.PendingTest
+import com.example.medicalscanner.model.ProcessedEmail
 
 // All queries are blocking; LocalStore is only ever called from Dispatchers.IO.
 
@@ -15,6 +16,9 @@ interface ReportDao {
 
     @Query("SELECT * FROM reports ORDER BY COALESCE(reportDate, createdAt) DESC")
     fun getAll(): List<MedicalReport>
+
+    @Query("SELECT * FROM reports WHERE userEmail = :userEmail OR (userEmail IS NULL AND :userEmail = '') ORDER BY COALESCE(reportDate, createdAt) DESC")
+    fun getAllFiltered(userEmail: String): List<MedicalReport>
 
     @Query("SELECT * FROM reports WHERE id = :id LIMIT 1")
     fun getById(id: String): MedicalReport?
@@ -33,18 +37,20 @@ interface ReportDao {
 
     @Query(
         """SELECT id, patientName, reportDate, reportType, reportCategory, imagePath, createdAt
-           FROM reports ORDER BY COALESCE(reportDate, createdAt) DESC"""
+           FROM reports WHERE userEmail = :userEmail OR (userEmail IS NULL AND :userEmail = '')
+           ORDER BY COALESCE(reportDate, createdAt) DESC"""
     )
-    fun getSummaries(): List<ReportSummary>
+    fun getSummariesFiltered(userEmail: String): List<ReportSummary>
 
     /** Full-text search over patient name, report type, comments, and OCR text. */
     @Query(
         """SELECT r.id, r.patientName, r.reportDate, r.reportType, r.reportCategory, r.imagePath, r.createdAt
            FROM reports r JOIN reports_fts fts ON r.rowid = fts.rowid
-           WHERE reports_fts MATCH :ftsQuery
+           WHERE (r.userEmail = :userEmail OR (r.userEmail IS NULL AND :userEmail = ''))
+             AND reports_fts MATCH :ftsQuery
            ORDER BY COALESCE(r.reportDate, r.createdAt) DESC"""
     )
-    fun search(ftsQuery: String): List<ReportSummary>
+    fun searchFiltered(ftsQuery: String, userEmail: String): List<ReportSummary>
 
     /**
      * How many OTHER reports still reference this image/source file. Reports saved from
@@ -61,25 +67,26 @@ interface ReportDao {
     fun countOtherReportsUsingPath(path: String, excludeId: String): Int
 
     /** id + page hashes of every report, for exact duplicate-file detection. */
-    @Query("SELECT id, pageHashes FROM reports")
-    fun getAllPageHashes(): List<ReportHashRow>
+    @Query("SELECT id, pageHashes FROM reports WHERE userEmail = :userEmail OR (userEmail IS NULL AND :userEmail = '')")
+    fun getAllPageHashesFiltered(userEmail: String): List<ReportHashRow>
 
     /** Candidate reports for content-level duplicate detection. */
     @Query(
         """SELECT * FROM reports
-           WHERE patientName = :patient COLLATE NOCASE
-             AND reportDate = :date AND reportCategory = :category"""
+           WHERE patientName = :patient COLLATE NOCASE AND reportDate = :date AND reportCategory = :category
+             AND (userEmail = :userEmail OR (userEmail IS NULL AND :userEmail = ''))"""
     )
-    fun findByPatientDateCategory(patient: String, date: String, category: String): List<MedicalReport>
+    fun findByPatientDateCategory(patient: String, date: String, category: String, userEmail: String): List<MedicalReport>
 
     /** Most recent earlier report of the same patient and category (for comparisons). */
     @Query(
         """SELECT * FROM reports
            WHERE id != :excludeId AND patientName = :patient AND reportCategory = :category
              AND COALESCE(reportDate, '') < :beforeDate
+             AND (userEmail = :userEmail OR (userEmail IS NULL AND :userEmail = ''))
            ORDER BY COALESCE(reportDate, createdAt) DESC LIMIT 1"""
     )
-    fun findPrevious(patient: String, category: String, beforeDate: String, excludeId: String): MedicalReport?
+    fun findPrevious(patient: String, category: String, beforeDate: String, excludeId: String, userEmail: String): MedicalReport?
 }
 
 @Dao
@@ -113,4 +120,16 @@ interface MedLogDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertAll(entries: List<MedLogEntry>)
+}
+
+@Dao
+interface ProcessedEmailDao {
+    @Query("SELECT EXISTS(SELECT 1 FROM processed_emails WHERE messageId = :messageId LIMIT 1)")
+    fun exists(messageId: String): Boolean
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insert(email: ProcessedEmail)
+
+    @Query("DELETE FROM processed_emails")
+    fun deleteAll()
 }

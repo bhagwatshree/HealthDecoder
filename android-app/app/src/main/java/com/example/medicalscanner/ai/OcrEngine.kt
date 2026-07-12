@@ -288,4 +288,40 @@ Return ONLY raw JSON. No markdown code fences, no extra text.
         val candidate = match?.groupValues?.getOrNull(1)?.trim()?.replace(Regex("\\s+"), " ")
         return if (!candidate.isNullOrBlank() && candidate.length > 3) candidate else "Unknown Patient"
     }
+
+    suspend fun translateSearchPromptToFilter(context: Context, userPrompt: String): String {
+        if (userPrompt.isBlank()) {
+            return "subject:(report OR lab OR diagnostic OR billing OR test OR health OR prescription) has:attachment filename:pdf"
+        }
+        val prompt = """
+            You are a medical email search assistant. Translate the user's request for medical reports or hospital emails into a standard Gmail search query syntax.
+            Also, automatically include generic keywords for medical reports (like report, lab, test, diagnostic, prescription) so that the search captures reports even if they don't exactly match the user's specific request.
+            The default generic query is: "subject:(report OR lab OR diagnostic OR billing OR test OR health OR prescription) has:attachment filename:pdf"
+            
+            Examples:
+            Input: "search SRL Labs"
+            Output: "SRL subject:(report OR lab OR diagnostic OR billing OR test OR health OR prescription) has:attachment filename:pdf"
+            
+            Input: "find blood test from Metropolis"
+            Output: "Metropolis subject:(report OR lab OR diagnostic OR billing OR test OR health OR prescription OR blood) has:attachment filename:pdf"
+            
+            Input: "Max Hospital"
+            Output: "Max subject:(report OR lab OR diagnostic OR billing OR test OR health OR prescription) has:attachment filename:pdf"
+            
+            Input: "$userPrompt"
+            Output: 
+        """.trimIndent()
+        return try {
+            val response = GeminiClient.generateText(context, prompt)
+            GeminiClient.stripJsonFences(response).trim().removeSurrounding("\"").trim()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            val words = userPrompt.split(" ").filter { it.length > 2 }.joinToString(" OR ")
+            if (words.isNotBlank()) {
+                "($words) subject:(report OR lab OR diagnostic OR billing OR test OR health OR prescription) has:attachment filename:pdf"
+            } else {
+                "subject:(report OR lab OR diagnostic OR billing OR test OR health OR prescription) has:attachment filename:pdf"
+            }
+        }
+    }
 }

@@ -15,4 +15,7 @@ object BuildKeys {
 
     // Sarvam AI — used for Indic OCR/translation when needed.
     val SARVAM_API_KEY = BuildConfig.SARVAM_API_KEY
+
+    // Google OAuth "Web application" client ID — powers native Sign in with Google.
+    val GOOGLE_WEB_CLIENT_ID = BuildConfig.GOOGLE_WEB_CLIENT_ID
 }

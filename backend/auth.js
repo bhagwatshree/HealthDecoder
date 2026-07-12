@@ -43,6 +43,25 @@ export async function verifyPhoneIdToken(idToken) {
   return decoded.phone_number;
 }
 
+// Native "Sign in with Google" (Android Credential Manager -> Firebase Auth) shares the same
+// Firebase Admin setup as phone-OTP — both are Firebase ID tokens, just with different claims.
+export function isGoogleAuthConfigured() {
+  return !!firebaseApp;
+}
+
+/** Verifies a Firebase ID token produced by signing in with a Google credential and returns
+ *  the verified email + display name pieces. */
+export async function verifyGoogleSignInIdToken(idToken) {
+  if (!firebaseApp) throw new Error('Google sign-in is not configured on this server.');
+  const decoded = await getAuth(firebaseApp).verifyIdToken(idToken);
+  if (!decoded.email) throw new Error('This sign-in token does not include a verified email.');
+  return {
+    email: String(decoded.email).toLowerCase(),
+    firstName: decoded.given_name || decoded.name?.split(' ')?.[0] || 'Google',
+    lastName: decoded.family_name || 'User',
+  };
+}
+
 export async function hashPassword(password) {
   return bcrypt.hash(password, 10);
 }

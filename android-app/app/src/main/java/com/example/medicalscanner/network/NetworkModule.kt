@@ -6,6 +6,7 @@ import com.example.medicalscanner.model.ApiKeyRequest
 import com.example.medicalscanner.model.ApiKeyResponse
 import com.example.medicalscanner.model.AuthRequest
 import com.example.medicalscanner.model.AuthResponse
+import com.example.medicalscanner.model.GoogleSignInRequest
 import com.example.medicalscanner.model.KeyAssignment
 import com.example.medicalscanner.model.MedicalReport
 import com.example.medicalscanner.model.PhoneLoginRequest
@@ -28,6 +29,11 @@ data class HealthResponse(
     val status: String,
     val timestamp: String
 )
+
+data class GoogleTokenResponse(
+    val access_token: String
+)
+
 
 interface MedicalScannerApi {
     @GET("api/health")
@@ -146,6 +152,10 @@ interface MedicalScannerApi {
     @POST("api/auth/login-phone")
     suspend fun loginPhone(@Body request: PhoneLoginRequest): AuthResponse
 
+    /** Native Google sign-in: the account was already picked on-device via Credential Manager. */
+    @POST("api/auth/google-signin")
+    suspend fun googleSignIn(@Body request: GoogleSignInRequest): AuthResponse
+
     @GET("api/auth/me")
     suspend fun getMe(): UserAccount
 
@@ -171,7 +181,11 @@ interface MedicalScannerApi {
 
     @POST("api/auth/change-password")
     suspend fun changePassword(@Body request: ChangePasswordRequest): SimpleResponse
+
+    @GET("api/auth/google/token")
+    suspend fun getGoogleAccessToken(): GoogleTokenResponse
 }
+
 
 /** Pulls the backend's {"error": "..."} message out of a failed Retrofit call, if present. */
 fun Throwable.apiErrorMessage(): String? {

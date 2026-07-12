@@ -94,6 +94,14 @@ async function runMigration() {
     await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_msisdn_unique ON users(msisdn) WHERE msisdn IS NOT NULL;`);
     console.log('Columns first_name, last_name, date_of_birth, gender, msisdn checked/added to users table.');
 
+    // Google OAuth columns
+    await db.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_email VARCHAR(255);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_refresh_token TEXT;
+    `);
+    console.log('Columns google_email, google_refresh_token checked/added to users table.');
+
+
     // One row per external AI/SMS call — feeds the local cost dashboard (D:\Medical_Admin_Dashboard).
     await db.query(`
       CREATE TABLE IF NOT EXISTS api_usage_events (

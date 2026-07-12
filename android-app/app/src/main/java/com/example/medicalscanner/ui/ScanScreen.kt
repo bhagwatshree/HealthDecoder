@@ -38,9 +38,19 @@ import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
 import com.example.medicalscanner.local.AppSettings
 import com.example.medicalscanner.local.LocalRepository
+import com.example.medicalscanner.local.LocalStore
 import com.example.medicalscanner.local.BackgroundScanScheduler
 import com.example.medicalscanner.util.FileImportUtil
 import com.example.medicalscanner.util.ImageUtil
+import com.example.medicalscanner.local.SecureKeyManager
+import com.example.medicalscanner.network.NetworkModule
+import com.example.medicalscanner.model.ProcessedEmail
+
+import java.util.Properties
+import java.util.Calendar
+import javax.mail.*
+import javax.mail.internet.MimeMessage
+import javax.mail.search.*
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -75,6 +85,12 @@ fun ScanScreen(
     var pendingUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var warningSizeMb by remember { mutableFloatStateOf(0f) }
     var errorMessage by remember { mutableStateOf("") }
+    var showConsentDialog by remember { mutableStateOf(false) }
+    var showSetupAlert by remember { mutableStateOf(false) }
+    var showEmailResultDialog by remember { mutableStateOf(false) }
+    var emailResultReportName by remember { mutableStateOf("") }
+    var emailResultLocalPath by remember { mutableStateOf("") }
+    var emailResultMessageId by remember { mutableStateOf("") }
     
     // ML Kit Local OCR results
     var localOcrText by remember { mutableStateOf("") }
@@ -143,6 +159,185 @@ fun ScanScreen(
             } catch (_: Exception) {}
         }
         return bytes / (1024f * 1024f)
+    }
+
+    fun triggerEmailScan() {
+        importingFiles = true
+        errorMessage = ""
+        coroutineScope.launch {
+            withContext(Dispatchers.IO) {
+                val email = AppSettings.getLinkedEmail(context)
+                val type = AppSettings.getLinkedEmailType(context)
+                if (email.isNullOrBlank() || type.isNullOrBlank()) {
+                    withContext(Dispatchers.Main) {
+                        importingFiles = false
+                        showSetupAlert = true
+                    }
+                    return@withContext
+                }
+
+                val db = LocalStore.getDatabase(context)
+                val dao = db.processedEmailDao()
+
+                fun reportResult(fileName: String?, filePath: String?, msgId: String?) {
+                    importingFiles = false
+                    if (filePath != null && fileName != null && msgId != null) {
+                        emailResultReportName = fileName
+                        emailResultLocalPath = filePath
+                        emailResultMessageId = msgId
+                        showEmailResultDialog = true
+                    } else {
+                        android.widget.Toast.makeText(context, "No new reports found (already scanned or none available).", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+
+                try {
+                    if (type == "gmail") {
+                        // Uses the Gmail REST API (gmail.readonly scope), not IMAP — the full
+                        // mailbox IMAP scope (https://mail.google.com/) needs a paid Google
+                        // security assessment to verify for production. See EmailScanWorker.kt.
+                        val accessToken = try {
+                            val token = NetworkModule.getApi(context).getGoogleAccessToken().access_token
+                            SecureKeyManager.setEmailToken(context, token)
+                            token
+                        } catch (e: Exception) {
+                            SecureKeyManager.getEmailToken(context)
+                        }
+                        if (accessToken.isNullOrBlank()) {
+                            withContext(Dispatchers.Main) {
+                                importingFiles = false
+                                showSetupAlert = true
+                            }
+                            return@withContext
+                        }
+
+                        val cal = Calendar.getInstance()
+                        cal.add(Calendar.DAY_OF_MONTH, -2)
+                        val afterClause = "after:${java.text.SimpleDateFormat("yyyy/MM/dd", java.util.Locale.US).format(cal.time)}"
+                        val keywords = listOf("report", "lab", "diagnostic", "billing", "test", "health", "prescription", "invoice", "medical")
+                        val subjectClause = "(" + keywords.joinToString(" OR ") { "subject:$it" } + ")"
+                        val customSearch = AppSettings.getEmailSearchPrompt(context)
+                        val customClause = if (customSearch.isNotBlank()) " subject:$customSearch" else ""
+                        val query = "$afterClause $subjectClause has:attachment filename:pdf$customClause"
+
+                        var foundFileName: String? = null
+                        var foundFilePath: String? = null
+                        var foundMsgId: String? = null
+
+                        for (messageId in com.example.medicalscanner.network.GmailApiClient.searchMessageIds(accessToken, query)) {
+                            if (dao.exists(messageId)) continue
+                            val attachment = com.example.medicalscanner.network.GmailApiClient.findPdfAttachment(accessToken, messageId) ?: continue
+                            val bytes = com.example.medicalscanner.network.GmailApiClient.downloadAttachment(accessToken, messageId, attachment.attachmentId)
+
+                            val emailImportsDir = File(context.cacheDir, "email_imports").apply { mkdirs() }
+                            val tempFile = File(emailImportsDir, "imported_${System.currentTimeMillis()}_${attachment.fileName}")
+                            tempFile.writeBytes(bytes)
+
+                            foundFileName = attachment.fileName
+                            foundFilePath = tempFile.absolutePath
+                            foundMsgId = messageId
+                            break
+                        }
+
+                        withContext(Dispatchers.Main) { reportResult(foundFileName, foundFilePath, foundMsgId) }
+                        return@withContext
+                    }
+
+                    // "Other (IMAP)" path — a plain IMAP mailbox with a host/port/app-password.
+                    val password = SecureKeyManager.getImapPassword(context)
+                    val host = AppSettings.getImapHost(context)
+                    val port = AppSettings.getImapPort(context)
+
+                    if (password.isNullOrBlank()) {
+                        withContext(Dispatchers.Main) {
+                            importingFiles = false
+                            showSetupAlert = true
+                        }
+                        return@withContext
+                    }
+
+                    val props = Properties()
+                    props.setProperty("mail.store.protocol", "imaps")
+                    props.setProperty("mail.imaps.host", host)
+                    props.setProperty("mail.imaps.port", port.toString())
+                    props.setProperty("mail.imaps.ssl.enable", "true")
+                    props.setProperty("mail.imaps.timeout", "8000")
+                    props.setProperty("mail.imaps.connectiontimeout", "8000")
+
+                    val session = Session.getInstance(props)
+                    val store = session.getStore("imaps")
+                    store.connect(host, port, email, password)
+
+                    val inbox = store.getFolder("INBOX")
+                    inbox.open(Folder.READ_ONLY)
+
+                    val cal = Calendar.getInstance()
+                    cal.add(Calendar.DAY_OF_MONTH, -2)
+                    val twoDaysAgo = cal.time
+                    val dateTerm = ReceivedDateTerm(ComparisonTerm.GE, twoDaysAgo)
+
+                    val keywords = listOf("report", "lab", "diagnostic", "billing", "test", "health", "prescription", "invoice", "medical")
+                    val subjectTerms = keywords.map { SubjectTerm(it) }.toTypedArray()
+                    val subjectOrTerm = OrTerm(subjectTerms)
+
+                    val customSearch = AppSettings.getEmailSearchPrompt(context)
+                    val finalTerm = if (customSearch.isNotBlank()) {
+                        val customTerm = OrTerm(SubjectTerm(customSearch), SubjectTerm(customSearch.lowercase()))
+                        AndTerm(dateTerm, AndTerm(subjectOrTerm, customTerm))
+                    } else {
+                        AndTerm(dateTerm, subjectOrTerm)
+                    }
+
+                    val messages = inbox.search(finalTerm)
+
+                    var foundFileName: String? = null
+                    var foundFilePath: String? = null
+                    var foundMsgId: String? = null
+
+                    for (msg in messages) {
+                        if (msg !is MimeMessage) continue
+                        val messageId = msg.messageID ?: "${msg.subject}_${msg.sentDate?.time}"
+                        if (dao.exists(messageId)) continue
+
+                        val content = msg.content
+                        if (content is Multipart) {
+                            for (i in 0 until content.count) {
+                                val part = content.getBodyPart(i)
+                                if (Part.ATTACHMENT.equals(part.disposition, ignoreCase = true) || !part.fileName.isNullOrBlank()) {
+                                    val fileName = part.fileName ?: "report.pdf"
+                                    if (fileName.lowercase().endsWith(".pdf")) {
+                                        val emailImportsDir = File(context.cacheDir, "email_imports").apply { mkdirs() }
+                                        val tempFile = File(emailImportsDir, "imported_${System.currentTimeMillis()}_$fileName")
+                                        part.inputStream.use { input ->
+                                            tempFile.outputStream().use { output ->
+                                                input.copyTo(output)
+                                            }
+                                        }
+                                        foundFileName = fileName
+                                        foundFilePath = tempFile.absolutePath
+                                        foundMsgId = messageId
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                        if (foundFilePath != null) break
+                    }
+
+                    inbox.close(false)
+                    store.close()
+
+                    withContext(Dispatchers.Main) { reportResult(foundFileName, foundFilePath, foundMsgId) }
+
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    withContext(Dispatchers.Main) {
+                        importingFiles = false
+                        errorMessage = "Failed to connect and read email inbox. Please verify settings."
+                    }
+                }
+            }
+        }
     }
 
     // Handles document layout rendering and file bytes loading
@@ -704,6 +899,25 @@ fun ScanScreen(
                     }
                 }
 
+                // Email scan integration manual option
+                OutlinedButton(
+                    onClick = {
+                        if (!AppSettings.isEmailConsentGranted(context)) {
+                            showConsentDialog = true
+                        } else if (AppSettings.getLinkedEmail(context).isNullOrBlank()) {
+                            showSetupAlert = true
+                        } else {
+                            triggerEmailScan()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Email, contentDescription = "Scan from Email")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Import from Linked Email", fontWeight = FontWeight.Bold)
+                }
+
                 // Indicator when a Word/text document's text has been attached
                 if (docText.isNotBlank()) {
                     Card(
@@ -818,6 +1032,113 @@ fun ScanScreen(
                             }
                         ) {
                             Text("Cancel")
+                        }
+                    }
+                )
+            }
+
+            if (showConsentDialog) {
+                AlertDialog(
+                    onDismissRequest = { showConsentDialog = false },
+                    title = { Text("Email Access Consent", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Text(
+                            text = "Medical Assist (MA) requires your permission to connect to your email inbox. We will only search for emails from the last 2 days containing potential medical report attachments (PDFs) and extract them locally on your phone. No email contents are sent to our servers. Do you consent to this?",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                showConsentDialog = false
+                                AppSettings.setEmailConsentGranted(context, true)
+                                if (AppSettings.getLinkedEmail(context).isNullOrBlank()) {
+                                    showSetupAlert = true
+                                } else {
+                                    triggerEmailScan()
+                                }
+                            }
+                        ) {
+                            Text("I Consent")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showConsentDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
+            if (showSetupAlert) {
+                AlertDialog(
+                    onDismissRequest = { showSetupAlert = false },
+                    title = { Text("Email Integration Required", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Text(
+                            text = "You haven't linked an email account yet. Please go to Settings (Account tab) to link your Gmail account or IMAP details first.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+                    confirmButton = {
+                        Button(onClick = { showSetupAlert = false }) {
+                            Text("OK")
+                        }
+                    }
+                )
+            }
+
+            if (showEmailResultDialog) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showEmailResultDialog = false
+                        try { File(emailResultLocalPath).delete() } catch (_: Exception) {}
+                    },
+                    title = { Text("New Medical Report Found", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Text(
+                            text = "We found report '$emailResultReportName' in your inbox. Do you want to download and upload it for scanning?",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                showEmailResultDialog = false
+                                val uri = Uri.fromFile(File(emailResultLocalPath))
+                                importSelectedFiles(listOf(uri))
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    LocalStore.getDatabase(context).processedEmailDao().insert(
+                                        ProcessedEmail(
+                                            messageId = emailResultMessageId,
+                                            attachmentName = emailResultReportName,
+                                            processedAt = System.currentTimeMillis()
+                                        )
+                                    )
+                                }
+                                android.widget.Toast.makeText(context, "Report added to scan preview.", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        ) {
+                            Text("Yes, Import")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                showEmailResultDialog = false
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    LocalStore.getDatabase(context).processedEmailDao().insert(
+                                        ProcessedEmail(
+                                            messageId = emailResultMessageId,
+                                            attachmentName = emailResultReportName,
+                                            processedAt = System.currentTimeMillis()
+                                        )
+                                    )
+                                }
+                                try { File(emailResultLocalPath).delete() } catch (_: Exception) {}
+                            }
+                        ) {
+                            Text("Skip & Mark Read")
                         }
                     }
                 )

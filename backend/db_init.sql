@@ -87,6 +87,8 @@ CREATE TABLE IF NOT EXISTS users (
     plan VARCHAR(20) NOT NULL DEFAULT 'free', -- 'free' | 'premium'
     own_gemini_key TEXT, -- AES-256-GCM encrypted, see backend/auth.js
     own_sarvam_key TEXT, -- AES-256-GCM encrypted, see backend/auth.js
+    google_email VARCHAR(255),
+    google_refresh_token TEXT,
     usage_count INTEGER NOT NULL DEFAULT 0,
     usage_period_start DATE NOT NULL DEFAULT CURRENT_DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

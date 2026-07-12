@@ -3,6 +3,7 @@ package com.example.medicalscanner.ui
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -23,16 +24,21 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
+import com.example.medicalscanner.local.SecureKeyManager
 import android.widget.Toast
 import com.example.medicalscanner.model.ResetPasswordRequest
 import androidx.fragment.app.FragmentActivity
 import com.example.medicalscanner.auth.BiometricHelper
+import com.example.medicalscanner.auth.GoogleSignInHelper
 import com.example.medicalscanner.auth.PhoneAuthHelper
 import com.example.medicalscanner.local.AppSettings
 import com.example.medicalscanner.model.AuthRequest
+import com.example.medicalscanner.model.GoogleSignInRequest
 import com.example.medicalscanner.model.PhoneLoginRequest
 import com.example.medicalscanner.network.AccountSync
 import com.example.medicalscanner.network.NetworkModule
@@ -136,6 +142,33 @@ fun LoginScreen(
                             ?: "Something went wrong. Check your connection and try again."
                     }
                 }
+        }
+    }
+
+    fun loginWithGoogle() {
+        errorMessage = null
+        isLoading = true
+        coroutineScope.launch {
+            GoogleSignInHelper.signIn(context) { googleResult ->
+                googleResult.onSuccess { idToken ->
+                    coroutineScope.launch {
+                        val result = runCatching { NetworkModule.getApi(context).googleSignIn(GoogleSignInRequest(idToken)) }
+                        isLoading = false
+                        result.onSuccess { onAuthSuccess(it.token, it.user.email) }
+                            .onFailure { e ->
+                                errorMessage = e.apiErrorMessage()
+                                    ?: e.message?.takeIf { it.isNotBlank() }
+                                    ?: "Something went wrong. Check your connection and try again."
+                            }
+                    }
+                }.onFailure { e ->
+                    isLoading = false
+                    // User simply closed the account picker — not an error worth showing.
+                    if (e !is androidx.credentials.exceptions.GetCredentialCancellationException) {
+                        errorMessage = e.message?.takeIf { it.isNotBlank() } ?: "Google sign-in failed. Please try again."
+                    }
+                }
+            }
         }
     }
 
@@ -417,6 +450,32 @@ fun LoginScreen(
                     Text("Change phone number")
                 }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Google Sign In Button — native account picker via Credential Manager, no browser.
+            OutlinedButton(
+                onClick = { loginWithGoogle() },
+                enabled = !isLoading,
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Text(
+                    text = "G ",
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF4285F4),
+                    fontSize = 18.sp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Continue with Google", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            }
+
 
             Spacer(modifier = Modifier.height(8.dp))
             TextButton(onClick = { onNavigateToRegister(null) }) {

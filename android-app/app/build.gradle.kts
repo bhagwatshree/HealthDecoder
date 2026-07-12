@@ -37,11 +37,17 @@ android {
 
         buildConfigField("String", "GEMINI_API_KEY", "\"${localProp("GEMINI_API_KEY")}\"")
         buildConfigField("String", "SARVAM_API_KEY", "\"${localProp("SARVAM_API_KEY")}\"")
+        // OAuth "Web application" client ID (Google Cloud Console) backing native Google
+        // Sign-In (Credential Manager requires a *server* client ID, even on Android) — the
+        // same client ID as the backend's GOOGLE_CLIENT_ID. See local.properties.example.
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${localProp("GOOGLE_WEB_CLIENT_ID")}\"")
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -58,7 +64,11 @@ android {
 
     packaging {
       resources {
-        excludes += "/META-INF/{AL2.0,LGPL2.1}"
+          excludes += "/META-INF/{AL2.0,LGPL2.1}"
+          excludes += "META-INF/NOTICE.md"
+          excludes += "META-INF/LICENSE.md"
+          excludes += "META-INF/LICENSE.txt"
+          excludes += "META-INF/NOTICE.txt"
       }
     }
 }
@@ -135,13 +145,25 @@ dependencies {
   // DocumentFile — used by SafCloudUploader for cloud-folder backup via SAF
   implementation("androidx.documentfile:documentfile:1.0.1")
 
-  // Firebase Auth (phone/OTP sign-in)
+  // Firebase Auth (phone/OTP sign-in, and Google sign-in below)
   implementation(platform(libs.firebase.bom))
   implementation(libs.firebase.auth)
   if (hasGoogleServicesConfig) {
       implementation("com.google.firebase:firebase-analytics")
   }
 
+  // Credential Manager — native "Sign in with Google" account picker (no browser)
+  implementation("androidx.credentials:credentials:1.3.0")
+  implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+  implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+
   // Biometric authentication
   implementation(libs.androidx.biometric)
+
+  // JavaMail Android port for IMAP email checking
+  implementation("com.sun.mail:android-mail:1.6.7")
+  implementation("com.sun.mail:android-activation:1.6.7")
+
+  // AndroidX WorkManager for background scheduling
+  implementation("androidx.work:work-runtime-ktx:2.9.0")
 }

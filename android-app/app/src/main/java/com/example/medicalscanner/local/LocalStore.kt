@@ -66,7 +66,7 @@ object LocalStore {
                 )
                     .openHelperFactory(factory)
                     .setJournalMode(RoomDatabase.JournalMode.TRUNCATE)
-                    .addMigrations(MedicalDatabase.MIGRATION_1_2)
+                    .addMigrations(MedicalDatabase.MIGRATION_1_2, MedicalDatabase.MIGRATION_2_3)
                     .build()
 
                 // Force open the database to verify passphrase decryption is correct
@@ -84,7 +84,7 @@ object LocalStore {
                 )
                     .openHelperFactory(factory)
                     .setJournalMode(RoomDatabase.JournalMode.TRUNCATE)
-                    .addMigrations(MedicalDatabase.MIGRATION_1_2)
+                    .addMigrations(MedicalDatabase.MIGRATION_1_2, MedicalDatabase.MIGRATION_2_3, MedicalDatabase.MIGRATION_3_4)
                     .build()
             }
 
@@ -93,6 +93,8 @@ object LocalStore {
             return instance
         }
     }
+
+    fun getDatabase(context: Context): MedicalDatabase = db(context)
 
     /**
      * Closes the database and drops the singleton. MUST be called before the records
@@ -151,24 +153,25 @@ object LocalStore {
 
     // ── Reports ─────────────────────────────────────────────────────────────
     fun getReports(context: Context): MutableList<MedicalReport> =
-        db(context).reportDao().getAll().toMutableList()
+        db(context).reportDao().getAllFiltered(AppSettings.getUserEmail(context) ?: "").toMutableList()
 
     fun getReport(context: Context, id: String): MedicalReport? =
         db(context).reportDao().getById(id)
 
     /** Light rows (no OCR text / analysis JSON) for list screens. */
     fun getReportSummaries(context: Context): List<ReportSummary> =
-        db(context).reportDao().getSummaries()
+        db(context).reportDao().getSummariesFiltered(AppSettings.getUserEmail(context) ?: "")
 
     /** Full-text search over patient, type, comments, and extracted OCR text. */
     fun searchReports(context: Context, query: String): List<ReportSummary> {
+        val email = AppSettings.getUserEmail(context) ?: ""
         val ftsQuery = query.trim()
             .split(Regex("\\s+"))
             .filter { it.isNotBlank() }
             .joinToString(" ") { "\"${it.replace("\"", "")}\"*" }
         if (ftsQuery.isBlank()) return getReportSummaries(context)
         return try {
-            db(context).reportDao().search(ftsQuery)
+            db(context).reportDao().searchFiltered(ftsQuery, email)
         } catch (e: Exception) {
             e.printStackTrace()
             emptyList()
@@ -183,10 +186,16 @@ object LocalStore {
         beforeDate: String,
         excludeId: String
     ): MedicalReport? =
-        db(context).reportDao().findPrevious(patient ?: "", category, beforeDate, excludeId)
+        db(context).reportDao().findPrevious(patient ?: "", category, beforeDate, excludeId, AppSettings.getUserEmail(context) ?: "")
 
     fun upsertReport(context: Context, report: MedicalReport) {
-        db(context).reportDao().upsert(report)
+        val userEmail = AppSettings.getUserEmail(context) ?: ""
+        val associatedReport = if (report.userEmail.isNullOrBlank() && userEmail.isNotBlank()) {
+            report.copy(userEmail = userEmail)
+        } else {
+            report
+        }
+        db(context).reportDao().upsert(associatedReport)
     }
 
     // ── Duplicate detection ─────────────────────────────────────────────────
@@ -199,7 +208,8 @@ object LocalStore {
     fun findReportByAnyHash(context: Context, hashes: Collection<String>): MedicalReport? {
         if (hashes.isEmpty()) return null
         val set = hashes.toSet()
-        val id = db(context).reportDao().getAllPageHashes()
+        val email = AppSettings.getUserEmail(context) ?: ""
+        val id = db(context).reportDao().getAllPageHashesFiltered(email)
             .firstOrNull { row -> row.pageHashes.any { it in set } }?.id
             ?: return null
         return getReport(context, id)
@@ -218,7 +228,8 @@ object LocalStore {
     ): MedicalReport? {
         val newTokens = tokenize(extractedText)
         if (newTokens.isEmpty()) return null
-        return db(context).reportDao().findByPatientDateCategory(patient, date, category)
+        val email = AppSettings.getUserEmail(context) ?: ""
+        return db(context).reportDao().findByPatientDateCategory(patient, date, category, email)
             .firstOrNull { candidate ->
                 val existing = tokenize(candidate.extractedText ?: "")
                 existing.isNotEmpty() && jaccard(newTokens, existing) >= 0.85
@@ -232,7 +243,8 @@ object LocalStore {
      * of each group is always kept.
      */
     fun findStoredDuplicates(context: Context): List<MedicalReport> {
-        val all = db(context).reportDao().getAll().sortedBy { it.createdAt }
+        val email = AppSettings.getUserEmail(context) ?: ""
+        val all = db(context).reportDao().getAllFiltered(email).sortedBy { it.createdAt }
         val kept = mutableListOf<MedicalReport>()
         val duplicates = mutableListOf<MedicalReport>()
         for (report in all) {

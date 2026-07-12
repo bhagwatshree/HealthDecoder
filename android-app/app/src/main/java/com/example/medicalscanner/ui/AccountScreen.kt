@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import com.example.medicalscanner.auth.BiometricHelper
 import com.example.medicalscanner.local.AppSettings
+import com.example.medicalscanner.local.SecureKeyManager
 import com.example.medicalscanner.model.KeyAssignment
 import com.example.medicalscanner.model.UserAccount
 import com.example.medicalscanner.network.AccountSync
@@ -430,6 +432,296 @@ fun AccountScreen(
                                 }
                             }
                         }
+                    }
+                }
+
+                // Email Integration Card
+                var showEmailIntegration by remember { mutableStateOf(false) }
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { showEmailIntegration = !showEmailIntegration },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Email, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text("Email Report Scanner", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    val linked = AppSettings.getLinkedEmail(context)
+                                    Text(
+                                        text = if (linked != null) "Linked to $linked" else "Not connected",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (linked != null) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            IconButton(onClick = { showEmailIntegration = !showEmailIntegration }) {
+                                Icon(
+                                    imageVector = if (showEmailIntegration) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = null
+                                )
+                            }
+                        }
+
+                        if (showEmailIntegration) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                            var emailConsent by remember { mutableStateOf(AppSettings.isEmailConsentGranted(context)) }
+                            var scanHour by remember { mutableStateOf(AppSettings.getEmailScanHour(context)) }
+                            var scanMinute by remember { mutableStateOf(AppSettings.getEmailScanMinute(context)) }
+                            var showScanTimePicker by remember { mutableStateOf(false) }
+
+                            fun rescheduleDailyScan() {
+                                com.example.medicalscanner.reminder.EmailScanReminderManager.scheduleDaily(context, scanHour, scanMinute)
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Auto-scan Inbox daily", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                    Text("Checks for medical report attachments once a day", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Switch(
+                                    checked = emailConsent,
+                                    onCheckedChange = { checked ->
+                                        emailConsent = checked
+                                        AppSettings.setEmailConsentGranted(context, checked)
+                                        if (checked) {
+                                            rescheduleDailyScan()
+                                        } else {
+                                            com.example.medicalscanner.reminder.EmailScanReminderManager.cancel(context)
+                                        }
+                                    }
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clickable(enabled = emailConsent) { showScanTimePicker = true },
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "Scan time",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (emailConsent) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    String.format("%02d:%02d", scanHour, scanMinute),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (emailConsent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            if (showScanTimePicker) {
+                                val timeState = rememberTimePickerState(initialHour = scanHour, initialMinute = scanMinute)
+                                AlertDialog(
+                                    onDismissRequest = { showScanTimePicker = false },
+                                    text = { TimePicker(state = timeState) },
+                                    confirmButton = {
+                                        Button(onClick = {
+                                            scanHour = timeState.hour
+                                            scanMinute = timeState.minute
+                                            AppSettings.setEmailScanTime(context, scanHour, scanMinute)
+                                            rescheduleDailyScan()
+                                            showScanTimePicker = false
+                                        }) { Text("OK") }
+                                    },
+                                    dismissButton = {
+                                        TextButton(onClick = { showScanTimePicker = false }) { Text("Cancel") }
+                                    }
+                                )
+                            }
+
+                            TextButton(
+                                onClick = {
+                                    val request = androidx.work.OneTimeWorkRequestBuilder<com.example.medicalscanner.local.EmailScanWorker>()
+                                        .setInputData(
+                                            androidx.work.Data.Builder()
+                                                .putInt(com.example.medicalscanner.local.EmailScanWorker.KEY_LOOKBACK_DAYS, 2)
+                                                .build()
+                                        )
+                                        .build()
+                                    androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
+                                        "ManualEmailScanWork",
+                                        androidx.work.ExistingWorkPolicy.REPLACE,
+                                        request
+                                    )
+                                    android.widget.Toast.makeText(context, "Scanning inbox for new reports…", android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                enabled = emailConsent && !AppSettings.getLinkedEmail(context).isNullOrBlank(),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Scan Now (last 2 days)")
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            var emailType by remember { mutableStateOf(AppSettings.getLinkedEmailType(context) ?: "gmail") }
+                            var userEmailInput by remember { mutableStateOf(AppSettings.getLinkedEmail(context) ?: "") }
+                            var imapHostInput by remember { mutableStateOf(AppSettings.getImapHost(context)) }
+                            var imapPortInput by remember { mutableStateOf(AppSettings.getImapPort(context).toString()) }
+                            var imapPasswordInput by remember { mutableStateOf(SecureKeyManager.getImapPassword(context) ?: "") }
+                            var oauthTokenInput by remember { mutableStateOf(SecureKeyManager.getEmailToken(context) ?: "") }
+                            var searchPromptInput by remember { mutableStateOf(AppSettings.getEmailSearchPrompt(context)) }
+
+                            Text("Email Provider", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                                SegmentedButton(
+                                    selected = emailType == "gmail",
+                                    onClick = { emailType = "gmail" },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                                ) { Text("Gmail (OAuth)") }
+                                SegmentedButton(
+                                    selected = emailType == "imap",
+                                    onClick = { emailType = "imap" },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                                ) { Text("Other (IMAP)") }
+                            }
+
+                            if (emailType == "gmail") {
+                                val linkedEmail = AppSettings.getLinkedEmail(context)
+                                val hasLinkedGmail = !linkedEmail.isNullOrBlank() && AppSettings.getLinkedEmailType(context) == "gmail"
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                ) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        Text(
+                                            text = if (hasLinkedGmail) "Linked Gmail Account: $linkedEmail" else "No Google Account Linked",
+                                            fontWeight = FontWeight.SemiBold,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Button(
+                                            onClick = {
+                                                val token = AppSettings.getAuthToken(context) ?: ""
+                                                val url = com.example.medicalscanner.network.NetworkModule.getFullImageUrl(context, "api/auth/google?state=link|$token")
+                                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                                context.startActivity(intent)
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            Text(if (hasLinkedGmail) "Re-link Google Account" else "Link Google Account")
+                                        }
+                                    }
+                                }
+                            } else {
+                                OutlinedTextField(
+                                    value = userEmailInput,
+                                    onValueChange = { userEmailInput = it },
+                                    label = { Text("Email Address") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                                )
+                                OutlinedTextField(
+                                    value = imapHostInput,
+                                    onValueChange = { imapHostInput = it },
+                                    label = { Text("IMAP Host") },
+                                    placeholder = { Text("imap.mail.yahoo.com") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                OutlinedTextField(
+                                    value = imapPortInput,
+                                    onValueChange = { imapPortInput = it },
+                                    label = { Text("IMAP Port") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                )
+                                OutlinedTextField(
+                                    value = imapPasswordInput,
+                                    onValueChange = { imapPasswordInput = it },
+                                    label = { Text("App Password / Password") },
+                                    placeholder = { Text("Secure App Password") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    visualTransformation = PasswordVisualTransformation()
+                                )
+                                Text(
+                                    "Note: Gmail, Yahoo, and Outlook require you to generate an 'App Password' from your account security settings to log in via IMAP.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Hospital Search Prompt (Optional)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            OutlinedTextField(
+                                value = searchPromptInput,
+                                onValueChange = { searchPromptInput = it },
+                                label = { Text("e.g. Apollo, Metropolis, Fortis") },
+                                placeholder = { Text("Leave blank to search all reports") },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            Text(
+                                "Translates this intent using AI to target specific lab emails.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = {
+                                    if (emailType == "gmail") {
+                                        val hasLinkedGmail = !AppSettings.getLinkedEmail(context).isNullOrBlank() && AppSettings.getLinkedEmailType(context) == "gmail"
+                                        if (!hasLinkedGmail) {
+                                            android.widget.Toast.makeText(context, "Please link your Google Account first.", android.widget.Toast.LENGTH_SHORT).show()
+                                            return@Button
+                                        }
+                                        AppSettings.setEmailSearchPrompt(context, searchPromptInput)
+
+                                        if (emailConsent) {
+                                            com.example.medicalscanner.reminder.EmailScanReminderManager.scheduleDaily(context, scanHour, scanMinute)
+                                        } else {
+                                            com.example.medicalscanner.reminder.EmailScanReminderManager.cancel(context)
+                                        }
+
+                                        android.widget.Toast.makeText(context, "Email settings saved successfully.", android.widget.Toast.LENGTH_SHORT).show()
+                                        showEmailIntegration = false
+                                    } else {
+                                        if (userEmailInput.isNotBlank()) {
+                                            AppSettings.setLinkedEmail(context, userEmailInput)
+                                            AppSettings.setLinkedEmailType(context, emailType)
+                                            AppSettings.setEmailSearchPrompt(context, searchPromptInput)
+                                            AppSettings.setImapHost(context, imapHostInput)
+                                            AppSettings.setImapPort(context, imapPortInput.toIntOrNull() ?: 993)
+                                            SecureKeyManager.setImapPassword(context, imapPasswordInput)
+
+                                            if (emailConsent) {
+                                                com.example.medicalscanner.reminder.EmailScanReminderManager.scheduleDaily(context, scanHour, scanMinute)
+                                            } else {
+                                                com.example.medicalscanner.reminder.EmailScanReminderManager.cancel(context)
+                                            }
+
+                                            android.widget.Toast.makeText(context, "Email settings saved successfully.", android.widget.Toast.LENGTH_SHORT).show()
+                                            showEmailIntegration = false
+                                        } else {
+                                            android.widget.Toast.makeText(context, "Please enter an email address.", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Save Settings")
+                            }
+                        }
+
                     }
                 }
 

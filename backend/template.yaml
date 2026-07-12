@@ -48,6 +48,18 @@ Parameters:
       Generate new private key. Leave blank to disable phone-OTP auth for now.
     NoEcho: true
     Default: ''
+  GoogleClientId:
+    Type: String
+    Description: >-
+      Google OAuth client ID (Google Cloud Console > APIs & Services > Credentials).
+      Leave blank to disable Google sign-in/linking for now.
+    NoEcho: true
+    Default: ''
+  GoogleClientSecret:
+    Type: String
+    Description: Google OAuth client secret, paired with GoogleClientId.
+    NoEcho: true
+    Default: ''
 
 Resources:
   MedicalScannerFunction:
@@ -66,6 +78,8 @@ Resources:
           ENCRYPTION_KEY: !Ref EncryptionKey
           FREE_TIER_DAILY_LIMIT: !Ref FreeTierDailyLimit
           FIREBASE_SERVICE_ACCOUNT_JSON: !Ref FirebaseServiceAccountJson
+          GOOGLE_CLIENT_ID: !Ref GoogleClientId
+          GOOGLE_CLIENT_SECRET: !Ref GoogleClientSecret
           NODE_ENV: production
       Events:
         # Catch-all: every HTTP method on every path goes to Express

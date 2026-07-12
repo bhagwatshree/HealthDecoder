@@ -156,7 +156,8 @@ data class MedicalReport(
     @SerializedName("health_insights") val healthInsights: HealthInsights? = null,
     /** SHA-256 of each scanned page / imported file, used to detect duplicate scans. */
     @ColumnInfo(defaultValue = "'[]'")
-    @SerializedName("page_hashes") val pageHashes: List<String> = emptyList()
+    @SerializedName("page_hashes") val pageHashes: List<String> = emptyList(),
+    @SerializedName("user_email") val userEmail: String? = null
 )
 
 data class ReportUpdateRequest(
@@ -315,6 +316,12 @@ data class SignupRequest(
 /** Phone+OTP login: the phone was already OTP-verified client-side by the Firebase SDK. */
 data class PhoneLoginRequest(
     @SerializedName("phoneIdToken") val phoneIdToken: String
+)
+
+/** Native Google sign-in: the account was already picked on-device via Credential Manager,
+ *  and Firebase Auth turned it into this ID token. */
+data class GoogleSignInRequest(
+    @SerializedName("idToken") val idToken: String
 )
 
 data class UserAccount(

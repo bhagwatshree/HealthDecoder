@@ -52,4 +52,34 @@ object SecureKeyManager {
             Base64.decode(passStr, Base64.NO_WRAP)
         }
     }
+
+    private fun getSecurePrefs(context: Context): android.content.SharedPreferences {
+        return try {
+            val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+            EncryptedSharedPreferences.create(
+                PREFS_FILE,
+                masterKeyAlias,
+                context,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+            context.getSharedPreferences("legacy_secure_prefs", Context.MODE_PRIVATE)
+        }
+    }
+
+    fun getEmailToken(context: Context): String? =
+        getSecurePrefs(context).getString("email_oauth_token", null)
+
+    fun setEmailToken(context: Context, token: String?) {
+        getSecurePrefs(context).edit().putString("email_oauth_token", token).apply()
+    }
+
+    fun getImapPassword(context: Context): String? =
+        getSecurePrefs(context).getString("email_imap_password", null)
+
+    fun setImapPassword(context: Context, pass: String?) {
+        getSecurePrefs(context).edit().putString("email_imap_password", pass).apply()
+    }
 }

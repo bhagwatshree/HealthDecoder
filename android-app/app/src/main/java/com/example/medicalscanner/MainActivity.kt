@@ -11,14 +11,35 @@ import androidx.compose.ui.Modifier
 import com.example.medicalscanner.reminder.MedicineReminderManager
 import com.example.medicalscanner.theme.MedicalScannerTheme
 
+import androidx.compose.runtime.mutableStateOf
+import android.content.Intent
+import android.net.Uri
+
 class MainActivity : FragmentActivity() {
+  companion object {
+    val deepLinkUri = mutableStateOf<Uri?>(null)
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     MedicineReminderManager.createChannel(this)
+
+    intent?.data?.let {
+      deepLinkUri.value = it
+    }
 
     enableEdgeToEdge()
     setContent {
       MedicalScannerTheme { Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { MainNavigation() } }
     }
   }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    intent.data?.let {
+      deepLinkUri.value = it
+    }
+  }
 }
+

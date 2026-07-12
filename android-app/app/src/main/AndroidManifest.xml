@@ -11,6 +11,7 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.GET_ACCOUNTS" />
 
     <application
         android:allowBackup="false"
@@ -39,6 +40,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter android:label="OAuth2 Callback">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="medicalscanner" android:host="oauth2" />
+                <data android:scheme="medicalscanner" android:host="oauth2-link" />
+            </intent-filter>
         </activity>
 
         <!-- Full-screen large-text medicine reminder (elderly-friendly style). -->
@@ -63,6 +71,14 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="com.example.medicalscanner.APPOINTMENT_REMINDER" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".reminder.EmailScanAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.medicalscanner.EMAIL_SCAN" />
             </intent-filter>
         </receiver>
 
