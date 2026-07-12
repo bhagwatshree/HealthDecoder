@@ -35,6 +35,8 @@ import com.example.medicalscanner.model.MedicationBulkRequest
 import com.example.medicalscanner.model.MedicationHistory
 import com.example.medicalscanner.model.PendingTest
 import com.example.medicalscanner.network.NetworkModule
+import com.example.medicalscanner.local.BackgroundScanScheduler
+import com.example.medicalscanner.local.ScanJobStatus
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -117,6 +119,13 @@ fun ReportListScreen(
     // Reload on first launch and whenever reloadKey changes (e.g. returning from IP settings)
     LaunchedEffect(reloadKey) {
         loadDashboard()
+    }
+
+    // Observe background jobs completing to refresh the dashboard list
+    LaunchedEffect(Unit) {
+        BackgroundScanScheduler.onJobCompleted.collect {
+            loadDashboard()
+        }
     }
 
     Scaffold(
@@ -263,6 +272,9 @@ fun ReportListScreen(
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
+            // Background scan progress indicators
+            BackgroundScanProgressBar(onNavigateToDetail = onNavigateToDetail)
+
             // Dashboard Tabs
             ScrollableTabRow(
                 selectedTabIndex = selectedTab,
@@ -2004,6 +2016,107 @@ fun ClinicalInsightsPanel(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BackgroundScanProgressBar(
+    onNavigateToDetail: (String) -> Unit
+) {
+    val activeJobs = BackgroundScanScheduler.activeJobs
+    if (activeJobs.isEmpty()) return
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        activeJobs.forEach { job ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = job.status == ScanJobStatus.COMPLETED) {
+                        job.resultReportId?.let { onNavigateToDetail(it) }
+                        BackgroundScanScheduler.removeJob(job.id)
+                    },
+                colors = CardDefaults.cardColors(
+                    containerColor = when (job.status) {
+                        ScanJobStatus.ERROR -> MaterialTheme.colorScheme.errorContainer
+                        ScanJobStatus.COMPLETED -> Color(0xFFE8F5E9)
+                        else -> MaterialTheme.colorScheme.primaryContainer
+                    }
+                ),
+                elevation = CardDefaults.cardElevation(2.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (job.status != ScanJobStatus.COMPLETED && job.status != ScanJobStatus.ERROR) {
+                        CircularProgressIndicator(
+                            progress = { job.progress },
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.5.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else if (job.status == ScanJobStatus.COMPLETED) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Success",
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Error,
+                            contentDescription = "Error",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        val statusText = when (job.status) {
+                            ScanJobStatus.UPLOADING -> "Uploading report..."
+                            ScanJobStatus.OCR -> "Analyzing with AI..."
+                            ScanJobStatus.SAVING -> "Saving details..."
+                            ScanJobStatus.COMPLETED -> "Report scan complete! Tap to view."
+                            ScanJobStatus.ERROR -> job.error ?: "Scan failed."
+                        }
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = when (job.status) {
+                                ScanJobStatus.ERROR -> MaterialTheme.colorScheme.onErrorContainer
+                                ScanJobStatus.COMPLETED -> Color(0xFF1B5E20)
+                                else -> MaterialTheme.colorScheme.onPrimaryContainer
+                            }
+                        )
+                        Text(
+                            text = "Patient: ${job.patientName} (${job.scanType.replaceFirstChar { it.lowercase() }})",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    if (job.status == ScanJobStatus.COMPLETED || job.status == ScanJobStatus.ERROR) {
+                        IconButton(
+                            onClick = { BackgroundScanScheduler.removeJob(job.id) },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close",
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
                     }
                 }

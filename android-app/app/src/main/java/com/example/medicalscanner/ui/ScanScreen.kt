@@ -38,6 +38,7 @@ import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
 import com.example.medicalscanner.local.AppSettings
 import com.example.medicalscanner.local.LocalRepository
+import com.example.medicalscanner.local.BackgroundScanScheduler
 import com.example.medicalscanner.util.FileImportUtil
 import com.example.medicalscanner.util.ImageUtil
 import com.google.mlkit.vision.common.InputImage
@@ -69,6 +70,10 @@ fun ScanScreen(
     val sources = remember { mutableStateListOf<Triple<Uri, String, String>>() }
     var docText by remember { mutableStateOf("") } // text extracted from Word/text documents
     var uploadingState by remember { mutableStateOf<String?>(null) } // null, "uploading", "ocr", "saving", "error"
+    var importingFiles by remember { mutableStateOf(false) }
+    var showSizeWarningDialog by remember { mutableStateOf(false) }
+    var pendingUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var warningSizeMb by remember { mutableFloatStateOf(0f) }
     var errorMessage by remember { mutableStateOf("") }
     
     // ML Kit Local OCR results
@@ -120,24 +125,77 @@ fun ScanScreen(
         }
     }
 
+    // Helper to estimate picked file size in MB
+    fun getUriSizeInMb(context: Context, uri: Uri): Float {
+        var bytes: Long = 0
+        try {
+            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use {
+                bytes = it.length
+            }
+        } catch (e: Exception) {
+            try {
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                    if (sizeIndex != -1 && cursor.moveToFirst()) {
+                        bytes = cursor.getLong(sizeIndex)
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        return bytes / (1024f * 1024f)
+    }
+
+    // Handles document layout rendering and file bytes loading
+    fun importSelectedFiles(uris: List<Uri>) {
+        importingFiles = true
+        errorMessage = ""
+        coroutineScope.launch {
+            try {
+                val wasEmpty = pages.isEmpty()
+                val imported = withContext(Dispatchers.IO) {
+                    uris.map { uri ->
+                        val cachedSource = FileImportUtil.cacheImage(context, uri) ?: uri
+                        Triple(cachedSource, FileImportUtil.displayName(context, uri), FileImportUtil.mimeOf(context, uri)) to
+                            FileImportUtil.importFile(context, uri)
+                    }
+                }
+                val newImages = imported.flatMap { it.second.images }
+                val newText = imported.joinToString("\n\n") { it.second.text }.trim()
+                if (newImages.isEmpty() && newText.isBlank()) {
+                    errorMessage = "Couldn't read the selected file(s). Try an image, PDF, or Word document."
+                } else {
+                    val room = maxPagesPerScan - pages.size
+                    errorMessage = if (newImages.size > room)
+                        "Page limit is $maxPagesPerScan per scan — extra pages were skipped. Analyze these first, then scan the rest."
+                    else ""
+                    if (newImages.isNotEmpty() && room > 0) {
+                        pages.addAll(newImages.take(room))
+                        if (wasEmpty) runLocalOcr(pages.first())
+                    }
+                    if (newText.isNotBlank()) docText = (docText + "\n\n" + newText).trim()
+                    imported.forEach { (meta, _) -> sources.add(meta) }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                errorMessage = "Failed to import selected files."
+            } finally {
+                importingFiles = false
+            }
+        }
+    }
+
     // Launcher for picking one or more images from gallery (multi-page report)
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(10),
         onResult = { uris ->
             if (uris.isNotEmpty()) {
-                coroutineScope.launch {
-                    val wasEmpty = pages.isEmpty()
-                    val room = maxPagesPerScan - pages.size
-                    // Copy into the app's cache right away — the picker's read grant on these
-                    // URIs is transient and can be revoked before the user taps Analyze.
-                    val cached = withContext(Dispatchers.IO) {
-                        uris.take(room.coerceAtLeast(0)).mapNotNull { FileImportUtil.cacheImage(context, it) }
-                    }
-                    pages.addAll(cached)
-                    errorMessage = if (uris.size > room)
-                        "Page limit is $maxPagesPerScan per scan — extra pages were skipped. Analyze these first, then scan the rest."
-                    else ""
-                    if (wasEmpty && pages.isNotEmpty()) runLocalOcr(pages.first())
+                val totalSize = uris.sumOf { getUriSizeInMb(context, it).toDouble() }.toFloat()
+                if (totalSize > 10.0f) {
+                    pendingUris = uris
+                    warningSizeMb = totalSize
+                    showSizeWarningDialog = true
+                } else {
+                    importSelectedFiles(uris)
                 }
             }
         }
@@ -148,34 +206,13 @@ fun ScanScreen(
         contract = ActivityResultContracts.OpenMultipleDocuments(),
         onResult = { uris ->
             if (uris.isNotEmpty()) {
-                coroutineScope.launch {
-                    val wasEmpty = pages.isEmpty()
-                    val imported = withContext(Dispatchers.IO) {
-                        uris.map { uri ->
-                            // Cache the original bytes now too, so "download original" still
-                            // works later even if the picker's read grant on `uri` is gone by then.
-                            val cachedSource = FileImportUtil.cacheImage(context, uri) ?: uri
-                            Triple(cachedSource, FileImportUtil.displayName(context, uri), FileImportUtil.mimeOf(context, uri)) to
-                                FileImportUtil.importFile(context, uri)
-                        }
-                    }
-                    val newImages = imported.flatMap { it.second.images }
-                    val newText = imported.joinToString("\n\n") { it.second.text }.trim()
-                    if (newImages.isEmpty() && newText.isBlank()) {
-                        errorMessage = "Couldn't read the selected file(s). Try an image, PDF, or Word document."
-                    } else {
-                        val room = maxPagesPerScan - pages.size
-                        errorMessage = if (newImages.size > room)
-                            "Page limit is $maxPagesPerScan per scan — extra pages were skipped. Analyze these first, then scan the rest."
-                        else ""
-                        if (newImages.isNotEmpty() && room > 0) {
-                            pages.addAll(newImages.take(room))
-                            if (wasEmpty) runLocalOcr(pages.first())
-                        }
-                        if (newText.isNotBlank()) docText = (docText + "\n\n" + newText).trim()
-                        // Preserve every picked original for later download.
-                        imported.forEach { (meta, _) -> sources.add(meta) }
-                    }
+                val totalSize = uris.sumOf { getUriSizeInMb(context, it).toDouble() }.toFloat()
+                if (totalSize > 10.0f) {
+                    pendingUris = uris
+                    warningSizeMb = totalSize
+                    showSizeWarningDialog = true
+                } else {
+                    importSelectedFiles(uris)
                 }
             }
         }
@@ -286,7 +323,30 @@ fun ScanScreen(
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (pages.isNotEmpty()) {
+                    if (importingFiles) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.padding(32.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Text(
+                                text = "Importing files...",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Rendering PDF pages and importing documents. This takes a brief moment.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else if (pages.isNotEmpty()) {
                         LazyRow(
                             modifier = Modifier.fillMaxSize().padding(8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -679,58 +739,27 @@ fun ScanScreen(
                     )
                     Button(
                         onClick = {
-                            coroutineScope.launch {
-                                if (pages.isEmpty() && docText.isBlank()) return@launch
-                                uploadingState = "uploading"
-                                errorMessage = ""
-                                try {
-                                    // Downscale pages one at a time — full camera photos held all
-                                    // at once (plus their Base64 copies for the AI request) used to
-                                    // run out of memory and crash multi-document scans.
-                                    val pageData = withContext(Dispatchers.IO) {
-                                        pages.mapNotNull { uri ->
-                                            ImageUtil.compressForScan(context, uri)?.let { it to "image/jpeg" }
-                                        }
-                                    }
-                                    if (pageData.isEmpty() && docText.isBlank()) {
-                                        uploadingState = null
-                                        errorMessage = "Failed to read the selected file(s)."
-                                        return@launch
-                                    }
-                                    // Preserve the original files so the user can download them later.
-                                    val sourceData = withContext(Dispatchers.IO) {
-                                        sources.mapNotNull { (uri, name, mime) ->
-                                            val b = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                                            if (b != null) Triple(b, name, mime) else null
-                                        }
-                                    }
-                                    val referenceText = listOf(localOcrText, docText).filter { it.isNotBlank() }.joinToString("\n\n")
-                                    val category = if (selectedScanType == "report") selectedReportCategory else "prescription"
-                                    uploadingState = "ocr" // On-device Gemini extraction (images and/or document text)
-                                    val savedReports = LocalRepository.saveScan(context, pageData, sourceData, referenceText, selectedScanType, category, patientName)
-                                    uploadingState = "saving"
-                                    if (savedReports.size > 1) {
-                                        android.widget.Toast.makeText(
-                                            context,
-                                            "Found ${savedReports.size} reports in this scan — each saved with its own date.",
-                                            android.widget.Toast.LENGTH_LONG
-                                        ).show()
-                                    }
-                                    onNavigateToDetail(savedReports.first().id)
-                                } catch (dup: com.example.medicalscanner.local.DuplicateReportException) {
-                                    uploadingState = null
-                                    val who = dup.existing.patientName ?: "this patient"
-                                    val date = dup.existing.reportDate ?: ""
-                                    errorMessage = "This report is already saved for $who${if (date.isNotBlank()) " (dated $date)" else ""}. It was not added again."
-                                } catch (e: OutOfMemoryError) {
-                                    uploadingState = null
-                                    errorMessage = "Too many pages to process at once. Please scan fewer documents at a time."
-                                } catch (e: Exception) {
-                                    e.printStackTrace()
-                                    uploadingState = null
-                                    errorMessage = "Scan failed. Please try again — check your internet connection for AI analysis."
-                                }
-                            }
+                            if (pages.isEmpty() && docText.isBlank()) return@Button
+                            val referenceText = listOf(localOcrText, docText).filter { it.isNotBlank() }.joinToString("\n\n")
+                            val category = if (selectedScanType == "report") selectedReportCategory else "prescription"
+                            
+                            BackgroundScanScheduler.startScan(
+                                context = context,
+                                pageUris = pages.toList(),
+                                sourceUris = sources.toList(),
+                                referenceText = referenceText,
+                                scanType = selectedScanType,
+                                category = category,
+                                patientName = patientName
+                            )
+                            
+                            android.widget.Toast.makeText(
+                                context,
+                                "Scan started in background.",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                            
+                            onNavigateBack()
                         },
                         enabled = uploadingState == null,
                         modifier = Modifier.fillMaxWidth().height(54.dp),
@@ -744,62 +773,56 @@ fun ScanScreen(
                 }
             }
 
-            // Upload Overlay Modal (Full-Screen loading screen)
-            AnimatedVisibility(
-                visible = uploadingState != null,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.75f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth(0.85f)
-                            .padding(24.dp),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+            if (showSizeWarningDialog) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showSizeWarningDialog = false
+                        pendingUris = emptyList()
+                    },
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            CircularProgressIndicator(
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(56.dp)
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
                             )
-                            
-                            val useSarvam = autoUseSarvam
-                            val statusText = when (uploadingState) {
-                                "uploading" -> "Uploading Document..."
-                                "ocr" -> if (useSarvam) {
-                                    "Sarvam AI OCR Running...\nExtracting Marathi/Hindi/English script\n& Translating to English..."
-                                } else {
-                                    "Standard AI OCR Running...\nExtracting dates, comments, and medicines"
-                                }
-                                "saving" -> "Saving to Secure Database..."
-                                else -> "Processing..."
+                            Text("Large Files Selected", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    text = {
+                        Text(
+                            text = "The selected files are very large (%.2f MB). Processing these files will take longer and might cause memory issues. We recommend keeping files under 10 MB. Do you want to proceed anyway?".format(warningSizeMb),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                showSizeWarningDialog = false
+                                importSelectedFiles(pendingUris)
+                                pendingUris = emptyList()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Proceed Anyway")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                showSizeWarningDialog = false
+                                pendingUris = emptyList()
                             }
-                            
-                            Text(
-                                text = statusText,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = "Please do not close the app. This takes a few moments for accurate parsing.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
+                        ) {
+                            Text("Cancel")
                         }
                     }
-                }
+                )
             }
+
         }
     }
 }

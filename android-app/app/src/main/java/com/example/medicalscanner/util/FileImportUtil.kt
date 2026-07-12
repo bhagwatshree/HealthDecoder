@@ -74,21 +74,29 @@ object FileImportUtil {
                 try {
                     val count = minOf(renderer.pageCount, maxPages)
                     for (i in 0 until count) {
-                        val page = renderer.openPage(i)
-                        val scale = 2
-                        val w = (page.width * scale).coerceAtLeast(1)
-                        val h = (page.height * scale).coerceAtLeast(1)
-                        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                        Canvas(bmp).drawColor(Color.WHITE)
-                        page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                        page.close()
-                        val f = File.createTempFile("pdfpage_${i}_", ".jpg", context.cacheDir)
-                        f.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
-                        bmp.recycle()
-                        out.add(Uri.fromFile(f))
+                        var page: PdfRenderer.Page? = null
+                        try {
+                            page = renderer.openPage(i)
+                            val scale = 1.5f
+                            val w = (page.width * scale).toInt().coerceAtLeast(1)
+                            val h = (page.height * scale).toInt().coerceAtLeast(1)
+                            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                            Canvas(bmp).drawColor(Color.WHITE)
+                            page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                            page.close()
+                            page = null
+
+                            val f = File.createTempFile("pdfpage_${i}_", ".jpg", context.cacheDir)
+                            f.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+                            bmp.recycle()
+                            out.add(Uri.fromFile(f))
+                        } catch (pageEx: Exception) {
+                            pageEx.printStackTrace()
+                            try { page?.close() } catch (_: Exception) {}
+                        }
                     }
                 } finally {
-                    renderer.close()
+                    try { renderer.close() } catch (_: Exception) {}
                 }
             }
         } catch (e: Exception) {
