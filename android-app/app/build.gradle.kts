@@ -128,14 +128,19 @@ dependencies {
   implementation(libs.androidx.room.runtime)
   ksp(libs.androidx.room.compiler)
 
+  // SQLCipher database encryption & Jetpack Security Crypto
+  implementation("net.zetetic:android-database-sqlcipher:4.5.4")
+  implementation("androidx.security:security-crypto:1.0.0")
+
   // DocumentFile — used by SafCloudUploader for cloud-folder backup via SAF
   implementation("androidx.documentfile:documentfile:1.0.1")
 
-  // Firebase Auth (phone/OTP sign-in). Safe to include even before google-services.json is
-  // set up — without it, Firebase's default app just fails to auto-initialize at runtime and
-  // PhoneAuthGate below reports phone auth as unavailable rather than crashing.
+  // Firebase Auth (phone/OTP sign-in)
   implementation(platform(libs.firebase.bom))
   implementation(libs.firebase.auth)
+  if (hasGoogleServicesConfig) {
+      implementation("com.google.firebase:firebase-analytics")
+  }
 
   // Biometric authentication
   implementation(libs.androidx.biometric)

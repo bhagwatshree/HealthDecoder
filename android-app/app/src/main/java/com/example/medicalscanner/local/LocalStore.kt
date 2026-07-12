@@ -51,16 +51,43 @@ object LocalStore {
         synchronized(this) {
             database?.let { return it }
             val dbFile = File(recordsDir(context), "medical_records.db")
-            val instance = Room.databaseBuilder(
-                context.applicationContext,
-                MedicalDatabase::class.java,
-                dbFile.absolutePath
-            )
-                // Single-file journal: the .db is always complete after each commit,
-                // which keeps BackupManager's zip snapshots consistent.
-                .setJournalMode(RoomDatabase.JournalMode.TRUNCATE)
-                .addMigrations(MedicalDatabase.MIGRATION_1_2)
-                .build()
+
+            // Initialize SQLCipher native libraries
+            net.sqlcipher.database.SQLiteDatabase.loadLibs(context)
+            val passphrase = SecureKeyManager.getDatabasePassphrase(context)
+            val factory = net.sqlcipher.database.SupportFactory(passphrase)
+
+            var instance: MedicalDatabase? = null
+            try {
+                instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    MedicalDatabase::class.java,
+                    dbFile.absolutePath
+                )
+                    .openHelperFactory(factory)
+                    .setJournalMode(RoomDatabase.JournalMode.TRUNCATE)
+                    .addMigrations(MedicalDatabase.MIGRATION_1_2)
+                    .build()
+
+                // Force open the database to verify passphrase decryption is correct
+                instance.openHelper.writableDatabase
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // Recover from decryption / key mismatch errors by recreating database
+                runCatching { instance?.close() }
+                dbFile.delete()
+
+                instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    MedicalDatabase::class.java,
+                    dbFile.absolutePath
+                )
+                    .openHelperFactory(factory)
+                    .setJournalMode(RoomDatabase.JournalMode.TRUNCATE)
+                    .addMigrations(MedicalDatabase.MIGRATION_1_2)
+                    .build()
+            }
+
             importLegacyJson(context, instance)
             database = instance
             return instance

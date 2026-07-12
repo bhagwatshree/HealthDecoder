@@ -14,6 +14,14 @@ object AppSettings {
     private const val KEY_LANGUAGE = "preferred_language"
     private const val KEY_VOICE_ENGINE = "voice_engine"
     private const val KEY_REMINDER_STYLE = "reminder_style"
+    private const val KEY_DISCLAIMER_ACCEPTED = "medical_disclaimer_accepted"
+
+    fun isDisclaimerAccepted(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_DISCLAIMER_ACCEPTED, false)
+
+    fun setDisclaimerAccepted(context: Context, accepted: Boolean) {
+        prefs(context).edit().putBoolean(KEY_DISCLAIMER_ACCEPTED, accepted).apply()
+    }
 
     /** Medicine reminder styles: a standard notification, or a full-screen alarm page
      *  with very large text so elderly users can read the medicine names clearly. */

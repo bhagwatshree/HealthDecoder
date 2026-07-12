@@ -11,6 +11,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Gavel
+import androidx.compose.material3.*
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.LaunchedEffect
 import com.example.medicalscanner.local.AppSettings
 import com.example.medicalscanner.network.NetworkModule
@@ -37,6 +48,71 @@ fun MainNavigation() {
   // A stored token can be stale (e.g. the account was deleted server-side). Validate it once
   // per launch; on 401 wipe the session and force a fresh login. Network failures are ignored
   // so the app still opens offline.
+  var showDisclaimer by remember { mutableStateOf(!AppSettings.isDisclaimerAccepted(context)) }
+
+  if (showDisclaimer) {
+      AlertDialog(
+          onDismissRequest = {},
+          title = {
+              Row(
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
+                  Icon(
+                      imageVector = Icons.Default.Gavel,
+                      contentDescription = null,
+                      tint = MaterialTheme.colorScheme.primary
+                  )
+                  Text("Medical Disclaimer", fontWeight = FontWeight.Bold)
+              }
+          },
+          text = {
+              Column(
+                  modifier = Modifier
+                      .fillMaxWidth()
+                      .verticalScroll(rememberScrollState()),
+                  verticalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
+                  Text(
+                      text = "Please read and accept this disclaimer before using Medical Assist:",
+                      fontWeight = FontWeight.SemiBold,
+                      style = MaterialTheme.typography.bodyMedium
+                  )
+                  Text(
+                      text = "1. Not Medical Advice: This application provides automated analysis and summaries of medical records using artificial intelligence. It does NOT provide medical advice, diagnosis, treatment, or clinical recommendations.",
+                      style = MaterialTheme.typography.bodyMedium
+                  )
+                  Text(
+                      text = "2. Not a Medical Device: Medical Assist is not a certified medical device. The information shown is for informational and educational purposes only.",
+                      style = MaterialTheme.typography.bodyMedium
+                  )
+                  Text(
+                      text = "3. Always Consult a Professional: You must always consult a qualified physician or healthcare provider before making any healthcare decisions or changing your medications. Never ignore professional medical advice because of something you read in this app.",
+                      style = MaterialTheme.typography.bodyMedium
+                  )
+                  Spacer(modifier = Modifier.height(4.dp))
+                  Text(
+                      text = "By clicking 'Accept and Continue', you acknowledge that you have read, understood, and agree to these terms.",
+                      style = MaterialTheme.typography.bodySmall,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+              }
+          },
+          confirmButton = {
+              Button(
+                  onClick = {
+                      AppSettings.setDisclaimerAccepted(context, true)
+                      showDisclaimer = false
+                  },
+                  shape = RoundedCornerShape(12.dp),
+                  modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+              ) {
+                  Text("Accept and Continue")
+              }
+          }
+      )
+  }
+
   LaunchedEffect(Unit) {
     if (AppSettings.isLoggedIn(context)) {
       runCatching { NetworkModule.getApi(context).getMe() }
