@@ -7,6 +7,14 @@ plugins {
   alias(libs.plugins.ksp)
 }
 
+// Google Services (Firebase) needs google-services.json, which isn't checked in (per-machine,
+// see README/DEPLOY notes on setting up phone-OTP login). Only apply the plugin — and only
+// pull in Firebase Auth below — once that file exists, so a fresh checkout still builds.
+val hasGoogleServicesConfig = file("google-services.json").exists()
+if (hasGoogleServicesConfig) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 // API keys are read from local.properties (gitignored, per-machine) rather than being
 // committed to source. See android-app/local.properties.example for the expected format.
 val localProperties = Properties().apply {
@@ -119,4 +127,16 @@ dependencies {
   // Room (on-device SQLite store for medical records)
   implementation(libs.androidx.room.runtime)
   ksp(libs.androidx.room.compiler)
+
+  // DocumentFile — used by SafCloudUploader for cloud-folder backup via SAF
+  implementation("androidx.documentfile:documentfile:1.0.1")
+
+  // Firebase Auth (phone/OTP sign-in). Safe to include even before google-services.json is
+  // set up — without it, Firebase's default app just fails to auto-initialize at runtime and
+  // PhoneAuthGate below reports phone auth as unavailable rather than crashing.
+  implementation(platform(libs.firebase.bom))
+  implementation(libs.firebase.auth)
+
+  // Biometric authentication
+  implementation(libs.androidx.biometric)
 }

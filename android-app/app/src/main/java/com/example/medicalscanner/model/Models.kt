@@ -293,3 +293,81 @@ data class MedicineInfo(
     @SerializedName("basicUse") val basicUse: String = "",
     @SerializedName("keyNotes") val keyNotes: List<String> = emptyList()
 )
+
+// ── Auth / per-user free tier ────────────────────────────────────────────────
+
+data class AuthRequest(
+    @SerializedName("email") val email: String,
+    @SerializedName("password") val password: String
+)
+
+/** Full registration: profile fields + email/password + a Firebase phone-OTP ID token. */
+data class SignupRequest(
+    @SerializedName("firstName") val firstName: String,
+    @SerializedName("lastName") val lastName: String,
+    @SerializedName("dateOfBirth") val dateOfBirth: String, // "YYYY-MM-DD"
+    @SerializedName("gender") val gender: String, // "male" | "female" | "other" | "prefer_not_to_say"
+    @SerializedName("email") val email: String,
+    @SerializedName("password") val password: String,
+    @SerializedName("phoneIdToken") val phoneIdToken: String
+)
+
+/** Phone+OTP login: the phone was already OTP-verified client-side by the Firebase SDK. */
+data class PhoneLoginRequest(
+    @SerializedName("phoneIdToken") val phoneIdToken: String
+)
+
+data class UserAccount(
+    @SerializedName("id") val id: String,
+    @SerializedName("firstName") val firstName: String? = null,
+    @SerializedName("lastName") val lastName: String? = null,
+    @SerializedName("dateOfBirth") val dateOfBirth: String? = null,
+    @SerializedName("gender") val gender: String? = null,
+    @SerializedName("email") val email: String,
+    @SerializedName("msisdn") val msisdn: String? = null,
+    @SerializedName("plan") val plan: String = "free", // "free" | "premium"
+    @SerializedName("hasOwnGeminiKey") val hasOwnGeminiKey: Boolean = false,
+    @SerializedName("hasOwnSarvamKey") val hasOwnSarvamKey: Boolean = false,
+    @SerializedName("createdAt") val createdAt: String? = null
+)
+
+data class AuthResponse(
+    @SerializedName("token") val token: String,
+    @SerializedName("user") val user: UserAccount
+)
+
+/** Response from GET /api/auth/keys — which key the phone should use right now, and usage. */
+data class KeyAssignment(
+    @SerializedName("geminiKey") val geminiKey: String? = null,
+    @SerializedName("sarvamKey") val sarvamKey: String? = null,
+    @SerializedName("plan") val plan: String = "free",
+    @SerializedName("billedTo") val billedTo: String = "free", // "own" | "free" | "premium" | "none"
+    @SerializedName("usageToday") val usageToday: Int = 0,
+    @SerializedName("limit") val limit: Int = 0,
+    @SerializedName("quotaExceeded") val quotaExceeded: Boolean = false
+)
+
+data class ApiKeyRequest(
+    @SerializedName("api_key") val apiKey: String
+)
+
+data class ApiKeyResponse(
+    @SerializedName("message") val message: String = "",
+    @SerializedName("hasOwnGeminiKey") val hasOwnGeminiKey: Boolean? = null,
+    @SerializedName("hasOwnSarvamKey") val hasOwnSarvamKey: Boolean? = null
+)
+
+data class ResetPasswordRequest(
+    @SerializedName("phoneIdToken") val phoneIdToken: String,
+    @SerializedName("newPassword") val newPassword: String
+)
+
+data class ChangePasswordRequest(
+    @SerializedName("currentPassword") val currentPassword: String,
+    @SerializedName("newPassword") val newPassword: String
+)
+
+data class SimpleResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("message") val message: String
+)

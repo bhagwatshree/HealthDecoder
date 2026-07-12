@@ -39,11 +39,29 @@ object FileImportUtil {
         val name = uri.toString().lowercase()
         return when {
             mime.contains("pdf") || name.endsWith(".pdf") -> ImportResult(images = renderPdf(context, uri))
-            mime.startsWith("image/") -> ImportResult(images = listOf(uri))
+            mime.startsWith("image/") -> ImportResult(images = listOfNotNull(cacheImage(context, uri)))
             name.endsWith(".docx") || mime.contains("wordprocessingml") -> ImportResult(text = extractDocx(context, uri))
             name.endsWith(".doc") || mime == "application/msword" -> ImportResult(text = extractLegacyDoc(context, uri))
             mime.startsWith("text/") || name.endsWith(".txt") -> ImportResult(text = readText(context, uri))
-            else -> ImportResult(images = listOf(uri)) // assume it's an image
+            else -> ImportResult(images = listOfNotNull(cacheImage(context, uri))) // assume it's an image
+        }
+    }
+
+    /**
+     * Copies a picked image into the app's own cache and returns a local file:// URI.
+     * Picker/gallery content:// URIs only carry a transient read grant that can be revoked
+     * (e.g. the process gets trimmed while the picker app is in front); reading it again at
+     * Analyze time then fails for every page. Copying immediately avoids depending on that
+     * grant surviving until the user taps Analyze.
+     */
+    fun cacheImage(context: Context, uri: Uri): Uri? {
+        return try {
+            val input = context.contentResolver.openInputStream(uri) ?: return null
+            val f = File.createTempFile("picked_", ".img", context.cacheDir)
+            input.use { inp -> f.outputStream().use { out -> inp.copyTo(out) } }
+            Uri.fromFile(f)
+        } catch (e: Exception) {
+            e.printStackTrace(); null
         }
     }
 

@@ -7,12 +7,19 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import db from './db.js';
 import { scanMedicalReport, generateReportComparison, generateHealthInsights, generateChatResponse, generateDetailedAnalysis, generateMedicineInfo, generateSpeech } from './ocr.js';
+import { hashPassword, verifyPassword, signToken, requireAuth, encrypt, publicUser, verifyPhoneIdToken, isPhoneAuthConfigured } from './auth.js';
+import { resolveKeysForUser, peekAssignmentForUser } from './keyPool.js';
+import { runWithUsageContext, trackFirebaseVerify } from './usageTracker.js';
 
 dotenv.config();
 
-// Helpers for paths in ES Modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Helpers for paths in ES Modules. Named __srcFilename/__srcDirname (not __filename/__dirname)
+// because the Lambda bundle (see template.yaml's esbuild Banner) injects its own top-level
+// __filename/__dirname for the whole bundled file — esbuild can't see inside that raw banner
+// text to rename around a collision, so declaring the standard names here a second time
+// causes "SyntaxError: Identifier '__filename' has already been declared" at Lambda cold start.
+const __srcFilename = fileURLToPath(import.meta.url);
+const __srcDirname = path.dirname(__srcFilename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,14 +28,19 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Ensure uploads folder exists
-const uploadsDir = path.join(__dirname, 'uploads');
+// Use /tmp on Lambda (the only writable directory), local uploads/ folder otherwise.
+const isLambda = !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+const uploadsDir = isLambda
+  ? path.join('/tmp', 'uploads')
+  : path.join(__srcDirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Serve uploaded images statically
-app.use('/uploads', express.static(uploadsDir));
+// Serve uploaded images statically (local dev only — on Lambda, images stay on the device)
+if (!isLambda) {
+  app.use('/uploads', express.static(uploadsDir));
+}
 
 // Setup Multer for file uploads
 const storage = multer.diskStorage({
@@ -64,6 +76,240 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date() });
 });
 
+// ─── Auth & per-user free tier ────────────────────────────────────────────────
+// The Android app calls Gemini/Sarvam directly from the phone (not proxied through this
+// server) — these routes exist so a logged-in user's phone can ask "which key should I use
+// right now", with the server tracking free-tier usage and handing back either a personal
+// key (if the user added one) or a key from the pooled house rotation. See keyPool.js.
+
+const VALID_GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'];
+
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    const { firstName, lastName, dateOfBirth, gender, email, password, phoneIdToken } = req.body || {};
+
+    if (!firstName || !String(firstName).trim() || !lastName || !String(lastName).trim()) {
+      return res.status(400).json({ error: 'First name and last name are required.' });
+    }
+    if (!dateOfBirth || Number.isNaN(Date.parse(dateOfBirth))) {
+      return res.status(400).json({ error: 'A valid date of birth is required.' });
+    }
+    if (!VALID_GENDERS.includes(gender)) {
+      return res.status(400).json({ error: 'A valid gender is required.' });
+    }
+    if (!email || !String(email).trim() || !password || String(password).length < 6) {
+      return res.status(400).json({ error: 'A valid email and a password of at least 6 characters are required.' });
+    }
+    if (!phoneIdToken) {
+      return res.status(400).json({ error: 'Phone verification is required.' });
+    }
+    if (!isPhoneAuthConfigured()) {
+      return res.status(501).json({ error: 'Phone verification is not configured on this server yet.' });
+    }
+
+    let msisdn;
+    try {
+      msisdn = await verifyPhoneIdToken(String(phoneIdToken));
+      trackFirebaseVerify(null, true);
+    } catch (error) {
+      trackFirebaseVerify(null, false);
+      return res.status(401).json({ error: 'Phone verification failed. Please request a new OTP and try again.' });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    // Email and MSISDN each get their own uniqueness check so we can return which one collided
+    // — both are UNIQUE at the DB level too (see db_init.sql) as the source of truth.
+    const existingEmail = await db.query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
+    if (existingEmail.rows.length > 0) {
+      return res.status(409).json({ error: 'An account with this email already exists.' });
+    }
+    const existingPhone = await db.query('SELECT id FROM users WHERE msisdn = $1', [msisdn]);
+    if (existingPhone.rows.length > 0) {
+      return res.status(409).json({ error: 'An account with this phone number already exists.' });
+    }
+
+    const passwordHash = await hashPassword(String(password));
+    const result = await db.query(
+      `INSERT INTO users (first_name, last_name, date_of_birth, gender, email, msisdn, password_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [String(firstName).trim(), String(lastName).trim(), dateOfBirth, gender, normalizedEmail, msisdn, passwordHash]
+    );
+    const user = result.rows[0];
+    res.status(201).json({ token: signToken(user), user: publicUser(user) });
+  } catch (error) {
+    // Race condition: two signups for the same email/phone landing concurrently past the
+    // pre-checks above — the DB's UNIQUE constraints are the real guard here.
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'An account with this email or phone number already exists.' });
+    }
+    console.error('Signup failed:', error);
+    res.status(500).json({ error: 'Failed to create account' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
+    const result = await db.query('SELECT * FROM users WHERE email = $1', [String(email).trim().toLowerCase()]);
+    const user = result.rows[0];
+    if (!user || !(await verifyPassword(String(password), user.password_hash))) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+    res.json({ token: signToken(user), user: publicUser(user) });
+  } catch (error) {
+    console.error('Login failed:', error);
+    res.status(500).json({ error: 'Failed to log in' });
+  }
+});
+
+// Phone+OTP login: the phone number was already OTP-verified client-side by the Firebase SDK;
+// this just confirms that verification (via the ID token) and looks up the linked account.
+app.post('/api/auth/login-phone', async (req, res) => {
+  try {
+    const { phoneIdToken } = req.body || {};
+    if (!phoneIdToken) {
+      return res.status(400).json({ error: 'Phone verification token is required.' });
+    }
+    if (!isPhoneAuthConfigured()) {
+      return res.status(501).json({ error: 'Phone verification is not configured on this server yet.' });
+    }
+
+    let msisdn;
+    try {
+      msisdn = await verifyPhoneIdToken(String(phoneIdToken));
+      trackFirebaseVerify(null, true);
+    } catch (error) {
+      trackFirebaseVerify(null, false);
+      return res.status(401).json({ error: 'Phone verification failed. Please request a new OTP and try again.' });
+    }
+
+    const result = await db.query('SELECT * FROM users WHERE msisdn = $1', [msisdn]);
+    const user = result.rows[0];
+    if (!user) {
+      return res.status(404).json({ error: 'No account found for this phone number. Sign up first.' });
+    }
+    res.json({ token: signToken(user), user: publicUser(user) });
+  } catch (error) {
+    console.error('Phone login failed:', error);
+    res.status(500).json({ error: 'Failed to log in' });
+  }
+});
+
+app.get('/api/auth/me', requireAuth, (req, res) => {
+  res.json(publicUser(req.user));
+});
+
+app.post('/api/auth/reset-password-otp', async (req, res) => {
+  try {
+    const { phoneIdToken, newPassword } = req.body || {};
+    if (!phoneIdToken || !newPassword || String(newPassword).length < 6) {
+      return res.status(400).json({ error: 'Phone verification token and a password of at least 6 characters are required.' });
+    }
+    if (!isPhoneAuthConfigured()) {
+      return res.status(501).json({ error: 'Phone verification is not configured on this server.' });
+    }
+
+    let msisdn;
+    try {
+      msisdn = await verifyPhoneIdToken(String(phoneIdToken));
+      trackFirebaseVerify(null, true);
+    } catch (error) {
+      trackFirebaseVerify(null, false);
+      return res.status(401).json({ error: 'Phone verification failed. Please try again.' });
+    }
+
+    const passwordHash = await hashPassword(String(newPassword));
+    const result = await db.query(
+      'UPDATE users SET password_hash = $1 WHERE msisdn = $2 RETURNING id',
+      [passwordHash, msisdn]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'No account found linked to this phone number.' });
+    }
+
+    res.json({ success: true, message: 'Password reset successfully.' });
+  } catch (error) {
+    console.error('Reset password failed:', error);
+    res.status(500).json({ error: 'Failed to reset password.' });
+  }
+});
+
+app.post('/api/auth/change-password', requireAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || !newPassword || String(newPassword).length < 6) {
+      return res.status(400).json({ error: 'Current password and a new password of at least 6 characters are required.' });
+    }
+
+    const result = await db.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
+    const user = result.rows[0];
+    if (!user || !(await verifyPassword(String(currentPassword), user.password_hash))) {
+      return res.status(401).json({ error: 'Incorrect current password.' });
+    }
+
+    const passwordHash = await hashPassword(String(newPassword));
+    await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, req.user.id]);
+
+    res.json({ success: true, message: 'Password updated successfully.' });
+  } catch (error) {
+    console.error('Change password failed:', error);
+    res.status(500).json({ error: 'Failed to change password.' });
+  }
+});
+
+// Issues the Gemini/Sarvam key the phone should use right now, and accounts for free-tier
+// usage. Call once per app session (or once/day) rather than before every AI call.
+app.get('/api/auth/keys', requireAuth, async (req, res) => {
+  try {
+    const resolved = await resolveKeysForUser(req.user);
+    res.json(resolved);
+  } catch (error) {
+    console.error('Error resolving keys for user:', error);
+    res.status(500).json({ error: 'Failed to resolve API keys' });
+  }
+});
+
+// Read-only usage/quota display (e.g. the Account screen) — unlike /api/auth/keys, this
+// never consumes a free-tier issuance, so it's safe to call every time the screen opens.
+app.get('/api/auth/usage', requireAuth, async (req, res) => {
+  try {
+    const usage = await peekAssignmentForUser(req.user);
+    res.json(usage);
+  } catch (error) {
+    console.error('Error reading usage for user:', error);
+    res.status(500).json({ error: 'Failed to read usage' });
+  }
+});
+
+app.post('/api/user/gemini-key', requireAuth, async (req, res) => {
+  try {
+    const { api_key } = req.body || {};
+    const value = api_key && String(api_key).trim() ? encrypt(String(api_key).trim()) : null;
+    await db.query('UPDATE users SET own_gemini_key = $1 WHERE id = $2', [value, req.user.id]);
+    res.json({ message: value ? 'Gemini API key saved.' : 'Gemini API key removed.', hasOwnGeminiKey: !!value });
+  } catch (error) {
+    console.error('Error saving Gemini key:', error);
+    res.status(500).json({ error: 'Failed to save Gemini API key' });
+  }
+});
+
+app.post('/api/user/sarvam-key', requireAuth, async (req, res) => {
+  try {
+    const { api_key } = req.body || {};
+    const value = api_key && String(api_key).trim() ? encrypt(String(api_key).trim()) : null;
+    await db.query('UPDATE users SET own_sarvam_key = $1 WHERE id = $2', [value, req.user.id]);
+    res.json({ message: value ? 'Sarvam API key saved.' : 'Sarvam API key removed.', hasOwnSarvamKey: !!value });
+  } catch (error) {
+    console.error('Error saving Sarvam key:', error);
+    res.status(500).json({ error: 'Failed to save Sarvam API key' });
+  }
+});
+
 // Endpoint: Medicine info — what a tablet is for, in the patient's local language
 app.post('/api/medicine-info', async (req, res) => {
   try {
@@ -71,7 +317,8 @@ app.post('/api/medicine-info', async (req, res) => {
     if (!medicine_name || !String(medicine_name).trim()) {
       return res.status(400).json({ error: 'medicine_name is required.' });
     }
-    const info = await generateMedicineInfo(String(medicine_name).trim(), language || 'English');
+    const info = await runWithUsageContext({ userId: req.user?.id, operation: 'medicine-info' }, () =>
+      generateMedicineInfo(String(medicine_name).trim(), language || 'English'));
     res.json(info);
   } catch (error) {
     console.error('Error generating medicine info:', error);
@@ -86,7 +333,8 @@ app.post('/api/tts', async (req, res) => {
     if (!text || !String(text).trim()) {
       return res.status(400).json({ error: 'text is required.' });
     }
-    const result = await generateSpeech(String(text), language || 'English', engine || 'sarvam');
+    const result = await runWithUsageContext({ userId: req.user?.id, operation: 'tts' }, () =>
+      generateSpeech(String(text), language || 'English', engine || 'sarvam'));
     res.json(result);
   } catch (error) {
     console.error('Error generating speech:', error);
@@ -121,7 +369,8 @@ app.post('/api/chat', async (req, res) => {
       reports = r.rows;
     }
 
-    const result = await generateChatResponse(String(question), reports, Array.isArray(history) ? history : [], language || 'English');
+    const result = await runWithUsageContext({ userId: req.user?.id, operation: 'chat' }, () =>
+      generateChatResponse(String(question), reports, Array.isArray(history) ? history : [], language || 'English'));
     res.json({ answer: result.answer, source: result.source });
   } catch (error) {
     console.error('Error handling chat request:', error);
@@ -148,7 +397,8 @@ app.post('/api/reports', upload.single('image'), async (req, res) => {
     console.log(`Starting scan for uploaded file: ${req.file.filename} (scanType: ${scanType}, category: ${reportCategory})`);
     
     // Call the OCR/AI extraction utility
-    const ocrData = await scanMedicalReport(filePath, mimeType, useSarvam, localOcrText, scanType, reportCategory);
+    const ocrData = await runWithUsageContext({ userId: req.user?.id, operation: 'ocr' }, () =>
+      scanMedicalReport(filePath, mimeType, useSarvam, localOcrText, scanType, reportCategory));
     
     // Extract values with sensible defaults
     const patientName = ocrData.patientName || 'Unknown Patient';
@@ -197,27 +447,28 @@ app.post('/api/reports', upload.single('image'), async (req, res) => {
       console.error('Error fetching previous report for comparison:', prevError);
     }
 
-    // Generate comparison result
-    const comparisonResult = await generateReportComparison({
-      patient_name: patientName,
-      report_date: reportDate,
-      report_type: reportType,
-      report_category: category,
-      medications: medications,
-      test_results: ocrData.testResults || { parameters: [], findings: [] },
-      comments: comments
-    }, previousReport);
-
-    // Generate health insights (interpretation, specialist recommendations, alignment, side-effects)
-    const healthInsights = await generateHealthInsights({
-      patient_name: patientName,
-      report_date: reportDate,
-      report_type: reportType,
-      report_category: category,
-      medications: medications,
-      test_results: ocrData.testResults || { parameters: [], findings: [] },
-      comments: comments
-    });
+    // Generate comparison result + health insights (interpretation, specialist recommendations,
+    // alignment, side-effects) — billed under the same 'ocr' operation as the scan itself.
+    const { comparisonResult, healthInsights } = await runWithUsageContext({ userId: req.user?.id, operation: 'ocr' }, async () => ({
+      comparisonResult: await generateReportComparison({
+        patient_name: patientName,
+        report_date: reportDate,
+        report_type: reportType,
+        report_category: category,
+        medications: medications,
+        test_results: ocrData.testResults || { parameters: [], findings: [] },
+        comments: comments
+      }, previousReport),
+      healthInsights: await generateHealthInsights({
+        patient_name: patientName,
+        report_date: reportDate,
+        report_type: reportType,
+        report_category: category,
+        medications: medications,
+        test_results: ocrData.testResults || { parameters: [], findings: [] },
+        comments: comments
+      }),
+    }));
 
     // Insert into PostgreSQL database
     const queryText = `
@@ -425,7 +676,8 @@ app.get('/api/reports/:id/detailed-analysis', async (req, res) => {
       return res.json({ ...cached, cached: true });
     }
 
-    const analysis = await generateDetailedAnalysis(report);
+    const analysis = await runWithUsageContext({ userId: req.user?.id, operation: 'detailed-analysis' }, () =>
+      generateDetailedAnalysis(report));
     analysis.generatedAt = new Date().toISOString();
 
     // Persist so repeat views don't re-call the AI.
@@ -482,26 +734,27 @@ app.put('/api/reports/:id', async (req, res) => {
       console.error('Error fetching previous report for comparison during update:', prevError);
     }
 
-    const comparisonResult = await generateReportComparison({
-      patient_name,
-      report_date,
-      report_type,
-      report_category: category,
-      medications: medications || [],
-      test_results: currentTestResults,
-      comments
-    }, previousReport);
-
-    // Regenerate health insights
-    const healthInsights = await generateHealthInsights({
-      patient_name,
-      report_date,
-      report_type,
-      report_category: category,
-      medications: medications || [],
-      test_results: currentTestResults,
-      comments
-    });
+    const { comparisonResult, healthInsights } = await runWithUsageContext({ userId: req.user?.id, operation: 'ocr' }, async () => ({
+      comparisonResult: await generateReportComparison({
+        patient_name,
+        report_date,
+        report_type,
+        report_category: category,
+        medications: medications || [],
+        test_results: currentTestResults,
+        comments
+      }, previousReport),
+      // Regenerate health insights
+      healthInsights: await generateHealthInsights({
+        patient_name,
+        report_date,
+        report_type,
+        report_category: category,
+        medications: medications || [],
+        test_results: currentTestResults,
+        comments
+      }),
+    }));
 
     const queryText = `
       UPDATE medical_reports 
@@ -562,7 +815,7 @@ app.delete('/api/reports/:id', async (req, res) => {
     }
     
     const relativeImagePath = findResult.rows[0].image_path;
-    const absoluteImagePath = path.join(__dirname, relativeImagePath);
+    const absoluteImagePath = path.join(__srcDirname, relativeImagePath);
     
     // Delete database record
     await db.query('DELETE FROM medical_reports WHERE id = $1', [id]);
@@ -1159,10 +1412,10 @@ app.post('/api/compare', upload.fields([
     console.log(`Compare request: ${file1.filename} vs ${file2.filename}`);
 
     // OCR both in parallel
-    const [ocr1, ocr2] = await Promise.all([
+    const [ocr1, ocr2] = await runWithUsageContext({ userId: req.user?.id, operation: 'compare' }, () => Promise.all([
       scanMedicalReport(file1.path, file1.mimetype, false, '', scanType1, category1),
       scanMedicalReport(file2.path, file2.mimetype, false, '', scanType2, category2)
-    ]);
+    ]));
 
     const report1Data = {
       patient_name: ocr1.patientName || 'Report 1',
@@ -1187,10 +1440,8 @@ app.post('/api/compare', upload.fields([
     };
 
     // Treat report1 as "previous" and report2 as "new" for comparison
-    const comparison = await generateReportComparison(report2Data, {
-      id: 'compare-temp',
-      ...report1Data
-    });
+    const comparison = await runWithUsageContext({ userId: req.user?.id, operation: 'compare' }, () =>
+      generateReportComparison(report2Data, { id: 'compare-temp', ...report1Data }));
 
     // Delete temp uploaded files since we're not saving to DB
     try { fs.unlinkSync(file1.path); } catch (_) {}
@@ -1215,8 +1466,12 @@ app.use((err, req, res, next) => {
   next();
 });
 
-// Start listening (on all network interfaces '0.0.0.0' so APK can connect over Wi-Fi)
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Backend server running on http://0.0.0.0:${PORT}`);
-  console.log(`Test connection locally at http://localhost:${PORT}/api/health`);
-});
+// Start listening only when run directly (not when imported by lambda.js on AWS)
+if (!isLambda) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Backend server running on http://0.0.0.0:${PORT}`);
+    console.log(`Test connection locally at http://localhost:${PORT}/api/health`);
+  });
+}
+
+export default app;

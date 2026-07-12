@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
+import { trackGemini, trackSarvam } from './usageTracker.js';
 // We're using standard fetch available natively in Node.js 18+
 
 dotenv.config();
@@ -44,7 +45,7 @@ export async function scanMedicalReport(filePath, mimeType, useSarvam = false, l
     if (sarvamKey && sarvamKey !== 'YOUR_SARVAM_API_KEY_HERE') {
       try {
         console.log('Running Sarvam Indic OCR + Translate pipeline for reference text...');
-        const sarvamText = await runSarvamOcrAndTranslate(filePath, mimeType, sarvamKey);
+        const sarvamText = await trackSarvam('doc-digitization', { pages: 1 }, () => runSarvamOcrAndTranslate(filePath, mimeType, sarvamKey));
         if (sarvamText && sarvamText.trim().length > 0) {
           referenceText = [referenceText, sarvamText].filter(Boolean).join('\n\n');
           console.log(`Sarvam reference text captured (${sarvamText.length} chars).`);
@@ -136,7 +137,7 @@ Do not return any markdown code block formatting (like \`\`\`json) or extra text
 `;
 
     console.log('Sending image to Gemini for analysis...');
-    const response = await ai.models.generateContent({
+    const response = await trackGemini(ai, {
       model: 'gemini-2.5-flash',
       contents: [imagePart, promptText],
     });
@@ -233,7 +234,7 @@ Return ONLY the raw JSON. Do not write markdown wrappers like \`\`\`json.
 `;
       
       console.log('Sending reports to Gemini for comparison...');
-      const response = await ai.models.generateContent({
+      const response = await trackGemini(ai, {
         model: 'gemini-2.5-flash',
         contents: [comparisonPrompt],
       });
@@ -428,7 +429,7 @@ Rules:
 `;
 
       console.log('Generating AI health insights...');
-      const response = await ai.models.generateContent({
+      const response = await trackGemini(ai, {
         model: 'gemini-2.5-flash',
         contents: [insightsPrompt],
       });
@@ -893,7 +894,8 @@ async function runSarvamOcrAndTranslate(filePath, mimeType, apiKey) {
   let translatedText = '';
   try {
     console.log('Translating extracted Sarvam text to English...');
-    const translateRes = await fetch('https://api.sarvam.ai/translate', {
+    const inputChars = Math.min(ocrText.length, 1000);
+    const translateRes = await trackSarvam('translate', { chars: inputChars }, () => fetch('https://api.sarvam.ai/translate', {
       method: 'POST',
       headers: {
         'api-subscription-key': apiKey,
@@ -905,7 +907,7 @@ async function runSarvamOcrAndTranslate(filePath, mimeType, apiKey) {
         target_language_code: 'en-IN',
         model: 'mayura:v1'
       })
-    });
+    }));
 
     if (translateRes.ok) {
       const transData = await translateRes.json();
@@ -1410,7 +1412,7 @@ PATIENT'S QUESTION: ${question}${langInstruction}
 Answer:`;
 
       console.log('Generating AI chat response...');
-      const response = await ai.models.generateContent({
+      const response = await trackGemini(ai, {
         model: 'gemini-2.5-flash',
         contents: [chatPrompt],
       });
@@ -1505,7 +1507,7 @@ STRICT RULES:
 - Return ONLY raw JSON. No markdown code fences, no text outside the JSON.`;
 
       console.log('Generating detailed AI analysis...');
-      const response = await ai.models.generateContent({
+      const response = await trackGemini(ai, {
         model: 'gemini-2.5-flash',
         contents: [prompt],
       });
@@ -1624,7 +1626,8 @@ async function sarvamTranslate(text, targetCode, apiKey) {
   if (!text || !text.trim() || targetCode === 'en-IN') return text;
   if (!apiKey || apiKey === 'YOUR_SARVAM_API_KEY_HERE') return null;
   try {
-    const res = await fetch('https://api.sarvam.ai/translate', {
+    const inputChars = Math.min(text.length, 900);
+    const res = await trackSarvam('translate', { chars: inputChars }, () => fetch('https://api.sarvam.ai/translate', {
       method: 'POST',
       headers: { 'api-subscription-key': apiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1633,7 +1636,7 @@ async function sarvamTranslate(text, targetCode, apiKey) {
         target_language_code: targetCode,
         model: 'mayura:v1'
       })
-    });
+    }));
     if (!res.ok) return null;
     const data = await res.json();
     return data.translated_text || null;
@@ -1709,7 +1712,7 @@ async function generateSpeechGemini(text) {
     const ai = new GoogleGenAI({ apiKey: geminiKey });
     const audios = [];
     for (const c of chunks) {
-      const response = await ai.models.generateContent({
+      const response = await trackGemini(ai, {
         model: 'gemini-2.5-flash-preview-tts',
         contents: [{ parts: [{ text: c }] }],
         config: {
@@ -1744,7 +1747,8 @@ export async function generateSpeech(text, language = 'English', engine = 'sarva
   if (chunks.length === 0) return { audios: [] };
 
   try {
-    const res = await fetch('https://api.sarvam.ai/text-to-speech', {
+    const chars = chunks.reduce((sum, c) => sum + c.length, 0);
+    const res = await trackSarvam('tts', { chars }, () => fetch('https://api.sarvam.ai/text-to-speech', {
       method: 'POST',
       headers: { 'api-subscription-key': sarvamKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1755,7 +1759,7 @@ export async function generateSpeech(text, language = 'English', engine = 'sarva
         speech_sample_rate: 22050,
         enable_preprocessing: true
       })
-    });
+    }));
     if (!res.ok) {
       const t = await res.text();
       console.error('Sarvam TTS failed:', res.status, t.slice(0, 200));
@@ -1793,7 +1797,7 @@ export async function generateMedicineInfo(medicineName, language = 'English') {
 Return ONLY raw JSON (no code fences):
 {"purpose":"one short line — what this medicine is commonly given for","plainExplanation":"2-3 very simple sentences on what it does in the body and why it helps","commonUses":["short phrase", "short phrase"],"safetyTips":["short simple tip", "short simple tip"]}
 If the name is unclear or could be several medicines, give the most common one and keep it general.`;
-      const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: [prompt] });
+      const response = await trackGemini(ai, { model: 'gemini-2.5-flash', contents: [prompt] });
       let cleaned = (response.text || '').trim();
       if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```json\s*/, '').replace(/```$/, '').trim();
       info = JSON.parse(cleaned);
@@ -1835,7 +1839,7 @@ If the name is unclear or could be several medicines, give the most common one a
       try {
         const ai = new GoogleGenAI({ apiKey: geminiKey });
         const tPrompt = `Rewrite this medicine explanation in ${language} using very simple words a common person understands. Keep the medicine name "${medicineName}" in English. Return ONLY raw JSON with the same keys: ${JSON.stringify(info)}`;
-        const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: [tPrompt] });
+        const response = await trackGemini(ai, { model: 'gemini-2.5-flash', contents: [tPrompt] });
         let cleaned = (response.text || '').trim();
         if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```json\s*/, '').replace(/```$/, '').trim();
         info = JSON.parse(cleaned);

@@ -10,14 +10,17 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -37,7 +40,12 @@ import com.example.medicalscanner.model.MedicationHistory
 import com.example.medicalscanner.reminder.MedicineReminderManager
 import com.example.medicalscanner.reminder.MedicineSchedule
 import com.example.medicalscanner.reminder.MedicineScheduleStore
+import com.example.medicalscanner.reminder.SlotConfig
+import com.example.medicalscanner.reminder.AppointmentSchedule
+import com.example.medicalscanner.reminder.AppointmentStore
+import com.example.medicalscanner.reminder.AppointmentReminderManager
 import java.util.Calendar
+import java.util.UUID
 
 private data class SlotStyle(val bg: Color, val fg: Color, val icon: ImageVector)
 
@@ -67,6 +75,7 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
     ) { granted -> hasNotifPermission = granted }
 
     var schedules by remember { mutableStateOf(MedicineScheduleStore.loadAll(context)) }
+    var appointments by remember { mutableStateOf(AppointmentStore.loadAll(context)) }
 
     LaunchedEffect(medicationHistory) {
         medicationHistory.filter { it.status.lowercase() == "active" }.forEach { med ->
@@ -78,7 +87,9 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
             )
         }
         schedules = MedicineScheduleStore.loadAll(context)
+        appointments = AppointmentStore.loadAll(context)
         MedicineReminderManager.scheduleAll(context)
+        AppointmentReminderManager.scheduleAll(context)
     }
 
     val currentSlot = remember {
@@ -89,6 +100,12 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
     var editingSchedule by remember { mutableStateOf<MedicineSchedule?>(null) }
     var editingSlot     by remember { mutableStateOf<String?>(null) }
     var deletingSchedule by remember { mutableStateOf<MedicineSchedule?>(null) }
+
+    var showAddMedDialog by remember { mutableStateOf(false) }
+    var showAddApptDialog by remember { mutableStateOf(false) }
+    var editingMedSchedule by remember { mutableStateOf<MedicineSchedule?>(null) }
+    var editingAppt by remember { mutableStateOf<AppointmentSchedule?>(null) }
+    var deletingAppt by remember { mutableStateOf<AppointmentSchedule?>(null) }
 
     val hasMedsToday = schedules.any { s -> s.slots.values.any { it.enabled } }
 
@@ -134,6 +151,42 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
                         Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
                             Uri.parse("package:${context.packageName}"))
                     )
+                }
+            }
+        }
+
+        // Custom quick-add actions row
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = { showAddMedDialog = true },
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Add Med", fontWeight = FontWeight.Bold)
+                }
+
+                Button(
+                    onClick = { showAddApptDialog = true },
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                ) {
+                    Icon(Icons.Default.Event, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Add Appt", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -189,6 +242,37 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
             }
         }
 
+        // Appointments section
+        if (appointments.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.CalendarMonth, "Appointments",
+                        tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(22.dp))
+                    Text("Doctor Appointments",
+                        fontWeight = FontWeight.ExtraBold, fontSize = 20.sp,
+                        color = MaterialTheme.colorScheme.secondary)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text("Manage your scheduled doctor visits and clinical check-ups.",
+                    fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(12.dp))
+            }
+
+            items(appointments, key = { "${it.id}_appt" }) { appt ->
+                AppointmentCard(
+                    appointment = appt,
+                    onEdit = { editingAppt = appt },
+                    onDelete = { deletingAppt = appt }
+                )
+            }
+        }
+
         // Manage all schedules section
         if (schedules.isNotEmpty()) {
             item {
@@ -225,7 +309,8 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
                         schedules = MedicineScheduleStore.loadAll(context)
                     },
                     onEditTime = { slot -> editingSchedule = schedule; editingSlot = slot },
-                    onDelete = { deletingSchedule = schedule }
+                    onDelete = { deletingSchedule = schedule },
+                    onEdit = { editingMedSchedule = schedule }
                 )
             }
         }
@@ -272,6 +357,85 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
                 editingSchedule = null; editingSlot = null
             },
             onDismiss = { editingSchedule = null; editingSlot = null }
+        )
+    }
+
+    // --- Custom Medicine Add / Edit Dialogs ---
+    if (showAddMedDialog) {
+        AddMedicineDialog(
+            onConfirm = { schedule ->
+                MedicineScheduleStore.upsert(context, schedule)
+                MedicineReminderManager.scheduleAll(context)
+                schedules = MedicineScheduleStore.loadAll(context)
+                showAddMedDialog = false
+            },
+            onDismiss = { showAddMedDialog = false }
+        )
+    }
+
+    editingMedSchedule?.let { schedule ->
+        AddMedicineDialog(
+            initialSchedule = schedule,
+            onConfirm = { updated ->
+                if (!updated.medicineName.equals(schedule.medicineName, ignoreCase = true) ||
+                    !updated.patientName.equals(schedule.patientName, ignoreCase = true)) {
+                    MedicineScheduleStore.delete(context, schedule.medicineName, schedule.patientName)
+                }
+                MedicineScheduleStore.upsert(context, updated)
+                MedicineReminderManager.scheduleAll(context)
+                schedules = MedicineScheduleStore.loadAll(context)
+                editingMedSchedule = null
+            },
+            onDismiss = { editingMedSchedule = null }
+        )
+    }
+
+    // --- Custom Appointment Add / Edit Dialogs ---
+    if (showAddApptDialog) {
+        AddAppointmentDialog(
+            onConfirm = { appt ->
+                AppointmentStore.upsert(context, appt)
+                AppointmentReminderManager.scheduleAll(context)
+                appointments = AppointmentStore.loadAll(context)
+                showAddApptDialog = false
+            },
+            onDismiss = { showAddApptDialog = false }
+        )
+    }
+
+    editingAppt?.let { appt ->
+        AddAppointmentDialog(
+            initialAppointment = appt,
+            onConfirm = { updated ->
+                AppointmentStore.upsert(context, updated)
+                AppointmentReminderManager.scheduleAll(context)
+                appointments = AppointmentStore.loadAll(context)
+                editingAppt = null
+            },
+            onDismiss = { editingAppt = null }
+        )
+    }
+
+    deletingAppt?.let { appt ->
+        AlertDialog(
+            onDismissRequest = { deletingAppt = null },
+            icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Delete Appointment?") },
+            text = { Text("Are you sure you want to cancel and delete the appointment with Dr. ${appt.doctorName}?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        AppointmentStore.delete(context, appt.id)
+                        AppointmentReminderManager.cancel(context, appt.id)
+                        appointments = AppointmentStore.loadAll(context)
+                        deletingAppt = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { deletingAppt = null }) { Text("Cancel") }
+            }
         )
     }
 }
@@ -436,7 +600,8 @@ private fun ManageCard(
     schedule: MedicineSchedule,
     onToggle: (String, Boolean) -> Unit,
     onEditTime: (String) -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onEdit: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -469,6 +634,10 @@ private fun ManageCard(
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             fontWeight = FontWeight.SemiBold)
                     }
+                }
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit reminder",
+                        tint = MaterialTheme.colorScheme.primary)
                 }
                 IconButton(onClick = onDelete) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete reminder",
@@ -568,3 +737,426 @@ private fun SlotTimePickerDialog(
         }
     )
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddMedicineDialog(
+    initialSchedule: MedicineSchedule? = null,
+    onConfirm: (MedicineSchedule) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var medName by remember { mutableStateOf(initialSchedule?.medicineName ?: "") }
+    var patName by remember { mutableStateOf(initialSchedule?.patientName ?: "Me") }
+    var dosage by remember { mutableStateOf(initialSchedule?.dosage ?: "") }
+    var frequency by remember { mutableStateOf(initialSchedule?.frequency ?: "Daily") }
+
+    val slotConfigMap = remember {
+        mutableStateMapOf<String, SlotConfig>().apply {
+            MedicineScheduleStore.defaultSlotTimes.forEach { (slot, hm) ->
+                val existing = initialSchedule?.slots?.get(slot)
+                put(slot, existing ?: SlotConfig(enabled = false, hour = hm.first, minute = hm.second))
+            }
+        }
+    }
+
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (initialSchedule == null) "Add Medicine Reminder" else "Edit Medicine Reminder",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = medName,
+                    onValueChange = { medName = it },
+                    label = { Text("Medicine Name") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = patName,
+                    onValueChange = { patName = it },
+                    label = { Text("Patient Name") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = dosage,
+                        onValueChange = { dosage = it },
+                        label = { Text("Dosage") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = frequency,
+                        onValueChange = { frequency = it },
+                        label = { Text("Frequency") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Text("Select reminder slots", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+
+                MedicineScheduleStore.defaultSlotTimes.keys.forEach { slot ->
+                    val cfg = slotConfigMap[slot]!!
+                    var timePickerDialogSlot by remember { mutableStateOf<String?>(null) }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = cfg.enabled,
+                                onCheckedChange = { checked ->
+                                    slotConfigMap[slot] = cfg.copy(enabled = checked)
+                                }
+                            )
+                            Text(slot, style = MaterialTheme.typography.bodyMedium)
+                        }
+
+                        TextButton(
+                            onClick = { timePickerDialogSlot = slot },
+                            enabled = cfg.enabled
+                        ) {
+                            Text("%02d:%02d".format(cfg.hour, cfg.minute))
+                        }
+                    }
+
+                    if (timePickerDialogSlot != null) {
+                        val slotState = rememberTimePickerState(initialHour = cfg.hour, initialMinute = cfg.minute)
+                        AlertDialog(
+                            onDismissRequest = { timePickerDialogSlot = null },
+                            text = { TimePicker(state = slotState) },
+                            confirmButton = {
+                                Button(onClick = {
+                                    slotConfigMap[slot] = cfg.copy(hour = slotState.hour, minute = slotState.minute)
+                                    timePickerDialogSlot = null
+                                }) { Text("OK") }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { timePickerDialogSlot = null }) { Text("Cancel") }
+                            }
+                        )
+                    }
+                }
+
+                errorMsg?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (medName.trim().isEmpty()) {
+                        errorMsg = "Medicine name is required."
+                        return@Button
+                    }
+                    if (slotConfigMap.values.none { it.enabled }) {
+                        errorMsg = "Select at least one reminder slot."
+                        return@Button
+                    }
+                    onConfirm(
+                        MedicineSchedule(
+                            medicineName = medName.trim(),
+                            patientName = patName.trim(),
+                            dosage = dosage.trim(),
+                            frequency = frequency.trim(),
+                            slots = slotConfigMap.toMap()
+                        )
+                    )
+                }
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddAppointmentDialog(
+    initialAppointment: AppointmentSchedule? = null,
+    onConfirm: (AppointmentSchedule) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var doctorName by remember { mutableStateOf(initialAppointment?.doctorName ?: "") }
+    var place by remember { mutableStateOf(initialAppointment?.place ?: "") }
+    var recurrence by remember { mutableStateOf(initialAppointment?.recurrence ?: "None") }
+    var date by remember { mutableStateOf(initialAppointment?.date ?: "") }
+    var time by remember { mutableStateOf(initialAppointment?.time ?: "") }
+
+    var hour by remember { mutableIntStateOf(initialAppointment?.hour ?: 9) }
+    var minute by remember { mutableIntStateOf(initialAppointment?.minute ?: 0) }
+
+    val recurrenceOptions = listOf("None", "Daily", "Weekly", "Monthly", "3 Months", "6 Months", "1 Year")
+    var recurrenceExpanded by remember { mutableStateOf(false) }
+
+    var showTimePicker by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (initialAppointment == null) "Add Appointment" else "Edit Appointment", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = doctorName,
+                    onValueChange = { doctorName = it },
+                    label = { Text("Doctor Name") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = place,
+                    onValueChange = { place = it },
+                    label = { Text("Place / Clinic Name") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Recurrence selector dropdown
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedCard(
+                        onClick = { recurrenceExpanded = true },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.outlinedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(
+                                    text = "Recurrence",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = recurrence,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Icon(
+                                imageVector = if (recurrenceExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = recurrenceExpanded,
+                        onDismissRequest = { recurrenceExpanded = false }
+                    ) {
+                        recurrenceOptions.forEach { opt ->
+                            DropdownMenuItem(
+                                text = { Text(opt) },
+                                onClick = {
+                                    recurrence = opt
+                                    recurrenceExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Date field (acts as Start Date for recurring)
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = date,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(if (recurrence == "None") "Date (YYYY-MM-DD)" else "Start Date (YYYY-MM-DD)") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Box(
+                        modifier = Modifier.matchParentSize().clickable {
+                            val cal = Calendar.getInstance()
+                            android.app.DatePickerDialog(
+                                context,
+                                { _, y, m, d ->
+                                    date = "%04d-%02d-%02d".format(y, m + 1, d)
+                                },
+                                cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
+                            ).show()
+                        }
+                    )
+                }
+
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = if (time.isNotEmpty()) time else "%02d:%02d".format(hour, minute),
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Time (HH:MM)") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Box(
+                        modifier = Modifier.matchParentSize().clickable {
+                            showTimePicker = true
+                        }
+                    )
+                }
+
+                if (showTimePicker) {
+                    val timeState = rememberTimePickerState(initialHour = hour, initialMinute = minute)
+                    AlertDialog(
+                        onDismissRequest = { showTimePicker = false },
+                        text = { TimePicker(state = timeState) },
+                        confirmButton = {
+                            Button(onClick = {
+                                hour = timeState.hour
+                                minute = timeState.minute
+                                time = "%02d:%02d".format(hour, minute)
+                                showTimePicker = false
+                            }) { Text("OK") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
+                        }
+                    )
+                }
+
+                errorMsg?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (doctorName.trim().isEmpty()) {
+                        errorMsg = "Doctor name is required."
+                        return@Button
+                    }
+                    if (place.trim().isEmpty()) {
+                        errorMsg = "Place is required."
+                        return@Button
+                    }
+                    var finalDate = date.trim()
+                    if (finalDate.isEmpty()) {
+                        if (recurrence == "None") {
+                            errorMsg = "Date is required."
+                            return@Button
+                        } else {
+                            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                            finalDate = sdf.format(java.util.Date())
+                        }
+                    }
+                    onConfirm(
+                        AppointmentSchedule(
+                            id = initialAppointment?.id ?: UUID.randomUUID().toString(),
+                            doctorName = doctorName.trim(),
+                            place = place.trim(),
+                            isRecurring = recurrence != "None",
+                            recurrence = recurrence,
+                            date = finalDate,
+                            time = "%02d:%02d".format(hour, minute),
+                            hour = hour,
+                            minute = minute
+                        )
+                    )
+                }
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+private fun AppointmentCard(
+    appointment: AppointmentSchedule,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(2.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Dr. ${appointment.doctorName}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Place, null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(appointment.place, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Schedule, null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    val recLabel = when (appointment.recurrence) {
+                        "None", "" -> if (appointment.isRecurring) "Daily" else "One-off"
+                        else -> appointment.recurrence
+                    }
+                    val dateStr = if (recLabel == "One-off") appointment.date else "$recLabel starting ${appointment.date}"
+                    Text("$dateStr at ${appointment.time}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Row {
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit Appointment", tint = MaterialTheme.colorScheme.primary)
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete Appointment", tint = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+}
+

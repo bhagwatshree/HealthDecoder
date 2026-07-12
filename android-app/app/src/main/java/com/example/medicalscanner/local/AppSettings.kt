@@ -108,4 +108,76 @@ object AppSettings {
     }
 
     fun hasGeminiKey(context: Context): Boolean = getGeminiKey(context).isNotEmpty()
+
+    // ── Account / login ──────────────────────────────────────────────────────
+    // The backend never sees scanned images (all AI calls happen on-device via GeminiClient),
+    // it only issues which key to use and tracks each user's free-tier usage. See
+    // network/AccountSync.kt for how the JWT below is used to pull that assigned key.
+    private const val KEY_AUTH_TOKEN = "auth_token"
+    private const val KEY_USER_EMAIL = "auth_user_email"
+
+    private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
+    private const val KEY_BIOMETRIC_TOKEN = "biometric_token"
+    private const val KEY_BIOMETRIC_USER_EMAIL = "biometric_user_email"
+
+    fun getAuthToken(context: Context): String? =
+        prefs(context).getString(KEY_AUTH_TOKEN, null)?.takeIf { it.isNotBlank() }
+
+    fun setAuthToken(context: Context, token: String?) {
+        prefs(context).edit().putString(KEY_AUTH_TOKEN, token).apply()
+    }
+
+    fun getUserEmail(context: Context): String? = prefs(context).getString(KEY_USER_EMAIL, null)
+
+    fun setUserEmail(context: Context, email: String?) {
+        prefs(context).edit().putString(KEY_USER_EMAIL, email).apply()
+    }
+
+    fun isLoggedIn(context: Context): Boolean = getAuthToken(context) != null
+
+    /** Logs out. Deliberately does NOT clear the Gemini/Sarvam keys — they fall back to
+     *  BuildKeys so scanning still works offline/logged-out, just without a personal quota. */
+    fun logout(context: Context) {
+        prefs(context).edit().remove(KEY_AUTH_TOKEN).remove(KEY_USER_EMAIL).apply()
+    }
+
+    fun isBiometricEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_BIOMETRIC_ENABLED, false)
+
+    fun setBiometricEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_BIOMETRIC_ENABLED, enabled).apply()
+    }
+
+    fun getBiometricToken(context: Context): String? =
+        prefs(context).getString(KEY_BIOMETRIC_TOKEN, null)?.takeIf { it.isNotBlank() }
+
+    fun setBiometricToken(context: Context, token: String?) {
+        prefs(context).edit().putString(KEY_BIOMETRIC_TOKEN, token).apply()
+    }
+
+    fun getBiometricUserEmail(context: Context): String? =
+        prefs(context).getString(KEY_BIOMETRIC_USER_EMAIL, null)?.takeIf { it.isNotBlank() }
+
+    fun setBiometricUserEmail(context: Context, email: String?) {
+        prefs(context).edit().putString(KEY_BIOMETRIC_USER_EMAIL, email).apply()
+    }
+
+    fun clearBiometricCredentials(context: Context) {
+        prefs(context).edit()
+            .remove(KEY_BIOMETRIC_TOKEN)
+            .remove(KEY_BIOMETRIC_USER_EMAIL)
+            .apply()
+    }
+
+    const val THEME_SYSTEM = "system"
+    const val THEME_LIGHT = "light"
+    const val THEME_DARK = "dark"
+    private const val KEY_THEME_MODE = "theme_mode"
+
+    fun getThemeMode(context: Context): String =
+        prefs(context).getString(KEY_THEME_MODE, THEME_SYSTEM) ?: THEME_SYSTEM
+
+    fun setThemeMode(context: Context, mode: String) {
+        prefs(context).edit().putString(KEY_THEME_MODE, mode).apply()
+    }
 }

@@ -2,12 +2,16 @@ package com.example.medicalscanner.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import com.example.medicalscanner.backup.BackupManager
+import com.example.medicalscanner.backup.BackupSync
+import com.example.medicalscanner.backup.SafCloudUploader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -15,9 +19,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -55,6 +57,26 @@ fun IPConfigScreen(
     var showDupDialog by remember { mutableStateOf(false) }
     var dupResult by remember { mutableStateOf<String?>(null) }
     var dupScanning by remember { mutableStateOf(false) }
+    var cloudFolderLabel by remember { mutableStateOf(SafCloudUploader.getBackupFolderLabel(context)) }
+    var pendingSyncCount by remember { mutableStateOf(BackupSync.pendingCount(context)) }
+    var syncing by remember { mutableStateOf(false) }
+
+    // SAF folder picker: user picks a cloud-synced folder (Drive / OneDrive / Dropbox / local)
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            SafCloudUploader.setBackupFolderUri(context, uri)
+            cloudFolderLabel = SafCloudUploader.getBackupFolderLabel(context)
+            // Immediately sync any pending backups to the newly chosen folder
+            coroutineScope.launch {
+                syncing = true
+                withContext(Dispatchers.IO) { BackupSync.syncPending(context) }
+                pendingSyncCount = BackupSync.pendingCount(context)
+                syncing = false
+            }
+        }
+    }
 
     // Export a backup zip to any folder the user picks (Google Drive / OneDrive / local).
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
@@ -128,23 +150,58 @@ fun IPConfigScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    ExposedDropdownMenuBox(
-                        expanded = langExpanded,
-                        onExpandedChange = { langExpanded = it }
-                    ) {
-                        OutlinedTextField(
-                            value = prefLanguage,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Language") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = langExpanded) },
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedCard(
+                            onClick = { langExpanded = true },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.menuAnchor().fillMaxWidth()
-                        )
-                        ExposedDropdownMenu(expanded = langExpanded, onDismissRequest = { langExpanded = false }) {
+                            colors = CardDefaults.outlinedCardColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Translate,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = "Language",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = prefLanguage,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                                Icon(
+                                    imageVector = if (langExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = langExpanded,
+                            onDismissRequest = { langExpanded = false }
+                        ) {
                             AppSettings.SUPPORTED_LANGUAGES.forEach { lang ->
                                 DropdownMenuItem(
-                                    text = { Text(lang) },
+                                    text = { Text(lang, fontWeight = FontWeight.Medium) },
                                     onClick = {
                                         prefLanguage = lang
                                         AppSettings.setPreferredLanguage(context, lang)
@@ -290,6 +347,84 @@ fun IPConfigScreen(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
                         ) { Text("Restore") }
+                    }
+
+                    // ── Auto Cloud Backup ──────────────────────────────────
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    Text(
+                        text = "Auto Cloud Backup",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Pick a folder in Google Drive, OneDrive, or Dropbox. New backups are automatically synced there by the cloud app.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (cloudFolderLabel != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = Color(0xFF2E7D32),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = cloudFolderLabel ?: "",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                val statusText = when {
+                                    syncing -> "Syncing…"
+                                    pendingSyncCount > 0 -> "$pendingSyncCount backup(s) pending sync"
+                                    else -> "All backups synced ✓"
+                                }
+                                Text(
+                                    text = statusText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        syncing = true
+                                        withContext(Dispatchers.IO) { BackupSync.syncPending(context) }
+                                        pendingSyncCount = BackupSync.pendingCount(context)
+                                        syncing = false
+                                    }
+                                },
+                                enabled = !syncing && pendingSyncCount > 0,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) { Text("Sync Now") }
+                            TextButton(
+                                onClick = {
+                                    SafCloudUploader.clearBackupFolder(context)
+                                    cloudFolderLabel = null
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("Disconnect", color = MaterialTheme.colorScheme.error) }
+                        }
+                    } else {
+                        Button(
+                            onClick = { folderPickerLauncher.launch(null) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        ) { Text("Choose Backup Folder") }
                     }
                 }
             }
@@ -438,6 +573,9 @@ fun IPConfigScreen(
                                 runCatching {
                                     com.example.medicalscanner.reminder.MedicineReminderManager.cancelAll(context)
                                     com.example.medicalscanner.reminder.MedicineScheduleStore.clearAll(context)
+                                    val appointmentsList = com.example.medicalscanner.reminder.AppointmentStore.loadAll(context)
+                                    appointmentsList.forEach { com.example.medicalscanner.reminder.AppointmentReminderManager.cancel(context, it.id) }
+                                    com.example.medicalscanner.reminder.AppointmentStore.clearAll(context)
                                 }
                                 // Clear all on-device data.
                                 runCatching { com.example.medicalscanner.local.LocalRepository.clearAllData(context) }

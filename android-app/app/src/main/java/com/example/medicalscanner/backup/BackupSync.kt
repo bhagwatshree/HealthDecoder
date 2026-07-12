@@ -34,9 +34,11 @@ object NoOpUploader : CloudUploader {
  */
 object BackupSync {
 
-    // Swapped for the Google Drive uploader in Phase 3.
+    // SafCloudUploader writes backup zips into the user's chosen cloud-synced
+    // folder via SAF — no OAuth, no API keys. Falls back to NoOpUploader if
+    // no folder has been selected yet (isConfigured returns false in that case).
     @Volatile
-    var uploader: CloudUploader = NoOpUploader
+    var uploader: CloudUploader = SafCloudUploader
 
     private val gson = Gson()
     private val syncedType = object : TypeToken<MutableSet<String>>() {}.type

@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Medical Scanner Backend — Express on AWS Lambda
+
+Globals:
+  Function:
+    Timeout: 60
+    MemorySize: 512
+    Runtime: nodejs20.x
+    Architectures:
+      - arm64  # Graviton — cheaper and faster than x86
+
+Parameters:
+  DatabaseUrl:
+    Type: String
+    Description: Neon PostgreSQL connection string (postgres://user:pass@host/db?sslmode=require)
+    NoEcho: true
+  GeminiApiKey:
+    Type: String
+    Description: Gemini API key (single key fallback)
+    NoEcho: true
+  GeminiApiKeys:
+    Type: String
+    Description: Comma-separated pool of Gemini API keys for free-tier rotation
+    NoEcho: true
+  SarvamApiKey:
+    Type: String
+    Description: Sarvam AI API key for Indic OCR and TTS
+    NoEcho: true
+    Default: ''
+  JwtSecret:
+    Type: String
+    Description: Secret for signing JWT auth tokens
+    NoEcho: true
+  EncryptionKey:
+    Type: String
+    Description: AES-256 key for encrypting user-stored API keys at rest
+    NoEcho: true
+  FreeTierDailyLimit:
+    Type: String
+    Description: Max free-tier AI issuances per user per day
+    Default: '50'
+  FirebaseServiceAccountJson:
+    Type: String
+    Description: >-
+      Firebase service account JSON (single line), used to verify phone-OTP ID tokens for
+      signup/login. Generate at Firebase Console > Project Settings > Service Accounts >
+      Generate new private key. Leave blank to disable phone-OTP auth for now.
+    NoEcho: true
+    Default: ''
+
+Resources:
+  MedicalScannerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambda.handler
+      CodeUri: .
+      Description: Express app wrapped with serverless-http
+      Environment:
+        Variables:
+          DATABASE_URL: !Ref DatabaseUrl
+          GEMINI_API_KEY: !Ref GeminiApiKey
+          GEMINI_API_KEYS: !Ref GeminiApiKeys
+          SARVAM_API_KEY: !Ref SarvamApiKey
+          JWT_SECRET: !Ref JwtSecret
+          ENCRYPTION_KEY: !Ref EncryptionKey
+          FREE_TIER_DAILY_LIMIT: !Ref FreeTierDailyLimit
+          FIREBASE_SERVICE_ACCOUNT_JSON: !Ref FirebaseServiceAccountJson
+          NODE_ENV: production
+      Events:
+        # Catch-all: every HTTP method on every path goes to Express
+        ApiCatchAll:
+          Type: HttpApi
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+        # Root path (for /api/health without trailing segments)
+        ApiRoot:
+          Type: HttpApi
+          Properties:
+            Path: /
+            Method: ANY
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - lambda.js
+        Banner:
+          # esbuild shim: ESM on Lambda needs __filename / __dirname / require
+          - js=import { createRequire as __createRequire } from 'module'; import { fileURLToPath as __fileURLToPath } from 'url'; import { dirname as __dirname_fn } from 'path'; const require = __createRequire(import.meta.url); const __filename = __fileURLToPath(import.meta.url); const __dirname = __dirname_fn(__filename);
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL — set this as DEFAULT_SERVER_URL in the Android app
+    Value: !Sub 'https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com'

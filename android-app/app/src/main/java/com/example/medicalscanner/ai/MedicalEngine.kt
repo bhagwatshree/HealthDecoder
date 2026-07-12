@@ -212,11 +212,22 @@ PATIENT'S QUESTION: $question
 Answer:
 """.trim()
 
+        val language = AppSettings.getPreferredLanguage(context)
+
         return try {
             val answer = GeminiClient.generateText(context, prompt).trim()
-            if (answer.isNotBlank()) answer to "ai" else localChat(question, reports) to "local"
+            if (answer.isNotBlank()) {
+                val translated = if (language.equals("English", true)) answer else com.example.medicalscanner.util.LanguageUtil.translate(context, answer, language)
+                translated to "ai"
+            } else {
+                val localAns = localChat(question, reports)
+                val translatedLocal = if (language.equals("English", true)) localAns else com.example.medicalscanner.util.LanguageUtil.translate(context, localAns, language)
+                translatedLocal to "local"
+            }
         } catch (e: Exception) {
-            localChat(question, reports) to "local"
+            val localAns = localChat(question, reports)
+            val translatedLocal = if (language.equals("English", true)) localAns else com.example.medicalscanner.util.LanguageUtil.translate(context, localAns, language)
+            translatedLocal to "local"
         }
     }
 
@@ -259,12 +270,32 @@ Return ONLY raw JSON:
 Use short paragraphs and dashed lists ("- item"). If a section has nothing, keep it and say so briefly.
 """.trim()
 
-        aiJson(context, prompt)?.let { json ->
+        val language = AppSettings.getPreferredLanguage(context)
+
+        val rawAnalysis = aiJson(context, prompt)?.let { json ->
             runCatching { gson.fromJson(json, DetailedAnalysis::class.java) }.getOrNull()?.let {
-                if (it.sections.isNotEmpty()) return it.copy(disclaimer = disclaimer, source = "ai")
+                if (it.sections.isNotEmpty()) it.copy(disclaimer = disclaimer, source = "ai") else null
             }
+        } ?: localDetailed(report).copy(disclaimer = disclaimer, source = "local")
+
+        if (language.equals("English", true)) {
+            return rawAnalysis
         }
-        return localDetailed(report).copy(disclaimer = disclaimer, source = "local")
+
+        // Translate the analysis using Sarvam API via LanguageUtil
+        val translatedSummary = com.example.medicalscanner.util.LanguageUtil.translate(context, rawAnalysis.summary ?: "", language)
+        val translatedDisclaimer = com.example.medicalscanner.util.LanguageUtil.translate(context, rawAnalysis.disclaimer ?: "", language)
+        val translatedSections = rawAnalysis.sections.map { section ->
+            DetailedAnalysisSection(
+                title = com.example.medicalscanner.util.LanguageUtil.translate(context, section.title, language),
+                content = com.example.medicalscanner.util.LanguageUtil.translate(context, section.content, language)
+            )
+        }
+        return rawAnalysis.copy(
+            summary = translatedSummary,
+            disclaimer = translatedDisclaimer,
+            sections = translatedSections
+        )
     }
 
     private fun localDetailed(report: MedicalReport): DetailedAnalysis {

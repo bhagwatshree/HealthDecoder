@@ -26,3 +26,12 @@ data object Chat : NavKey
 
 @Serializable
 data object Trends : NavKey
+
+@Serializable
+data object Login : NavKey
+
+@Serializable
+data class Register(val msisdn: String? = null) : NavKey
+
+@Serializable
+data object Account : NavKey

@@ -70,4 +70,50 @@ CREATE TABLE IF NOT EXISTS medication_logs (
 -- Index for medication logs
 CREATE INDEX IF NOT EXISTS idx_medication_logs_patient_med ON medication_logs(patient_name, medicine_name);
 
+-- User accounts: each logged-in user gets their own metered free-tier AI usage lane
+-- (see backend/keyPool.js) and can optionally attach their own Gemini/Sarvam API key.
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    date_of_birth DATE NOT NULL,
+    gender VARCHAR(20) NOT NULL CHECK (gender IN ('male', 'female', 'other', 'prefer_not_to_say')),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    -- E.164 format (e.g. +919876543210). One MSISDN maps to exactly one email and vice
+    -- versa — enforced by this UNIQUE constraint plus the UNIQUE on email above, since both
+    -- live on the same row (see backend/server.js signup for the paired-uniqueness check).
+    msisdn VARCHAR(20) UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    plan VARCHAR(20) NOT NULL DEFAULT 'free', -- 'free' | 'premium'
+    own_gemini_key TEXT, -- AES-256-GCM encrypted, see backend/auth.js
+    own_sarvam_key TEXT, -- AES-256-GCM encrypted, see backend/auth.js
+    usage_count INTEGER NOT NULL DEFAULT 0,
+    usage_period_start DATE NOT NULL DEFAULT CURRENT_DATE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_msisdn ON users(msisdn);
+
+-- One row per external AI/SMS call, written by backend/usageTracker.js. Feeds the local cost
+-- dashboard (D:\Medical_Admin_Dashboard) — cost_usd is an estimate computed at write time from
+-- backend/pricing.js, not a real invoice line.
+CREATE TABLE IF NOT EXISTS api_usage_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    provider VARCHAR(20) NOT NULL, -- 'gemini' | 'sarvam' | 'firebase'
+    operation VARCHAR(50) NOT NULL, -- 'ocr' | 'chat' | 'tts' | 'compare' | 'detailed-analysis' | 'translate' | 'otp-verify' | ...
+    model VARCHAR(100),
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    units INTEGER, -- provider-specific fallback count (chars, pages, verifications) when tokens don't apply
+    latency_ms INTEGER,
+    cost_usd NUMERIC(12, 6) NOT NULL DEFAULT 0,
+    success BOOLEAN NOT NULL DEFAULT true
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_usage_events_created_at ON api_usage_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_api_usage_events_provider ON api_usage_events(provider, created_at DESC);
+
 

@@ -125,13 +125,20 @@ fun ScanScreen(
         contract = ActivityResultContracts.PickMultipleVisualMedia(10),
         onResult = { uris ->
             if (uris.isNotEmpty()) {
-                val wasEmpty = pages.isEmpty()
-                val room = maxPagesPerScan - pages.size
-                pages.addAll(uris.take(room.coerceAtLeast(0)))
-                errorMessage = if (uris.size > room)
-                    "Page limit is $maxPagesPerScan per scan — extra pages were skipped. Analyze these first, then scan the rest."
-                else ""
-                if (wasEmpty && pages.isNotEmpty()) runLocalOcr(pages.first())
+                coroutineScope.launch {
+                    val wasEmpty = pages.isEmpty()
+                    val room = maxPagesPerScan - pages.size
+                    // Copy into the app's cache right away — the picker's read grant on these
+                    // URIs is transient and can be revoked before the user taps Analyze.
+                    val cached = withContext(Dispatchers.IO) {
+                        uris.take(room.coerceAtLeast(0)).mapNotNull { FileImportUtil.cacheImage(context, it) }
+                    }
+                    pages.addAll(cached)
+                    errorMessage = if (uris.size > room)
+                        "Page limit is $maxPagesPerScan per scan — extra pages were skipped. Analyze these first, then scan the rest."
+                    else ""
+                    if (wasEmpty && pages.isNotEmpty()) runLocalOcr(pages.first())
+                }
             }
         }
     )
@@ -145,7 +152,10 @@ fun ScanScreen(
                     val wasEmpty = pages.isEmpty()
                     val imported = withContext(Dispatchers.IO) {
                         uris.map { uri ->
-                            Triple(uri, FileImportUtil.displayName(context, uri), FileImportUtil.mimeOf(context, uri)) to
+                            // Cache the original bytes now too, so "download original" still
+                            // works later even if the picker's read grant on `uri` is gone by then.
+                            val cachedSource = FileImportUtil.cacheImage(context, uri) ?: uri
+                            Triple(cachedSource, FileImportUtil.displayName(context, uri), FileImportUtil.mimeOf(context, uri)) to
                                 FileImportUtil.importFile(context, uri)
                         }
                     }

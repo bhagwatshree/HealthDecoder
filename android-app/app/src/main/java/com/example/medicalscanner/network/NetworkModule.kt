@@ -1,8 +1,20 @@
 package com.example.medicalscanner.network
 
 import android.content.Context
+import com.example.medicalscanner.local.AppSettings
+import com.example.medicalscanner.model.ApiKeyRequest
+import com.example.medicalscanner.model.ApiKeyResponse
+import com.example.medicalscanner.model.AuthRequest
+import com.example.medicalscanner.model.AuthResponse
+import com.example.medicalscanner.model.KeyAssignment
 import com.example.medicalscanner.model.MedicalReport
+import com.example.medicalscanner.model.PhoneLoginRequest
 import com.example.medicalscanner.model.ReportUpdateRequest
+import com.example.medicalscanner.model.SignupRequest
+import com.example.medicalscanner.model.UserAccount
+import com.example.medicalscanner.model.ResetPasswordRequest
+import com.example.medicalscanner.model.ChangePasswordRequest
+import com.example.medicalscanner.model.SimpleResponse
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -122,12 +134,60 @@ interface MedicalScannerApi {
         @Part("report_category_1") category1: okhttp3.RequestBody,
         @Part("report_category_2") category2: okhttp3.RequestBody
     ): com.example.medicalscanner.model.CompareResponse
+
+    // ── Auth / per-user free tier ────────────────────────────────────────────
+    @POST("api/auth/signup")
+    suspend fun signup(@Body request: SignupRequest): AuthResponse
+
+    @POST("api/auth/login")
+    suspend fun login(@Body request: AuthRequest): AuthResponse
+
+    /** Phone+OTP login: the phone was already OTP-verified client-side via Firebase. */
+    @POST("api/auth/login-phone")
+    suspend fun loginPhone(@Body request: PhoneLoginRequest): AuthResponse
+
+    @GET("api/auth/me")
+    suspend fun getMe(): UserAccount
+
+    /** Asks the backend which Gemini/Sarvam key this account should use right now, and
+     *  accounts for today's free-tier usage. Call once per session, not once per scan —
+     *  this consumes one of today's free issuances. For just displaying usage (e.g. the
+     *  Account screen), use getUsage() instead, which never consumes one. */
+    @GET("api/auth/keys")
+    suspend fun getAssignedKeys(): KeyAssignment
+
+    /** Read-only usage/quota snapshot — safe to call every time the Account screen opens. */
+    @GET("api/auth/usage")
+    suspend fun getUsage(): KeyAssignment
+
+    @POST("api/user/gemini-key")
+    suspend fun setGeminiKeyOnAccount(@Body request: ApiKeyRequest): ApiKeyResponse
+
+    @POST("api/user/sarvam-key")
+    suspend fun setSarvamKeyOnAccount(@Body request: ApiKeyRequest): ApiKeyResponse
+
+    @POST("api/auth/reset-password-otp")
+    suspend fun resetPasswordOtp(@Body request: ResetPasswordRequest): SimpleResponse
+
+    @POST("api/auth/change-password")
+    suspend fun changePassword(@Body request: ChangePasswordRequest): SimpleResponse
 }
 
+/** Pulls the backend's {"error": "..."} message out of a failed Retrofit call, if present. */
+fun Throwable.apiErrorMessage(): String? {
+    val body = (this as? retrofit2.HttpException)?.response()?.errorBody()?.string() ?: return null
+    return runCatching {
+        com.google.gson.JsonParser.parseString(body).asJsonObject.get("error")?.asString
+    }.getOrNull()
+}
+
+/** HTTP status code of a failed Retrofit call, or null if it wasn't an HTTP error. */
+fun Throwable.httpCode(): Int? = (this as? retrofit2.HttpException)?.code()
+
 object NetworkModule {
-    // Replace with your permanent ngrok/cloudflare URL once set up.
+    // AWS API Gateway URL for the deployed `medical-scanner` SAM stack (region us-east-1).
     // Leave empty to require manual IP config from the app settings screen.
-    private const val DEFAULT_SERVER_URL = "https://oppressed-matter-gusto.ngrok-free.dev"
+    private const val DEFAULT_SERVER_URL = "https://k6tdi2uzoh.execute-api.us-east-1.amazonaws.com"
 
     private var currentRetrofit: Retrofit? = null
     private var currentIp: String? = null
@@ -186,11 +246,15 @@ object NetworkModule {
                 .readTimeout(60, TimeUnit.SECONDS)
                 .writeTimeout(60, TimeUnit.SECONDS)
                 .addInterceptor { chain ->
-                    // Bypass ngrok's browser-warning interstitial page for API calls
-                    val request = chain.request().newBuilder()
+                    // Bypass ngrok's browser-warning interstitial page for API calls, and attach
+                    // the logged-in user's session (if any) — read fresh per-request so login/
+                    // logout takes effect immediately without rebuilding the Retrofit client.
+                    val builder = chain.request().newBuilder()
                         .addHeader("ngrok-skip-browser-warning", "true")
-                        .build()
-                    chain.proceed(request)
+                    AppSettings.getAuthToken(context)?.let { token ->
+                        builder.addHeader("Authorization", "Bearer $token")
+                    }
+                    chain.proceed(builder.build())
                 }
                 .addInterceptor(logging)
                 .build()

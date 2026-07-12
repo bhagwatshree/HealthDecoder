@@ -6,7 +6,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,6 +46,7 @@ fun ReportListScreen(
     onNavigateToCompare: () -> Unit = {},
     onNavigateToChat: () -> Unit = {},
     onNavigateToTrends: () -> Unit = {},
+    onNavigateToAccount: () -> Unit = {},
     modifier: Modifier = Modifier,
     reloadKey: Int = 0
 ) {
@@ -119,7 +122,21 @@ fun ReportListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("MMB Medical", fontWeight = FontWeight.Bold) },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = com.example.medicalscanner.R.drawable.medical_assist_logo),
+                            contentDescription = "Medical Assist Logo",
+                            modifier = Modifier
+                                .height(36.dp)
+                                .width(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                        )
+                    }
+                },
                 actions = {
                     IconButton(onClick = { loadDashboard() }) {
                         Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh")
@@ -132,6 +149,9 @@ fun ReportListScreen(
                     }
                     IconButton(onClick = onNavigateToCompare) {
                         Icon(imageVector = Icons.Default.CompareArrows, contentDescription = "Compare Reports")
+                    }
+                    IconButton(onClick = onNavigateToAccount) {
+                        Icon(imageVector = Icons.Default.AccountCircle, contentDescription = "Account")
                     }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings")

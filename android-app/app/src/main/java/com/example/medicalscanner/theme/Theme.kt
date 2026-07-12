@@ -1,11 +1,14 @@
 package com.example.medicalscanner.theme
 
+import android.content.Context
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import com.example.medicalscanner.local.AppSettings
 
 private val DarkColorScheme = darkColorScheme(
     primary = MedicalTealLight,
@@ -56,12 +59,34 @@ private val LightColorScheme =
 
 @Composable
 fun MedicalScannerTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean? = null,
     // Disabled: medical app should maintain consistent branding regardless of wallpaper
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val context = LocalContext.current
+    var themeMode by remember { mutableStateOf(AppSettings.getThemeMode(context)) }
+
+    DisposableEffect(context) {
+        val prefs = context.getSharedPreferences("medical_scanner_prefs", Context.MODE_PRIVATE)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "theme_mode") {
+                themeMode = AppSettings.getThemeMode(context)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            prefs.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+
+    val isDark = darkTheme ?: when (themeMode) {
+        AppSettings.THEME_LIGHT -> false
+        AppSettings.THEME_DARK -> true
+        else -> isSystemInDarkTheme()
+    }
+
+    val colorScheme = if (isDark) DarkColorScheme else LightColorScheme
 
     MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
 }
