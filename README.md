@@ -11,6 +11,7 @@ Repo: [github.com/bhagwatshree/HealthDecoder](https://github.com/bhagwatshree/He
 ```
 backend/        Express API, deployed as a single AWS Lambda (see backend/DEPLOY.md)
 android-app/    Kotlin/Compose Android app
+releases/       Hand-picked APK builds committed for direct download (see releases/README.md)
 ```
 
 The local-only cost dashboard (AWS/Gemini/Sarvam/Firebase spend) lives in its own repo:
@@ -111,10 +112,39 @@ Gmail API (`GmailApiClient.kt`) or plain IMAP for the "Other" provider option:
 
 ### Home screen
 
-The main screen (`ReportListScreen.kt`) leads with a horizontal row of quick-action tiles —
-Scan Report, Reminders, Trends, Ask AI, Compare, Medicines, Account — so the app's primary
-actions are reachable in one tap instead of buried in top-bar icons. The tabs below it
-(Today's Meds / Reports History / Medication Tracker / Pending Tests) are unchanged.
+The main screen (`HomeScreen.kt`) is a top bar plus six square action tiles, each opening its
+own full screen instead of sharing space in a tabbed dashboard:
+
+- **Top bar** — Account and Chat sit top-left as a pair; the app logo and a Refresh button sit
+  center; Compare and a language switcher (globe icon) sit top-right.
+- **Action tiles**, in order — Scan Report, Records (`RecordsScreen.kt`), Reminders
+  (`RemindersScreen.kt`, today's medicine schedule), Medication Tracker
+  (`MedicationTrackerScreen.kt`, dosage history + bulk edit/delete), Pending Tests
+  (`PendingTestsScreen.kt`), Trends. Shared list/card/dialog composables that used to live in
+  one large `ReportListScreen.kt` now live in `DashboardComponents.kt`.
+- **Per-page Chat** — Records, Reminders, Medication Tracker, and Pending Tests each carry
+  their own Chat icon in the top bar. Opening Chat from one of these shows "Asking about: X"
+  and folds that context into the question sent to the AI assistant, so answers stay scoped to
+  what's on screen rather than the whole app.
+
+### UI language
+
+Two independent translation systems cover different content:
+
+- **AI-generated content** (chat answers, report explanations) is translated live via the
+  Sarvam API, controlled by the "Preferred Language" setting on the Account screen — unchanged,
+  pre-existing behavior.
+- **Static UI text** (button labels, titles — introduced by the Home redesign above) is served
+  from a `ui_translations` table in Postgres via `GET /api/translations`, fetched once on first
+  launch and cached on-device (`RemoteUiTranslations.kt`), then re-fetched for a single language
+  whenever it's picked from the globe icon. Editing a row in that table changes the label for
+  every install without an app update — see the seed data and schema in `backend/db_init.sql`.
+  A string with no DB/seed entry yet just falls back to English (`UiTranslations.kt` is the
+  bundled offline seed; `tr()` in `Localization.kt` is the lookup used throughout the UI).
+
+On first-ever launch, the preferred language defaults to whatever the device's *active
+keyboard* is set to (not the system display language — see `DeviceLanguageDetector.kt`),
+falling back to English if that keyboard's language isn't one of the 11 supported.
 
 ### Scanning a report
 
