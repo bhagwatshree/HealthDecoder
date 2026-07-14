@@ -230,6 +230,21 @@ Also ensure that:
 4. Medicines mentioned are extracted as an array in the report where they appear.
 5. Future recommended tests go into that report's "recommendedTests".
 6. Test results go into that report's "testResults": lab parameters into "parameters"; scan/diagnostic conclusions into "findings".
+7. For each parameter, also classify it for trend-charting across multiple reports over time:
+   - "trendCategory": if it matches one of these, use that EXACT text (case-sensitive) —
+     Blood Sugar, HbA1c, TSH, T3, T4, Hemoglobin, WBC, Platelets, Total Cholesterol, LDL, HDL,
+     Triglycerides, Creatinine, Oxygen (SpO2), Ejection Fraction, Vitamin D, Vitamin B12
+     — otherwise a short clean name of your own for that specific test. Never merge two
+     DIFFERENT tests into one category just because they share a word or organ — e.g. serum
+     creatinine and urinary creatinine are different categories; blood glucose and urine
+     glucose are different categories; an actual measured value and a value CALCULATED from
+     a different test (e.g. HbA1c's "estimated average glucose") are different categories.
+   - "trendCondition": the condition it was measured under, if the report states one — mainly
+     relevant to blood sugar: "Fasting", "PP" (post-meal), or "Random". Empty string otherwise.
+   - "excludeFromTrend": true only when the value is NOT a direct numeric measurement — e.g. a
+     value calculated/derived from another test, or a semi-quantitative dipstick result like
+     "+", "++", "+++", "Negative", "Trace". False for every normal numeric lab result.
+   (This list must stay in sync with DashboardEngine.KEY_PARAMETER_ORDER in the Android app.)
 
 The response MUST be a JSON object with this schema:
 {
@@ -247,7 +262,12 @@ The response MUST be a JSON object with this schema:
       ],
       "recommendedTests": [ { "testName": "", "dueDate": "YYYY-MM-DD or null" } ],
       "testResults": {
-        "parameters": [ { "name": "", "value": "", "unit": "", "referenceRange": "", "status": "High | Low | Normal" } ],
+        "parameters": [
+          {
+            "name": "", "value": "", "unit": "", "referenceRange": "", "status": "High | Low | Normal",
+            "trendCategory": "", "trendCondition": "", "excludeFromTrend": false
+          }
+        ],
         "findings": [ "" ]
       },
       "rawText": "Markdown transcription of THIS report's pages"

@@ -23,7 +23,14 @@ data class TestParameter(
     @SerializedName("referenceRange") val referenceRange: String = "",
     // Gemini returns null when a parameter has no High/Low/Normal flag (e.g. uptake %),
     // and Gson writes that null despite the default — so this must be nullable.
-    @SerializedName("status") val status: String? = ""
+    @SerializedName("status") val status: String? = "",
+    // AI-provided at scan time (see OcrEngine's extraction prompt) so trend charting doesn't
+    // need brittle after-the-fact keyword matching — null/blank for reports scanned before this
+    // existed, or when the AI didn't have an opinion; DashboardEngine falls back to its own
+    // keyword heuristics in that case. Nullable for the same reason as `status` above.
+    @SerializedName("trendCategory") val trendCategory: String? = "",
+    @SerializedName("trendCondition") val trendCondition: String? = "",
+    @SerializedName("excludeFromTrend") val excludeFromTrend: Boolean? = false
 )
 
 data class TestResults(
@@ -88,7 +95,10 @@ data class TrendDataPoint(
     @SerializedName("value") val value: String,
     @SerializedName("unit") val unit: String = "",
     @SerializedName("status") val status: String = "",
-    @SerializedName("reportId") val reportId: String = "" // report this value came from (for click-through)
+    @SerializedName("reportId") val reportId: String = "", // report this value came from (for click-through)
+    // Test condition for this specific reading (e.g. "Fasting" / "PP" / "Random" for blood
+    // sugar) — points on the same trend line can differ, so this rides per-point, not per-trend.
+    @SerializedName("context") val context: String = ""
 )
 
 data class ParameterTrend(

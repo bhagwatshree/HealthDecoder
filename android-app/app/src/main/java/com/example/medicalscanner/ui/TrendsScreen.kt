@@ -320,7 +320,7 @@ private fun TrendCard(trend: ParameterTrend, onPointClick: (TrendDataPoint) -> U
                 latest?.let {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "${it.value} ${it.unit}".trim(),
+                            text = "${it.value} ${it.unit}".trim() + (it.context.takeIf { c -> c.isNotBlank() }?.let { c -> " ($c)" } ?: ""),
                             fontWeight = FontWeight.Bold,
                             color = statusColor(it.status, MaterialTheme.colorScheme.onSurface)
                         )
@@ -331,7 +331,9 @@ private fun TrendCard(trend: ParameterTrend, onPointClick: (TrendDataPoint) -> U
             // Latest status in words, so the number has meaning to the reader.
             latest?.status?.takeIf { it.isNotBlank() }?.let { st ->
                 Text(
-                    text = "Latest reading is ${st.uppercase()}" + (latest.unit.takeIf { it.isNotBlank() }?.let { " (measured in $it)" } ?: ""),
+                    text = "Latest reading is ${st.uppercase()}" +
+                        (latest.unit.takeIf { it.isNotBlank() }?.let { " (measured in $it)" } ?: "") +
+                        (latest.context.takeIf { it.isNotBlank() }?.let { " — $it" } ?: ""),
                     style = MaterialTheme.typography.labelSmall,
                     color = statusColor(st, MaterialTheme.colorScheme.onSurfaceVariant),
                     fontWeight = FontWeight.SemiBold
@@ -339,6 +341,15 @@ private fun TrendCard(trend: ParameterTrend, onPointClick: (TrendDataPoint) -> U
             }
             Spacer(Modifier.height(8.dp))
             TrendLineChart(points = trend.dataPoints, onPointClick = onPointClick)
+            val unitsMismatch = trend.dataPoints.mapNotNull { it.unit.takeIf { u -> u.isNotBlank() } }.distinct().size > 1
+            if (unitsMismatch) {
+                Text(
+                    text = "⚠ Readings use different units across reports (shown per point) — compare with care.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = statusLow,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
             // Plain-language explanation of what this test means (curated, accurate).
             if (info != null) {
                 Spacer(Modifier.height(10.dp))
@@ -369,6 +380,11 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
     val minV = validIdx.minOf { nums[it]!! }
     val maxV = validIdx.maxOf { nums[it]!! }
     val range = (maxV - minV).let { if (it == 0f) 1f else it }
+
+    // Different labs can report the same test in different units (e.g. T3 in ng/mL vs nmol/L) —
+    // when that happens, tag each point with its own unit so the raw numbers aren't read as
+    // directly comparable.
+    val unitsMismatch = points.mapNotNull { it.unit.takeIf { u -> u.isNotBlank() } }.distinct().size > 1
 
     // Position points by their real date (full year+month+day), not evenly by index.
     val times = points.map { isoToMillis(it.date) }
@@ -432,7 +448,12 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
             pos.forEach { (o, dp) ->
                 drawCircle(color = statusColor(dp.status, primary), radius = with(density) { 6.dp.toPx() }, center = o)
                 drawCircle(color = Color.White, radius = with(density) { 2.5.dp.toPx() }, center = o)
-                drawContext.canvas.nativeCanvas.drawText(dp.value, o.x, o.y - with(density) { 10.dp.toPx() }, labelPaint)
+                val pointLabel = buildString {
+                    append(dp.value)
+                    if (dp.context.isNotBlank()) append(" (${dp.context.first()})")
+                    if (unitsMismatch && dp.unit.isNotBlank()) append(" ${dp.unit}")
+                }
+                drawContext.canvas.nativeCanvas.drawText(pointLabel, o.x, o.y - with(density) { 10.dp.toPx() }, labelPaint)
                 if (o.x - lastLabelX >= minGap) {
                     drawContext.canvas.nativeCanvas.drawText(shortDate(dp.date), o.x, h - with(density) { 6.dp.toPx() }, labelPaint)
                     lastLabelX = o.x

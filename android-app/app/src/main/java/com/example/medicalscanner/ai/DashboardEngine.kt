@@ -10,9 +10,10 @@ import com.example.medicalscanner.model.*
 object DashboardEngine {
 
     // 80/20: the vital-few tests that cover most health signals, in display order.
+    // Must stay in sync with the "trendCategory" list in OcrEngine.buildPrompt() — the AI is
+    // told to use these exact category strings when it recognizes one of these tests.
     val KEY_PARAMETER_ORDER = listOf(
-        "Blood Sugar (Fasting)", "Blood Sugar (PP)", "Blood Sugar (Random)", "Blood Sugar",
-        "HbA1c", "TSH", "T3", "T4", "Hemoglobin", "WBC", "Platelets",
+        "Blood Sugar", "HbA1c", "TSH", "T3", "T4", "Hemoglobin", "WBC", "Platelets",
         "Total Cholesterol", "LDL", "HDL", "Triglycerides", "Creatinine",
         "Oxygen (SpO2)", "Ejection Fraction", "Vitamin D", "Vitamin B12"
     )
@@ -24,20 +25,24 @@ object DashboardEngine {
         val n = raw.lowercase()
         return when {
             n.contains("hba1c") || n.contains("glycated") || n.contains("glycosylated") -> "HbA1c"
-            // Blood sugar: keep the test condition (fasting / post-meal / random) in the
-            // canonical name so readings taken under different conditions don't plot as
-            // one misleading line — a fasting 90 and a post-meal 160 are not comparable.
-            n.contains("fbs") || n.contains("bsf") ||
-                (n.contains("fasting") && (n.contains("sugar") || n.contains("glucose"))) -> "Blood Sugar (Fasting)"
-            n.contains("ppbs") || n.contains("post prandial") || n.contains("postprandial") ||
-                n.contains("post-meal") || n.contains("post meal") || n.contains("pp2") ||
-                (n.contains("pp") && (n.contains("sugar") || n.contains("glucose"))) -> "Blood Sugar (PP)"
-            n.contains("rbs") || n.contains("grbs") ||
-                (n.contains("random") && (n.contains("sugar") || n.contains("glucose"))) -> "Blood Sugar (Random)"
-            n.contains("glucose") || n.contains("sugar") -> "Blood Sugar"
+            // Blood sugar readings all plot on ONE line regardless of test condition (fasting /
+            // post-meal / random) — see bloodSugarContext() for the per-point condition label
+            // shown alongside each value, instead of fragmenting the trend into separate lines.
+            // Excluded: urine dipstick glucose (semi-quantitative +/++/+++, not a mg/dL reading —
+            // also caught by the value-based numeric guard in buildHealthSummary, since a urine
+            // panel's "Glucose" often carries no "urine" in its own name) and "Estimated Average
+            // Glucose (eAG)", a value CALCULATED from HbA1c rather than measured directly.
+            !n.contains("urine") && !n.contains("estimated average") && !n.contains("eag") && (
+                n.contains("glucose") || n.contains("sugar") || n.contains("fbs") || n.contains("bsf") ||
+                    n.contains("ppbs") || n.contains("rbs") || n.contains("grbs")
+                ) -> "Blood Sugar"
             n.contains("tsh") || (n.contains("thyroid") && n.contains("stimulating")) -> "TSH"
-            n == "t3" || n.contains("triiodo") -> "T3"
-            n == "t4" || n.contains("thyroxine") -> "T4"
+            // Word-boundary match (not exact-equals) — real reports label this "T3 (Total), Serum",
+            // "Free T3", "Serum T4", etc., not just the bare word "T3"/"T4".
+            n.contains("triiodothyronine") || n.contains("free t3") || n.contains("ft3") ||
+                Regex("\\bt3\\b").containsMatchIn(n) -> "T3"
+            n.contains("thyroxine") || n.contains("free t4") || n.contains("ft4") ||
+                Regex("\\bt4\\b").containsMatchIn(n) -> "T4"
             // Exclude MCH / MCHC ("mean corpuscular hemoglobin…") which are separate CBC indices.
             (n.contains("hemoglobin") || n.contains("haemoglobin") || n == "hb" || n == "hgb") &&
                 !n.contains("corpuscular") && !n.contains("mch") -> "Hemoglobin"
@@ -48,12 +53,30 @@ object DashboardEngine {
             n.contains("hdl") -> "HDL"
             n.contains("triglyceride") -> "Triglycerides"
             n.contains("cholesterol") -> "Total Cholesterol"
-            n.contains("creatinine") -> "Creatinine"
+            // Exclude urinary/spot creatinine and the Albumin:Creatinine Ratio (ACR) — a kidney
+            // screening test with a completely different normal range from serum creatinine.
+            n.contains("creatinine") && !n.contains("urin") -> "Creatinine"
             n.contains("spo2") || n.contains("oxygen") || n.contains("saturation") -> "Oxygen (SpO2)"
             n.contains("ejection") || n == "ef" || n.contains("lvef") -> "Ejection Fraction"
             n.contains("vitamin d") || n.contains("25-oh") || n.contains("25 oh") -> "Vitamin D"
             n.contains("b12") || n.contains("cobalamin") -> "Vitamin B12"
             else -> raw.trim()
+        }
+    }
+
+    /** Test condition for a blood-sugar reading (Fasting / PP / Random), or "" if unspecified —
+     *  shown per-point alongside the value since a fasting and a post-meal reading aren't
+     *  directly comparable even though they share one trend line. */
+    fun bloodSugarContext(raw: String): String {
+        val n = raw.lowercase()
+        return when {
+            n.contains("urine") -> ""
+            n.contains("fbs") || n.contains("bsf") || n.contains("fasting") -> "Fasting"
+            n.contains("ppbs") || n.contains("post prandial") || n.contains("postprandial") ||
+                n.contains("post-meal") || n.contains("post meal") || n.contains("pp2") ||
+                (n.contains("pp") && (n.contains("sugar") || n.contains("glucose"))) -> "PP"
+            n.contains("rbs") || n.contains("grbs") || n.contains("random") -> "Random"
+            else -> ""
         }
     }
 
@@ -167,10 +190,22 @@ object DashboardEngine {
             val date = (r.reportDate ?: r.createdAt).split("T")[0]
             for (p in r.testResults?.parameters ?: emptyList()) {
                 if (p.name.isNullOrBlank()) continue
-                val canon = canonicalParamName(p.name)
+                // AI classified this at scan time (sees full report/panel context) — trust it
+                // when present. Reports scanned before this existed have it null/blank, so fall
+                // back to the local keyword heuristics unchanged.
+                if (p.excludeFromTrend == true) continue
+                var canon = p.trendCategory?.takeIf { it.isNotBlank() } ?: canonicalParamName(p.name)
+                // A urine dipstick's semi-quantitative "++" (or "Negative"/"Trace") can share a
+                // bare name like "Glucose" with no "urine" qualifier — the panel it came from
+                // carries that context, not the parameter name. Never let a non-numeric reading
+                // merge onto a numeric mg/dL trend line regardless of how it's spelled — kept as
+                // defense-in-depth even when the AI already tagged excludeFromTrend correctly.
+                if (canon == "Blood Sugar" && p.value.toFloatOrNull() == null) canon = p.name.trim()
                 if (!seenPerReport.add("$canon|${r.id}")) continue // already have this test for this report
+                val context = p.trendCondition?.takeIf { it.isNotBlank() }
+                    ?: (if (canon == "Blood Sugar") bloodSugarContext(p.name) else "")
                 paramMap.getOrPut(canon) { mutableListOf() }.add(
-                    TrendDataPoint(date, p.value, p.unit, p.status ?: "", r.id)
+                    TrendDataPoint(date, p.value, p.unit, p.status ?: "", r.id, context)
                 )
             }
         }
