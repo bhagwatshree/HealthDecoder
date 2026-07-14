@@ -79,7 +79,7 @@ private fun isoToMillis(iso: String): Long? = try {
 @Composable
 fun TrendsScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToReport: (String) -> Unit,
+    onNavigateToReport: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -92,6 +92,7 @@ fun TrendsScreen(
     var trends by remember { mutableStateOf<List<ParameterTrend>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var patientMenu by remember { mutableStateOf(false) }
+    var refreshTick by remember { mutableStateOf(0) }
 
     // Build the patient list once.
     LaunchedEffect(Unit) {
@@ -102,8 +103,8 @@ fun TrendsScreen(
         if (selectedPatient == null) isLoading = false
     }
 
-    // Reload trends when patient/period changes.
-    LaunchedEffect(selectedPatient, period) {
+    // Reload trends when patient/period changes, or the user taps refresh.
+    LaunchedEffect(selectedPatient, period, refreshTick) {
         val p = selectedPatient ?: return@LaunchedEffect
         isLoading = true
         trends = try {
@@ -131,6 +132,12 @@ fun TrendsScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") }
+                },
+                actions = {
+                    IconButton(onClick = { refreshTick++ }, enabled = !isLoading && selectedPatient != null) {
+                        if (isLoading) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.Default.Refresh, contentDescription = "Refresh trends")
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp))
             )
@@ -205,7 +212,7 @@ fun TrendsScreen(
                     ) {
                         item { OverviewCard(trends = visibleTrends, period = period) }
                         items(visibleTrends) { trend ->
-                            TrendCard(trend = trend, onPointClick = { dp -> if (dp.reportId.isNotEmpty()) onNavigateToReport(dp.reportId) })
+                            TrendCard(trend = trend, onPointClick = { dp -> if (dp.reportId.isNotEmpty()) onNavigateToReport(dp.reportId, trend.name) })
                         }
                     }
                 }

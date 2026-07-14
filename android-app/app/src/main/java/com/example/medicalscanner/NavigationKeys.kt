@@ -13,7 +13,7 @@ data object IPConfig : NavKey
 data object Scan : NavKey
 
 @Serializable
-data class ReportDetail(val reportId: String) : NavKey
+data class ReportDetail(val reportId: String, val highlightParam: String? = null) : NavKey
 
 @Serializable
 data class DetailedAnalysis(val reportId: String) : NavKey

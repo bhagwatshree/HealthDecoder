@@ -366,7 +366,7 @@ fun MainNavigation() {
         entry<Trends> {
           TrendsScreen(
             onNavigateBack = { backStack.removeLastOrNull() },
-            onNavigateToReport = { reportId -> backStack.add(ReportDetail(reportId)) },
+            onNavigateToReport = { reportId, param -> backStack.add(ReportDetail(reportId, param)) },
             modifier = Modifier.safeDrawingPadding()
           )
         }
@@ -404,6 +404,7 @@ fun MainNavigation() {
         entry<ReportDetail> { key ->
           ReportDetailScreen(
             reportId = key.reportId,
+            highlightParam = key.highlightParam,
             onNavigateBack = { backStack.removeLastOrNull() },
             onNavigateToDetail = { id ->
               backStack.add(ReportDetail(id))

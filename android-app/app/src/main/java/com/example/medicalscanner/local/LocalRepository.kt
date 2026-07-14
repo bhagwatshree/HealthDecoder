@@ -221,7 +221,7 @@ object LocalRepository {
             comments = req.comments,
             medications = dedupeMedications(req.medications),
             extractedText = req.extractedText,
-            testResults = req.testResults ?: TestResults(),
+            testResults = req.testResults ?: existing.testResults,
             reportCategory = category
         )
         val previous = findPrevious(context, updated.patientName, category, updated.reportDate ?: today(), excludeId = id)
@@ -232,6 +232,52 @@ object LocalRepository {
         detailedCacheFile(context, id).delete() // invalidate cached detailed analysis
         afterWrite(context)
         updated
+    }
+
+    /**
+     * Re-runs OCR/AI extraction on a report's originally scanned image(s) and refreshes its
+     * test parameters, medications and insights. For when the first scan came back incomplete
+     * (e.g. the AI API was briefly unavailable) — this is the only way to redo extraction
+     * without deleting and re-scanning the report from scratch.
+     */
+    suspend fun reprocessReport(context: Context, id: String): MedicalReport? = withContext(Dispatchers.IO) {
+        val existing = LocalStore.getReport(context, id) ?: return@withContext null
+        val pages = existing.imagePaths.mapNotNull { path ->
+            val file = File(path)
+            if (!file.exists()) return@mapNotNull null
+            file.readBytes() to mimeForPath(path)
+        }
+        if (pages.isEmpty()) return@withContext existing
+
+        val category = existing.reportCategory ?: "other"
+        val scanType = if (category == "prescription" || existing.reportType == "Prescription") "prescription" else "report"
+        val extraction = OcrEngine.scan(context, pages, "", scanType, category)
+        val sections = extraction.reports.ifEmpty { listOf(extraction.merged()) }
+        val section = sections.firstOrNull { DateResolver.resolve(it, category) == existing.reportDate } ?: sections.first()
+
+        // Parameters/medications aren't user-editable today, so overwriting them is safe;
+        // comments/raw text ARE user-editable, so only fill those in if still blank.
+        var updated = existing.copy(
+            testResults = section.testResults ?: existing.testResults,
+            medications = dedupeMedications(section.medications.ifEmpty { existing.medications }),
+            comments = existing.comments?.takeIf { it.isNotBlank() } ?: section.comments,
+            extractedText = existing.extractedText?.takeIf { it.isNotBlank() } ?: section.rawText
+        )
+        val previous = findPrevious(context, updated.patientName, category, updated.reportDate ?: today(), excludeId = id)
+        val comparison = MedicalEngine.compareReports(context, updated, previous)
+        val insights = MedicalEngine.healthInsights(context, updated)
+        updated = updated.copy(comparisonResult = comparison, healthInsights = insights)
+        LocalStore.upsertReport(context, updated)
+        detailedCacheFile(context, id).delete() // invalidate cached detailed analysis
+        afterWrite(context)
+        updated
+    }
+
+    private fun mimeForPath(path: String): String = when {
+        path.endsWith(".png", true) -> "image/png"
+        path.endsWith(".webp", true) -> "image/webp"
+        path.endsWith(".pdf", true) -> "application/pdf"
+        else -> "image/jpeg"
     }
 
     private fun findPrevious(context: Context, patient: String?, category: String, date: String, excludeId: String): MedicalReport? =

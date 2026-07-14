@@ -11,7 +11,8 @@ object DashboardEngine {
 
     // 80/20: the vital-few tests that cover most health signals, in display order.
     val KEY_PARAMETER_ORDER = listOf(
-        "Blood Sugar", "HbA1c", "TSH", "T3", "T4", "Hemoglobin", "WBC", "Platelets",
+        "Blood Sugar (Fasting)", "Blood Sugar (PP)", "Blood Sugar (Random)", "Blood Sugar",
+        "HbA1c", "TSH", "T3", "T4", "Hemoglobin", "WBC", "Platelets",
         "Total Cholesterol", "LDL", "HDL", "Triglycerides", "Creatinine",
         "Oxygen (SpO2)", "Ejection Fraction", "Vitamin D", "Vitamin B12"
     )
@@ -23,7 +24,17 @@ object DashboardEngine {
         val n = raw.lowercase()
         return when {
             n.contains("hba1c") || n.contains("glycated") || n.contains("glycosylated") -> "HbA1c"
-            n.contains("glucose") || n.contains("sugar") || n.contains("fbs") || n.contains("ppbs") || n.contains("rbs") -> "Blood Sugar"
+            // Blood sugar: keep the test condition (fasting / post-meal / random) in the
+            // canonical name so readings taken under different conditions don't plot as
+            // one misleading line — a fasting 90 and a post-meal 160 are not comparable.
+            n.contains("fbs") || n.contains("bsf") ||
+                (n.contains("fasting") && (n.contains("sugar") || n.contains("glucose"))) -> "Blood Sugar (Fasting)"
+            n.contains("ppbs") || n.contains("post prandial") || n.contains("postprandial") ||
+                n.contains("post-meal") || n.contains("post meal") || n.contains("pp2") ||
+                (n.contains("pp") && (n.contains("sugar") || n.contains("glucose"))) -> "Blood Sugar (PP)"
+            n.contains("rbs") || n.contains("grbs") ||
+                (n.contains("random") && (n.contains("sugar") || n.contains("glucose"))) -> "Blood Sugar (Random)"
+            n.contains("glucose") || n.contains("sugar") -> "Blood Sugar"
             n.contains("tsh") || (n.contains("thyroid") && n.contains("stimulating")) -> "TSH"
             n == "t3" || n.contains("triiodo") -> "T3"
             n == "t4" || n.contains("thyroxine") -> "T4"

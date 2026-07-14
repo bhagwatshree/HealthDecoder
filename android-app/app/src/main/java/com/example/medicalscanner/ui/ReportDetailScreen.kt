@@ -34,6 +34,9 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import com.example.medicalscanner.ai.DashboardEngine
 import com.example.medicalscanner.local.LocalRepository
 import com.example.medicalscanner.model.MedicalReport
 import com.example.medicalscanner.model.Medication
@@ -52,6 +55,7 @@ fun ReportDetailScreen(
     onNavigateBack: () -> Unit,
     onNavigateToDetail: (String) -> Unit = {},
     onNavigateToAnalysis: (String) -> Unit = {},
+    highlightParam: String? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -73,6 +77,8 @@ fun ReportDetailScreen(
     // Collapsible states
     var rawTextExpanded by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showReprocessDialog by remember { mutableStateOf(false) }
+    var isReprocessing by remember { mutableStateOf(false) }
     var showFullImageDialog by remember { mutableStateOf(false) }
     var medicineSheetName by remember { mutableStateOf<String?>(null) }
     var fullImagePath by remember { mutableStateOf<String?>(null) }
@@ -202,6 +208,14 @@ fun ReportDetailScreen(
                                 Icon(imageVector = Icons.Default.Check, contentDescription = "Save", tint = MaterialTheme.colorScheme.primary)
                             }
                         } else {
+                            // Reprocess Button — re-run AI extraction from the original scanned
+                            // image, for when the earlier scan came back incomplete (API down).
+                            if (report?.imagePaths?.isNotEmpty() == true) {
+                                IconButton(onClick = { showReprocessDialog = true }, enabled = !isReprocessing) {
+                                    if (isReprocessing) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                    else Icon(imageVector = Icons.Default.Autorenew, contentDescription = "Reprocess")
+                                }
+                            }
                             // Edit Button
                             IconButton(onClick = { isEditing = true }) {
                                 Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit")
@@ -240,11 +254,28 @@ fun ReportDetailScreen(
             } else {
                 val currentReport = report!!
                 val scrollState = rememberScrollState()
-                
+                // Deep-linking from a Trends chart point: scroll to and briefly highlight
+                // the specific parameter row instead of dropping the user at the top.
+                var columnTopInRoot by remember { mutableStateOf(0f) }
+                val paramRowOffsets = remember { mutableStateMapOf<String, Float>() }
+                var didScrollToHighlight by remember { mutableStateOf(false) }
+                var highlightedParamKey by remember { mutableStateOf<String?>(null) }
+                LaunchedEffect(highlightParam, paramRowOffsets.size, columnTopInRoot) {
+                    if (didScrollToHighlight || highlightParam == null) return@LaunchedEffect
+                    val targetY = paramRowOffsets[highlightParam] ?: return@LaunchedEffect
+                    didScrollToHighlight = true
+                    val target = (targetY - columnTopInRoot + scrollState.value - 24f).coerceAtLeast(0f)
+                    scrollState.animateScrollTo(target.toInt())
+                    highlightedParamKey = highlightParam
+                    kotlinx.coroutines.delay(2000)
+                    highlightedParamKey = null
+                }
+
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(scrollState)
+                        .onGloballyPositioned { columnTopInRoot = it.positionInRoot().y }
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
@@ -576,10 +607,18 @@ fun ReportDetailScreen(
                                         }
                                         
                                         testRes.parameters.forEach { param ->
+                                            val paramKey = DashboardEngine.canonicalParamName(param.name)
+                                            val rowHighlight by animateColorAsState(
+                                                if (highlightedParamKey == paramKey) MaterialTheme.colorScheme.primaryContainer
+                                                else Color.Transparent,
+                                                label = "paramRowHighlight"
+                                            )
                                             Divider(color = MaterialTheme.colorScheme.outlineVariant)
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
+                                                    .onGloballyPositioned { paramRowOffsets[paramKey] = it.positionInRoot().y }
+                                                    .background(rowHighlight)
                                                     .padding(8.dp),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
@@ -1425,6 +1464,41 @@ fun ReportDetailScreen(
                     },
                     dismissButton = {
                         TextButton(onClick = { showDeleteDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
+            // Reprocess Confirmation Dialog
+            if (showReprocessDialog) {
+                AlertDialog(
+                    onDismissRequest = { showReprocessDialog = false },
+                    title = { Text("Reprocess this report?") },
+                    text = { Text("This re-runs AI analysis on the originally scanned image and refreshes the extracted test values, medicines and insights below. Useful if the earlier scan came back incomplete (e.g. the API was briefly unavailable). It may use some of your API quota.") },
+                    confirmButton = {
+                        Button(onClick = {
+                            showReprocessDialog = false
+                            coroutineScope.launch {
+                                isReprocessing = true
+                                errorMessage = ""
+                                try {
+                                    val updated = LocalRepository.reprocessReport(context, reportId)
+                                    if (updated != null) report = updated
+                                    else errorMessage = "Couldn't reprocess: report or its scanned image is missing."
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                    errorMessage = "Failed to reprocess this report."
+                                } finally {
+                                    isReprocessing = false
+                                }
+                            }
+                        }) {
+                            Text("Reprocess")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showReprocessDialog = false }) {
                             Text("Cancel")
                         }
                     }
