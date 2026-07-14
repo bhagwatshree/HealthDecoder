@@ -2,6 +2,7 @@ package com.example.medicalscanner.ui
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -34,6 +35,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
 import com.example.medicalscanner.local.AppSettings
@@ -59,9 +62,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,6 +92,7 @@ fun ScanScreen(
     var pendingUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var warningSizeMb by remember { mutableFloatStateOf(0f) }
     var errorMessage by remember { mutableStateOf("") }
+    var showQrScanner by remember { mutableStateOf(false) }
     var showConsentDialog by remember { mutableStateOf(false) }
     var showSetupAlert by remember { mutableStateOf(false) }
     var showEmailResultDialog by remember { mutableStateOf(false) }
@@ -394,6 +402,40 @@ fun ScanScreen(
                 errorMessage = "Failed to import selected files."
             } finally {
                 importingFiles = false
+            }
+        }
+    }
+
+    // Handles a decoded QR payload: fetches the linked file (if it's a direct image/PDF) and
+    // feeds it through the same import pipeline as a Gallery/File pick; falls back to opening
+    // it in the browser when it's a portal page rather than a direct file link.
+    fun handleQrResult(raw: String) {
+        showQrScanner = false
+        if (!raw.startsWith("http://") && !raw.startsWith("https://")) {
+            errorMessage = "That QR code doesn't contain a report link."
+            return
+        }
+        coroutineScope.launch {
+            importingFiles = true
+            errorMessage = ""
+            val fetched = try {
+                withContext(Dispatchers.IO) { fetchQrLinkedFile(context, raw) }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                importingFiles = false
+                errorMessage = "Couldn't fetch the report from that QR code."
+                return@launch
+            }
+            importingFiles = false
+            when (fetched) {
+                // importSelectedFiles manages its own importingFiles/errorMessage from here.
+                is QrFetchResult.ImportableFile -> importSelectedFiles(listOf(fetched.uri))
+                is QrFetchResult.WebPage -> {
+                    errorMessage = "That QR opened a web page, not a direct file. Opening it in your browser — " +
+                        "download the report there, then use \"From Device\" to import it."
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(raw))) }
+                }
+                is QrFetchResult.Failed -> errorMessage = fetched.message
             }
         }
     }
@@ -918,6 +960,18 @@ fun ScanScreen(
                     }
                 }
 
+                // Scan the QR code printed on the report — most labs link it to the official
+                // digital copy, which imports through the same pipeline as any other file.
+                OutlinedButton(
+                    onClick = { showQrScanner = true },
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.QrCodeScanner, contentDescription = "Scan QR Code")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Scan QR Code", fontWeight = FontWeight.Bold)
+                }
+
                 // Email scan integration manual option
                 OutlinedButton(
                     onClick = {
@@ -1066,6 +1120,18 @@ fun ScanScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Analyze & Scan Document", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
+                }
+            }
+
+            if (showQrScanner) {
+                Dialog(
+                    onDismissRequest = { showQrScanner = false },
+                    properties = DialogProperties(usePlatformDefaultWidth = false)
+                ) {
+                    QrScannerScreen(
+                        onResult = { value -> handleQrResult(value) },
+                        onDismiss = { showQrScanner = false }
+                    )
                 }
             }
 
@@ -1227,6 +1293,75 @@ fun ScanScreen(
             }
 
         }
+    }
+}
+
+/** Result of fetching the URL decoded from a report's printed QR code. */
+private sealed class QrFetchResult {
+    /** A direct image/PDF link — [uri] points at a cached local copy ready to import. */
+    data class ImportableFile(val uri: Uri) : QrFetchResult()
+    /** An HTML page (e.g. a lab portal needing login), not a direct file link. */
+    object WebPage : QrFetchResult()
+    data class Failed(val message: String) : QrFetchResult()
+}
+
+private const val MAX_QR_FETCH_BYTES = 15L * 1024 * 1024
+
+private val qrFetchClient: OkHttpClient by lazy {
+    OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .build()
+}
+
+/** Reads at most [max] bytes from [input]; returns null if the stream has more than that. */
+private fun readBytesCapped(input: java.io.InputStream, max: Long): ByteArray? {
+    val buffer = ByteArrayOutputStream()
+    val chunk = ByteArray(8192)
+    var total = 0L
+    while (true) {
+        val n = input.read(chunk)
+        if (n == -1) break
+        total += n
+        if (total > max) return null
+        buffer.write(chunk, 0, n)
+    }
+    return buffer.toByteArray()
+}
+
+/**
+ * Fetches the URL decoded from a report's QR code. Most Indian diagnostic labs print a QR
+ * linking straight to the official digital copy (image/PDF) — download and cache it as a
+ * local file so it can flow through the normal import pipeline. If it resolves to a web page
+ * instead (a portal needing login/OTP), the caller falls back to opening it in the browser.
+ */
+private fun fetchQrLinkedFile(context: Context, url: String): QrFetchResult {
+    val request = Request.Builder().url(url).build()
+    try {
+        qrFetchClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                return QrFetchResult.Failed("The linked report couldn't be reached (HTTP ${response.code}).")
+            }
+            val contentType = (response.header("Content-Type") ?: "").lowercase()
+            val body = response.body ?: return QrFetchResult.Failed("The linked report was empty.")
+            return when {
+                contentType.startsWith("image/") || contentType.contains("pdf") -> {
+                    val bytes = body.byteStream().use { readBytesCapped(it, MAX_QR_FETCH_BYTES) }
+                        ?: return QrFetchResult.Failed("That file is too large to import (over 15MB).")
+                    val ext = if (contentType.contains("pdf")) "pdf"
+                        else contentType.substringAfter("image/").substringBefore(";").ifBlank { "jpg" }
+                    val tempFile = File.createTempFile("qr_report_", ".$ext", context.cacheDir)
+                    tempFile.writeBytes(bytes)
+                    val authority = "${context.packageName}.fileprovider"
+                    QrFetchResult.ImportableFile(FileProvider.getUriForFile(context, authority, tempFile))
+                }
+                contentType.contains("html") -> QrFetchResult.WebPage
+                else -> QrFetchResult.Failed("Unrecognized file type from that QR code.")
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        return QrFetchResult.Failed("Couldn't reach the linked report — check your connection.")
     }
 }
 

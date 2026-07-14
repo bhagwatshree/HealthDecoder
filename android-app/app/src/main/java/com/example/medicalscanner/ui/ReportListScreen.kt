@@ -10,6 +10,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -147,20 +148,10 @@ fun ReportListScreen(
                     }
                 },
                 actions = {
+                    // Trends/Chat/Compare/Account moved into the quick-action tile row below —
+                    // the top bar now only keeps the two actions that don't fit that pattern.
                     IconButton(onClick = { loadDashboard() }) {
                         Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh")
-                    }
-                    IconButton(onClick = onNavigateToTrends) {
-                        Icon(imageVector = Icons.Default.ShowChart, contentDescription = "Health Trends")
-                    }
-                    IconButton(onClick = onNavigateToChat) {
-                        Icon(imageVector = Icons.Default.QuestionAnswer, contentDescription = "Ask AI Assistant")
-                    }
-                    IconButton(onClick = onNavigateToCompare) {
-                        Icon(imageVector = Icons.Default.CompareArrows, contentDescription = "Compare Reports")
-                    }
-                    IconButton(onClick = onNavigateToAccount) {
-                        Icon(imageVector = Icons.Default.AccountCircle, contentDescription = "Account")
                     }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings")
@@ -274,6 +265,16 @@ fun ReportListScreen(
         ) {
             // Background scan progress indicators
             BackgroundScanProgressBar(onNavigateToDetail = onNavigateToDetail)
+
+            QuickActionRow(
+                onScan = onNavigateToScan,
+                onReminders = { selectedTab = 3 },
+                onTrends = onNavigateToTrends,
+                onChat = onNavigateToChat,
+                onCompare = onNavigateToCompare,
+                onMedicines = { selectedTab = 2 },
+                onAccount = onNavigateToAccount
+            )
 
             // Dashboard Tabs
             ScrollableTabRow(
@@ -730,6 +731,86 @@ fun ReportListScreen(
                 }
             )
         }
+    }
+}
+
+/** Horizontal row of square tiles for the app's primary actions — replaces the icon-only
+ *  top bar buttons with something a first-time user can recognize and thumb-reach. */
+@Composable
+private fun QuickActionRow(
+    onScan: () -> Unit,
+    onReminders: () -> Unit,
+    onTrends: () -> Unit,
+    onChat: () -> Unit,
+    onCompare: () -> Unit,
+    onMedicines: () -> Unit,
+    onAccount: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+    ) {
+        Text(
+            "Quick actions",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp)
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            item { QuickActionTile("Scan Report", Icons.Default.AddPhotoAlternate, onScan, primary = true) }
+            item { QuickActionTile("Reminders", Icons.Default.NotificationsActive, onReminders) }
+            item { QuickActionTile("Trends", Icons.Default.ShowChart, onTrends) }
+            item { QuickActionTile("Ask AI", Icons.Default.QuestionAnswer, onChat) }
+            item { QuickActionTile("Compare", Icons.Default.CompareArrows, onCompare) }
+            item { QuickActionTile("Medicines", Icons.Default.Medication, onMedicines) }
+            item { QuickActionTile("Account", Icons.Default.AccountCircle, onAccount) }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+
+@Composable
+private fun QuickActionTile(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    primary: Boolean = false
+) {
+    Column(
+        modifier = Modifier.width(68.dp).clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    if (primary) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.surfaceVariant
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (primary) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

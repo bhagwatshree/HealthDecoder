@@ -109,6 +109,28 @@ Gmail API (`GmailApiClient.kt`) or plain IMAP for the "Other" provider option:
 
    Open the folder in Android Studio instead if you'd rather run/debug on a device directly.
 
+### Home screen
+
+The main screen (`ReportListScreen.kt`) leads with a horizontal row of quick-action tiles —
+Scan Report, Reminders, Trends, Ask AI, Compare, Medicines, Account — so the app's primary
+actions are reachable in one tap instead of buried in top-bar icons. The tabs below it
+(Today's Meds / Reports History / Medication Tracker / Pending Tests) are unchanged.
+
+### Scanning a report
+
+From the Scan screen, a report can be added three ways:
+- **Camera** — photograph a printed report or prescription page-by-page.
+- **From Device** — import an existing photo, PDF, or Word document from any folder.
+- **Scan QR Code** — point the camera at the QR code printed on a lab report
+  (`QrScannerScreen.kt`, on-device via CameraX + ML Kit barcode scanning). Most diagnostic labs
+  link that QR straight to the official digital copy; the app downloads it and imports it through
+  the same pipeline as any other file. If the QR instead opens a portal page (e.g. one requiring
+  login/OTP), it opens in the browser so the report can be downloaded and imported via "From
+  Device" instead.
+
+Reports can also be pulled in automatically from a linked Gmail inbox — see Google Sign-In &
+Gmail scanning above.
+
 ## Cost tracking
 
 Every Gemini/Sarvam/Firebase call the backend makes is logged (provider, operation, tokens,
