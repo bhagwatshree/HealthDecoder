@@ -90,6 +90,7 @@ fun DetailedAnalysisScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
+                .appWatermark()
         ) {
             when {
                 isLoading -> {

@@ -92,7 +92,7 @@ fun PendingTestsScreen(
             }
         }
     ) { innerPadding ->
-        Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+        Column(modifier = Modifier.fillMaxSize().padding(innerPadding).appWatermark()) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },

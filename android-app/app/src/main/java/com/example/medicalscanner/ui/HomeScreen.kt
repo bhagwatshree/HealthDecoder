@@ -1,6 +1,8 @@
 package com.example.medicalscanner.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -87,13 +89,18 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
+                        // The source JPG has an opaque white background (no alpha channel), so it
+                        // sits in a deliberate white badge rather than floating directly on the
+                        // top bar — otherwise it shows as a stray white box in dark mode.
                         Image(
                             painter = painterResource(id = com.example.medicalscanner.R.drawable.medical_assist_logo),
-                            contentDescription = "HealthDecoder",
+                            contentDescription = "Medical Assist",
                             modifier = Modifier
                                 .height(32.dp)
                                 .width(32.dp)
                                 .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White, RoundedCornerShape(8.dp))
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
                         )
                         IconButton(onClick = onRefresh, modifier = Modifier.size(32.dp)) {
                             Icon(
@@ -120,6 +127,7 @@ fun HomeScreen(
             modifier = modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .appWatermark()
         ) {
             BackgroundScanProgressBar(onNavigateToDetail = onNavigateToDetail)
 

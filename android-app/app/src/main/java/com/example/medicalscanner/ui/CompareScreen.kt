@@ -100,6 +100,7 @@ fun CompareScreen(
             modifier = modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .appWatermark()
         ) {
             Column(
                 modifier = Modifier

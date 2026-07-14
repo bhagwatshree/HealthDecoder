@@ -68,7 +68,7 @@ fun RemindersScreen(
             )
         }
     ) { innerPadding ->
-        Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+        Column(modifier = Modifier.fillMaxSize().padding(innerPadding).appWatermark()) {
             if (errorMessage.isNotEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxSize().padding(16.dp),

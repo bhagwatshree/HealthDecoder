@@ -148,6 +148,7 @@ fun TrendsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
+                .appWatermark()
         ) {
             // Patient + key-only controls
             Row(

@@ -209,6 +209,7 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
+                .appWatermark()
         ) {
             // Language selector + optional patient scope
             Row(
