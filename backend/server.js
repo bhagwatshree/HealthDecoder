@@ -82,6 +82,40 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date() });
 });
 
+// ─── UI-chrome translations ───────────────────────────────────────────────────
+// Static button/label/title text, as opposed to AI-generated content (chat answers,
+// report summaries) which is translated live via /api/chat's Sarvam call. The app fetches
+// this once on first launch and again whenever the user picks a language from the picker,
+// then caches it on-device — so editing a row here reaches every install without a build.
+// No ?language query: returns every language, grouped. With it: just that language's map.
+app.get('/api/translations', async (req, res) => {
+  try {
+    const { language } = req.query;
+    const result = language
+      ? await db.query(
+          'SELECT text_key, translated_text FROM ui_translations WHERE language = $1',
+          [language]
+        )
+      : await db.query('SELECT language, text_key, translated_text FROM ui_translations');
+
+    if (language) {
+      const map = {};
+      for (const row of result.rows) map[row.text_key] = row.translated_text;
+      return res.json(map);
+    }
+
+    const byLanguage = {};
+    for (const row of result.rows) {
+      if (!byLanguage[row.language]) byLanguage[row.language] = {};
+      byLanguage[row.language][row.text_key] = row.translated_text;
+    }
+    res.json(byLanguage);
+  } catch (error) {
+    console.error('Error fetching translations:', error);
+    res.status(500).json({ error: 'Failed to fetch translations.' });
+  }
+});
+
 // ─── Auth & per-user free tier ────────────────────────────────────────────────
 // The Android app calls Gemini/Sarvam directly from the phone (not proxied through this
 // server) — these routes exist so a logged-in user's phone can ask "which key should I use

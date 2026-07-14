@@ -22,7 +22,7 @@ data class DetailedAnalysis(val reportId: String) : NavKey
 data object Compare : NavKey
 
 @Serializable
-data object Chat : NavKey
+data class Chat(val contextHint: String? = null) : NavKey
 
 @Serializable
 data object Trends : NavKey
@@ -35,3 +35,15 @@ data class Register(val msisdn: String? = null) : NavKey
 
 @Serializable
 data object Account : NavKey
+
+@Serializable
+data object Records : NavKey
+
+@Serializable
+data object MedicationTracker : NavKey
+
+@Serializable
+data object Reminders : NavKey
+
+@Serializable
+data object PendingTests : NavKey

@@ -184,6 +184,13 @@ interface MedicalScannerApi {
 
     @GET("api/auth/google/token")
     suspend fun getGoogleAccessToken(): GoogleTokenResponse
+
+    // ── UI-chrome translations (button/label text; DB is the source of truth) ──────────
+    @GET("api/translations")
+    suspend fun getAllTranslations(): Map<String, Map<String, String>>
+
+    @GET("api/translations")
+    suspend fun getLanguageTranslations(@Query("language") language: String): Map<String, String>
 }
 
 

@@ -51,7 +51,11 @@ private val SUGGESTED_QUESTIONS = listOf(
 fun ChatScreen(
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier,
-    initialPatientName: String = ""
+    initialPatientName: String = "",
+    // Which screen the user opened Chat from (e.g. "Records", "Medication Tracker"). Shown
+    // in the top bar and folded into the question sent to the AI so answers stay scoped to
+    // what's on screen, without needing a separate backend field.
+    contextHint: String? = null
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -113,12 +117,15 @@ fun ChatScreen(
         input = ""
         val history = messages.dropLast(1).toList()
         isLoading = true
+        val questionForApi = if (contextHint != null) {
+            "The user is currently viewing the \"$contextHint\" screen of the app. $trimmed"
+        } else trimmed
         coroutineScope.launch {
             try {
                 val response = LocalRepository.chat(
                     context,
                     ChatRequest(
-                        question = trimmed,
+                        question = questionForApi,
                         patientName = patientName.trim().ifEmpty { null },
                         history = history,
                         language = language
@@ -163,7 +170,8 @@ fun ChatScreen(
                     Column {
                         Text("AI Health Assistant", fontWeight = FontWeight.Bold)
                         Text(
-                            "Ask by text or voice — in your language",
+                            text = contextHint?.let { "Asking about: $it" }
+                                ?: "Ask by text or voice — in your language",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

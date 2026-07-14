@@ -85,8 +85,17 @@ object AppSettings {
         "Telugu", "Kannada", "Bengali", "Punjabi", "Malayalam", "Odia"
     )
 
-    fun getPreferredLanguage(context: Context): String =
-        prefs(context).getString(KEY_LANGUAGE, "English") ?: "English"
+    // On first read ever (key never set), seed from the device's active keyboard language
+    // instead of hardcoding English, then persist it so this only runs once.
+    fun getPreferredLanguage(context: Context): String {
+        val p = prefs(context)
+        if (!p.contains(KEY_LANGUAGE)) {
+            val detected = com.example.medicalscanner.util.DeviceLanguageDetector.detectFromKeyboard(context)
+            p.edit().putString(KEY_LANGUAGE, detected).apply()
+            return detected
+        }
+        return p.getString(KEY_LANGUAGE, "English") ?: "English"
+    }
 
     fun setPreferredLanguage(context: Context, language: String) {
         prefs(context).edit().putString(KEY_LANGUAGE, language).apply()

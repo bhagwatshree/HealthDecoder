@@ -3,7 +3,6 @@ package com.example.medicalscanner
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -34,13 +33,18 @@ import com.example.medicalscanner.ui.AccountScreen
 import com.example.medicalscanner.ui.ChatScreen
 import com.example.medicalscanner.ui.CompareScreen
 import com.example.medicalscanner.ui.DetailedAnalysisScreen
+import com.example.medicalscanner.ui.HomeScreen
 import com.example.medicalscanner.ui.IPConfigScreen
 import com.example.medicalscanner.ui.LoginScreen
+import com.example.medicalscanner.ui.MedicationTrackerScreen
+import com.example.medicalscanner.ui.PendingTestsScreen
+import com.example.medicalscanner.ui.RecordsScreen
 import com.example.medicalscanner.ui.RegisterScreen
+import com.example.medicalscanner.ui.RemindersScreen
 import com.example.medicalscanner.ui.ReportDetailScreen
-import com.example.medicalscanner.ui.ReportListScreen
 import com.example.medicalscanner.ui.ScanScreen
 import com.example.medicalscanner.ui.TrendsScreen
+import kotlinx.coroutines.launch
 
 private data class DisclaimerTranslation(
     val title: String,
@@ -124,7 +128,7 @@ fun MainNavigation() {
   val context = LocalContext.current
   val startKey = remember { if (AppSettings.isLoggedIn(context)) Main else Login }
   val backStack = rememberNavBackStack(startKey)
-  var ipReturnKey by remember { mutableIntStateOf(0) }
+  val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
   // A stored token can be stale (e.g. the account was deleted server-side). Validate it once
   // per launch; on 401 wipe the session and force a fresh login. Network failures are ignored
@@ -314,6 +318,12 @@ fun MainNavigation() {
     }
   }
 
+  // One-time (per install, retried until it succeeds) pull of UI-chrome translations from
+  // the backend so DB edits reach the phone without an app update; see RemoteUiTranslations.
+  LaunchedEffect(Unit) {
+    com.example.medicalscanner.local.RemoteUiTranslations.fetchAllIfNeverFetched(context)
+  }
+
   NavDisplay(
     backStack = backStack,
     onBack = { backStack.removeLastOrNull() },
@@ -347,20 +357,59 @@ fun MainNavigation() {
               backStack.clear()
               backStack.add(Login)
             },
+            onNavigateToSettings = { backStack.add(IPConfig) },
             modifier = Modifier.safeDrawingPadding()
           )
         }
         entry<Main> {
-          ReportListScreen(
+          HomeScreen(
             onNavigateToScan = { backStack.add(Scan) },
             onNavigateToDetail = { reportId -> backStack.add(ReportDetail(reportId)) },
-            onNavigateToSettings = { backStack.add(IPConfig) },
             onNavigateToCompare = { backStack.add(Compare) },
-            onNavigateToChat = { backStack.add(Chat) },
+            onNavigateToChat = { backStack.add(Chat()) },
             onNavigateToTrends = { backStack.add(Trends) },
             onNavigateToAccount = { backStack.add(Account) },
-            modifier = Modifier.safeDrawingPadding(),
-            reloadKey = ipReturnKey
+            onNavigateToRecords = { backStack.add(Records) },
+            onNavigateToMedicationTracker = { backStack.add(MedicationTracker) },
+            onNavigateToReminders = { backStack.add(Reminders) },
+            onNavigateToPendingTests = { backStack.add(PendingTests) },
+            onRefresh = {
+              coroutineScope.launch {
+                runCatching { NetworkModule.getApi(context).getMe() }
+              }
+            },
+            modifier = Modifier.safeDrawingPadding()
+          )
+        }
+        entry<Records> {
+          RecordsScreen(
+            onNavigateBack = { backStack.removeLastOrNull() },
+            onNavigateToDetail = { reportId -> backStack.add(ReportDetail(reportId)) },
+            onNavigateToScan = { backStack.add(Scan) },
+            onNavigateToChat = { backStack.add(Chat(contextHint = "Records")) },
+            modifier = Modifier.safeDrawingPadding()
+          )
+        }
+        entry<MedicationTracker> {
+          MedicationTrackerScreen(
+            onNavigateBack = { backStack.removeLastOrNull() },
+            onNavigateToChat = { backStack.add(Chat(contextHint = "Medication Tracker")) },
+            modifier = Modifier.safeDrawingPadding()
+          )
+        }
+        entry<Reminders> {
+          RemindersScreen(
+            onNavigateBack = { backStack.removeLastOrNull() },
+            onNavigateToChat = { backStack.add(Chat(contextHint = "Reminders")) },
+            modifier = Modifier.safeDrawingPadding()
+          )
+        }
+        entry<PendingTests> {
+          PendingTestsScreen(
+            onNavigateBack = { backStack.removeLastOrNull() },
+            onNavigateToDetail = { reportId -> backStack.add(ReportDetail(reportId)) },
+            onNavigateToChat = { backStack.add(Chat(contextHint = "Pending Tests")) },
+            modifier = Modifier.safeDrawingPadding()
           )
         }
         entry<Trends> {
@@ -372,10 +421,7 @@ fun MainNavigation() {
         }
         entry<IPConfig> {
           IPConfigScreen(
-            onNavigateBack = {
-              ipReturnKey++
-              backStack.removeLastOrNull()
-            },
+            onNavigateBack = { backStack.removeLastOrNull() },
             modifier = Modifier.safeDrawingPadding()
           )
         }
@@ -385,10 +431,11 @@ fun MainNavigation() {
             modifier = Modifier.safeDrawingPadding()
           )
         }
-        entry<Chat> {
+        entry<Chat> { key ->
           ChatScreen(
             onNavigateBack = { backStack.removeLastOrNull() },
-            modifier = Modifier.safeDrawingPadding()
+            modifier = Modifier.safeDrawingPadding(),
+            contextHint = key.contextHint
           )
         }
         entry<Scan> {
