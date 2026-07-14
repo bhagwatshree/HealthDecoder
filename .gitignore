@@ -29,6 +29,8 @@ captures/
 
 # --- Build artifacts ---
 *.apk
+# Exception: hand-picked APKs deliberately committed for distribution (see releases/README.md)
+!releases/*.apk
 
 # --- AWS SAM ---
 backend/.aws-sam/
