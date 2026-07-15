@@ -2,6 +2,8 @@ package com.example.medicalscanner.local
 
 import android.content.Context
 import com.example.medicalscanner.BuildKeys
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 /**
  * Stores the on-device API keys (entered by the user in Settings) so the phone can call
@@ -15,6 +17,31 @@ object AppSettings {
     private const val KEY_VOICE_ENGINE = "voice_engine"
     private const val KEY_REMINDER_STYLE = "reminder_style"
     private const val KEY_DISCLAIMER_ACCEPTED = "medical_disclaimer_accepted"
+    private const val KEY_TREND_STANDARD_UNITS = "trend_standard_units"
+
+    private val gson = Gson()
+
+    /**
+     * The unit each test is standardized to on the trend chart — the first non-blank unit ever
+     * seen for that test, LOCKED so later readings in a different unit get converted to it (and
+     * so the standard survives deleting or period-filtering the report it came from). Keyed by
+     * "<patientName>|<trendCategory>". Trend charting only; the report screen is unaffected.
+     */
+    fun getTrendStandardUnits(context: Context): Map<String, String> {
+        val json = prefs(context).getString(KEY_TREND_STANDARD_UNITS, null) ?: return emptyMap()
+        return runCatching {
+            gson.fromJson<Map<String, String>>(json, object : TypeToken<Map<String, String>>() {}.type)
+        }.getOrNull() ?: emptyMap()
+    }
+
+    /** Records [unit] as the standard for [key] ("<patient>|<category>") only if none is set yet. */
+    fun lockTrendStandardUnitIfAbsent(context: Context, key: String, unit: String) {
+        if (unit.isBlank()) return
+        val current = getTrendStandardUnits(context)
+        if (current.containsKey(key)) return
+        val updated = current + (key to unit)
+        prefs(context).edit().putString(KEY_TREND_STANDARD_UNITS, gson.toJson(updated)).apply()
+    }
 
     fun isDisclaimerAccepted(context: Context): Boolean =
         prefs(context).getBoolean(KEY_DISCLAIMER_ACCEPTED, false)

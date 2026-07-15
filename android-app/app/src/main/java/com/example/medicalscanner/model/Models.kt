@@ -98,7 +98,15 @@ data class TrendDataPoint(
     @SerializedName("reportId") val reportId: String = "", // report this value came from (for click-through)
     // Test condition for this specific reading (e.g. "Fasting" / "PP" / "Random" for blood
     // sugar) — points on the same trend line can differ, so this rides per-point, not per-trend.
-    @SerializedName("context") val context: String = ""
+    @SerializedName("context") val context: String = "",
+    // Cross-lab unit standardization (trend chart only — the report screen shows the printed
+    // value). When a reading's printed unit differs from the test's locked standard unit and a
+    // verified conversion exists, `value`/`unit` above hold the CONVERTED figures and these hold
+    // what the report actually printed, so the chart can note "converted from X". `converted` is
+    // false either when no conversion was needed or when the unit couldn't be safely converted.
+    @SerializedName("originalValue") val originalValue: String = "",
+    @SerializedName("originalUnit") val originalUnit: String = "",
+    @SerializedName("converted") val converted: Boolean = false
 )
 
 data class ParameterTrend(

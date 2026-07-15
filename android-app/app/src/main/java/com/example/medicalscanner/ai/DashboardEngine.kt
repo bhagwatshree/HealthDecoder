@@ -175,7 +175,52 @@ object DashboardEngine {
         return out
     }
 
-    fun buildHealthSummary(patientName: String, reports: List<MedicalReport>): HealthSummary {
+    /**
+     * The canonical trend category for a parameter, or null if it should NOT be trended
+     * (excluded by the AI, or a non-numeric reading masquerading under a numeric test's name).
+     * Shared so [resolveStandardUnits] and [buildHealthSummary] categorise identically.
+     */
+    private fun trendCategoryOf(p: TestParameter): String? {
+        if (p.name.isBlank()) return null
+        // AI classified this at scan time (sees full report/panel context) — trust it when
+        // present. Reports scanned before that existed fall back to the keyword heuristics.
+        if (p.excludeFromTrend == true) return null
+        var canon = p.trendCategory?.takeIf { it.isNotBlank() } ?: canonicalParamName(p.name)
+        // A urine dipstick's semi-quantitative "++" (or "Negative"/"Trace") can share a bare
+        // name like "Glucose" with no "urine" qualifier — never let a non-numeric reading merge
+        // onto a numeric mg/dL line regardless of spelling (defense-in-depth vs excludeFromTrend).
+        if (canon == "Blood Sugar" && p.value.toFloatOrNull() == null) canon = p.name.trim()
+        return canon
+    }
+
+    /**
+     * The unit each trendable test should be standardized to: the FIRST non-blank unit seen for
+     * it in chronological order. Callers persist this (see AppSettings) so it's locked once and
+     * later readings in a different unit get converted to it. Derived from the full report set.
+     */
+    fun resolveStandardUnits(reports: List<MedicalReport>): Map<String, String> {
+        val chrono = reports.sortedBy { it.reportDate ?: it.createdAt }
+        val out = linkedMapOf<String, String>()
+        for (r in chrono) {
+            for (p in r.testResults?.parameters ?: emptyList()) {
+                val canon = trendCategoryOf(p) ?: continue
+                val unit = p.unit.trim()
+                if (unit.isNotEmpty() && !out.containsKey(canon)) out[canon] = unit
+            }
+        }
+        return out
+    }
+
+    /** Formats a converted value without noisy trailing zeros (e.g. 8.0 -> "8", 0.4400 -> "0.44"). */
+    private fun fmtNum(v: Float): String =
+        if (v == v.toLong().toFloat()) v.toLong().toString()
+        else String.format(java.util.Locale.US, "%.2f", v).trimEnd('0').trimEnd('.')
+
+    fun buildHealthSummary(
+        patientName: String,
+        reports: List<MedicalReport>,
+        standardUnits: Map<String, String> = emptyMap()
+    ): HealthSummary {
         if (reports.isEmpty()) {
             return HealthSummary("No reports found for this patient in the selected period.", emptyList(), emptyList(), emptyList())
         }
@@ -189,23 +234,34 @@ object DashboardEngine {
         for (r in chrono) {
             val date = (r.reportDate ?: r.createdAt).split("T")[0]
             for (p in r.testResults?.parameters ?: emptyList()) {
-                if (p.name.isNullOrBlank()) continue
-                // AI classified this at scan time (sees full report/panel context) — trust it
-                // when present. Reports scanned before this existed have it null/blank, so fall
-                // back to the local keyword heuristics unchanged.
-                if (p.excludeFromTrend == true) continue
-                var canon = p.trendCategory?.takeIf { it.isNotBlank() } ?: canonicalParamName(p.name)
-                // A urine dipstick's semi-quantitative "++" (or "Negative"/"Trace") can share a
-                // bare name like "Glucose" with no "urine" qualifier — the panel it came from
-                // carries that context, not the parameter name. Never let a non-numeric reading
-                // merge onto a numeric mg/dL trend line regardless of how it's spelled — kept as
-                // defense-in-depth even when the AI already tagged excludeFromTrend correctly.
-                if (canon == "Blood Sugar" && p.value.toFloatOrNull() == null) canon = p.name.trim()
+                val canon = trendCategoryOf(p) ?: continue
                 if (!seenPerReport.add("$canon|${r.id}")) continue // already have this test for this report
                 val context = p.trendCondition?.takeIf { it.isNotBlank() }
                     ?: (if (canon == "Blood Sugar") bloodSugarContext(p.name) else "")
+
+                // Standardize this reading's unit to the test's locked standard so the line is
+                // comparable across labs. Same unit (ignoring notation) → just adopt the standard
+                // spelling. Different unit with a verified factor → convert. Different unit with
+                // no factor → keep as printed and let the chart flag it (never guess).
+                val rawUnit = p.unit.trim()
+                val std = standardUnits[canon]
+                var value = p.value; var unit = rawUnit
+                var origValue = ""; var origUnit = ""; var converted = false
+                if (std != null && rawUnit.isNotEmpty()) {
+                    if (UnitConverter.canonicalizeUnitString(rawUnit) == UnitConverter.canonicalizeUnitString(std)) {
+                        unit = std // identical unit, normalize spelling (e.g. "mg %" == "mg/dL")
+                    } else {
+                        val num = p.value.toFloatOrNull()
+                        val conv = if (num != null) UnitConverter.convert(canon, num, rawUnit, std) else null
+                        if (conv != null) {
+                            value = fmtNum(conv); unit = std
+                            origValue = p.value; origUnit = rawUnit; converted = true
+                        }
+                        // else: no verified factor — leave value/unit as printed, converted=false.
+                    }
+                }
                 paramMap.getOrPut(canon) { mutableListOf() }.add(
-                    TrendDataPoint(date, p.value, p.unit, p.status ?: "", r.id, context)
+                    TrendDataPoint(date, value, unit, p.status ?: "", r.id, context, origValue, origUnit, converted)
                 )
             }
         }

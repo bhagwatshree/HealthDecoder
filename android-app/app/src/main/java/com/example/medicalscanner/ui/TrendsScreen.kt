@@ -340,12 +340,32 @@ private fun TrendCard(trend: ParameterTrend, onPointClick: (TrendDataPoint) -> U
                     fontWeight = FontWeight.SemiBold
                 )
             }
+            // The standard unit this test's line is drawn in — the one converted points were
+            // brought to, or (if none were converted) the unit shared by the readings.
+            val stdUnit = trend.dataPoints.firstOrNull { it.converted }?.unit
+                ?: trend.dataPoints.lastOrNull { it.unit.isNotBlank() }?.unit ?: ""
+            // Readings in a unit we couldn't safely convert to the standard are kept OFF the line
+            // (plotting them on a different scale would distort it) and called out below instead.
+            val unconvertible = trend.dataPoints.filter {
+                it.unit.isNotBlank() && it.unit != stdUnit && !it.converted
+            }
+            val chartPoints = trend.dataPoints.filterNot { it in unconvertible }
+            val convertedCount = trend.dataPoints.count { it.converted }
+
             Spacer(Modifier.height(8.dp))
-            TrendLineChart(points = trend.dataPoints, onPointClick = onPointClick)
-            val unitsMismatch = trend.dataPoints.mapNotNull { it.unit.takeIf { u -> u.isNotBlank() } }.distinct().size > 1
-            if (unitsMismatch) {
+            TrendLineChart(points = chartPoints, onPointClick = onPointClick)
+            if (convertedCount > 0) {
                 Text(
-                    text = "⚠ Readings use different units across reports (shown per point) — compare with care.",
+                    text = "↺ $convertedCount reading(s) from other labs converted to $stdUnit for comparison — tap a point to open the report and see the original.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            if (unconvertible.isNotEmpty()) {
+                val listed = unconvertible.joinToString(", ") { "${it.value} ${it.unit}".trim() }
+                Text(
+                    text = "⚠ Not shown on the chart (a different unit we can't safely convert to $stdUnit): $listed.",
                     style = MaterialTheme.typography.labelSmall,
                     color = statusLow,
                     modifier = Modifier.padding(top = 2.dp)
@@ -381,11 +401,6 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
     val minV = validIdx.minOf { nums[it]!! }
     val maxV = validIdx.maxOf { nums[it]!! }
     val range = (maxV - minV).let { if (it == 0f) 1f else it }
-
-    // Different labs can report the same test in different units (e.g. T3 in ng/mL vs nmol/L) —
-    // when that happens, tag each point with its own unit so the raw numbers aren't read as
-    // directly comparable.
-    val unitsMismatch = points.mapNotNull { it.unit.takeIf { u -> u.isNotBlank() } }.distinct().size > 1
 
     // Position points by their real date (full year+month+day), not evenly by index.
     val times = points.map { isoToMillis(it.date) }
@@ -452,7 +467,7 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
                 val pointLabel = buildString {
                     append(dp.value)
                     if (dp.context.isNotBlank()) append(" (${dp.context.first()})")
-                    if (unitsMismatch && dp.unit.isNotBlank()) append(" ${dp.unit}")
+                    if (dp.converted) append(" ↺") // this reading was unit-converted for comparison
                 }
                 drawContext.canvas.nativeCanvas.drawText(pointLabel, o.x, o.y - with(density) { 10.dp.toPx() }, labelPaint)
                 if (o.x - lastLabelX >= minGap) {

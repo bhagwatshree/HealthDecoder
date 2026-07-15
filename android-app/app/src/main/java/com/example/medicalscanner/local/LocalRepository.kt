@@ -312,9 +312,20 @@ object LocalRepository {
     }
 
     suspend fun getHealthSummary(context: Context, patientName: String, period: String?): HealthSummary = withContext(Dispatchers.IO) {
-        val reports = filterByPeriod(LocalStore.getReports(context), period)
-            .filter { it.patientName.equals(patientName, true) }
-        DashboardEngine.buildHealthSummary(patientName, reports)
+        // Resolve each test's standard unit from the patient's FULL history (so the period chip
+        // can't change it) and lock any not-yet-seen ones, then read the locked map back so the
+        // standard survives deleting/filtering the report it first came from.
+        val all = LocalStore.getReports(context).filter { it.patientName.equals(patientName, true) }
+        val derived = DashboardEngine.resolveStandardUnits(all)
+        derived.forEach { (canon, unit) ->
+            AppSettings.lockTrendStandardUnitIfAbsent(context, "$patientName|$canon", unit)
+        }
+        val locked = AppSettings.getTrendStandardUnits(context)
+        val standardUnits = derived.keys.associateWith { canon ->
+            locked["$patientName|$canon"] ?: derived.getValue(canon)
+        }
+        val reports = filterByPeriod(all, period)
+        DashboardEngine.buildHealthSummary(patientName, reports, standardUnits)
     }
 
     private fun filterByPeriod(reports: List<MedicalReport>, period: String?): List<MedicalReport> {
