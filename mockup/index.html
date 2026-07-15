@@ -1,0 +1,1422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Medical Assist Figma Canvas & Clickable Mockup</title>
+  <link rel="stylesheet" href="style_v2.css">
+  <!-- Google Fonts: Inter for UI, JetBrains Mono for Code -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body class="figma-dark-theme">
+  <!-- Shared SVG Definitions -->
+  <svg style="display:none">
+    <defs>
+      <linearGradient id="logoGrad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#0D7377"/>
+        <stop offset="1" stop-color="#1B3A4B"/>
+      </linearGradient>
+    </defs>
+  </svg>
+  <!-- Figma Top Bar -->
+  <header class="figma-header">
+    <div class="header-left">
+      <div class="figma-logo">
+        <svg width="24" height="36" viewBox="0 0 24 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 9C12 4.02944 7.97056 0 3 0C1.34315 0 0 1.34315 0 3V9C0 13.9706 4.02944 18 9 18C7.97056 18 12 18 12 9Z" fill="#F24E1E"/>
+          <path d="M12 9V18H3C1.34315 18 0 16.6569 0 15V9C0 9 0 9 0 9C0 4.02944 4.02944 0 9 0C10.6569 0 12 1.34315 12 3" fill="#A259FF"/>
+          <path d="M12 18C12 22.9706 7.97056 27 3 27C1.34315 27 0 25.6569 0 24V18H12Z" fill="#1ABC9C"/>
+          <path d="M12 27V33C12 34.6569 13.3431 36 15 36C19.9706 36 24 31.9706 24 27C24 22.0294 19.9706 18 15 18C13.3431 18 12 19.3431 12 21" fill="#FF7262"/>
+          <path d="M24 9C24 13.9706 19.9706 18 15 18C12 18 12 18 12 18V9C12 4.02944 16.0294 0 21 0C22.6569 0 24 1.34315 24 3V9Z" fill="#18A0FB"/>
+        </svg>
+      </div>
+      <div class="project-info">
+        <span class="project-name">Medical Assist UI Spec</span>
+        <span class="project-meta">Draft / Mobile Design System</span>
+      </div>
+    </div>
+
+    <!-- Mode Tabs: Figma Canvas (Design) or Prototype Simulator -->
+    <div class="header-center">
+      <div class="mode-tabs">
+        <button class="mode-tab active" data-mode="design">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
+          </svg>
+          Design Canvas
+        </button>
+        <button class="mode-tab" data-mode="prototype">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Prototype Simulator
+        </button>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="user-badge">Antigravity Coding</div>
+      <button class="share-btn">Share</button>
+    </div>
+  </header>
+
+  <!-- Figma Workspace Area -->
+  <div class="figma-workspace">
+    
+    <!-- Left Sidebar: Layer & Page Navigation -->
+    <aside class="figma-sidebar sidebar-left">
+      <div class="sidebar-section">
+        <div class="section-title">Pages</div>
+        <ul class="page-list">
+          <li class="page-item active" data-page="mobile-app">
+            <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/></svg>
+            Mobile Screens
+          </li>
+          <li class="page-item" data-page="design-tokens">
+            <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2v20M2 12h20"/></svg>
+            Design Tokens
+          </li>
+        </ul>
+      </div>
+
+      <div class="sidebar-section layers-section">
+        <div class="section-title">Layers / Screens</div>
+        <ul class="layer-list" id="layerList">
+          <!-- Populated by JS dynamically based on screens -->
+        </ul>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Canvas -->
+    <main class="figma-canvas-viewport" id="canvasViewport">
+      <!-- Grid Overlay for Design Mode -->
+      <div class="canvas-grid-bg"></div>
+      
+      <!-- The main container holding all screens -->
+      <div class="canvas-container mode-design-layout" id="canvasContainer">
+        
+        <!-- Screen 1: Login Screen -->
+        <div class="screen-wrapper" data-screen-id="login">
+          <div class="screen-title-badge">LoginScreen</div>
+          <div class="mobile-frame-mock">
+            <div class="phone-status-bar">
+              <span class="time">9:41 AM</span>
+              <div class="status-icons">📶 🔋</div>
+            </div>
+            <div class="screen-content light-theme" data-inspect-component="LoginScreen" data-description="Main login gateway supporting email/password, firebase phone OTP, and local biometrics.">
+              <div class="app-branding">
+                <div class="logo-wrapper" data-inspect-component="AppLogo" style="margin-bottom: 12px; display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px;">
+                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2" y="2" width="20" height="20" rx="6" fill="url(#logoGrad)" />
+                    <path d="M12 6V18M6 12H18" stroke="white" stroke-width="3" stroke-linecap="round" />
+                    <path d="M8 12.5h1.5l1-3 1.5 5 1-2.5h2" stroke="#E8A838" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </div>
+                <h1>Medical Assist</h1>
+                <p class="subtitle">Secure Medical Report Analyzer</p>
+              </div>
+
+              <!-- Login Form -->
+              <div class="login-container">
+                <div class="auth-tabs" data-inspect-component="AuthTabs">
+                  <button class="auth-tab active" id="btnTabEmail">Email</button>
+                  <button class="auth-tab" id="btnTabPhone">Phone OTP</button>
+                </div>
+
+                <!-- Email Form -->
+                <div class="form-group-container" id="emailFormGroup">
+                  <div class="input-field" data-inspect-component="EmailTextField">
+                    <label>Email Address</label>
+                    <div class="input-wrapper">
+                      <span class="input-icon">✉️</span>
+                      <input type="email" placeholder="name@example.com" value="patient@health.org" readonly>
+                    </div>
+                  </div>
+                  <div class="input-field" data-inspect-component="PasswordTextField">
+                    <label>Password</label>
+                    <div class="input-wrapper">
+                      <span class="input-icon">🔒</span>
+                      <input type="password" value="••••••••••••" readonly>
+                      <span class="password-toggle">👁️</span>
+                    </div>
+                  </div>
+                  <div class="forgot-pwd" data-inspect-component="ForgotPasswordLink">Forgot Password?</div>
+                  <button class="primary-btn" id="btnLoginEmail" data-inspect-component="LoginButton">Sign In</button>
+                </div>
+
+                <!-- Phone Form (Hidden initially but structured for inspector/toggle) -->
+                <div class="form-group-container hidden" id="phoneFormGroup">
+                  <div class="input-field" data-inspect-component="PhoneTextField">
+                    <label>Phone Number</label>
+                    <div class="input-wrapper">
+                      <span class="input-icon">📞</span>
+                      <span class="phone-prefix">+91</span>
+                      <input type="tel" placeholder="98765 43210" id="inputPhoneNum">
+                    </div>
+                  </div>
+                  <div class="form-row otp-row hidden" id="otpInputRow">
+                    <div class="input-field" data-inspect-component="OtpTextField">
+                      <label>Enter 6-Digit OTP</label>
+                      <div class="input-wrapper">
+                        <input type="text" placeholder="######" maxLength="6" class="center-text" id="inputOtpCode">
+                      </div>
+                    </div>
+                  </div>
+                  <button class="primary-btn" id="btnSendOtp" data-inspect-component="SendOtpButton">Send OTP</button>
+                </div>
+
+                <div class="divider-text"><span>or continue with</span></div>
+
+                <button class="google-btn" id="btnGoogleSignIn" data-inspect-component="GoogleSignInButton">
+                  <svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+                  </svg>
+                  Sign In with Google
+                </button>
+
+                <div class="biometric-trigger" id="btnBiometricLogin" data-inspect-component="BiometricButton">
+                  <span>🔒 Tap to use Fingerprint / Face ID</span>
+                </div>
+              </div>
+
+              <div class="auth-footer">
+                Don't have an account? <span class="text-link" id="lnkGoRegister">Create Account</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen 2: Register Screen -->
+        <div class="screen-wrapper" data-screen-id="register">
+          <div class="screen-title-badge">RegisterScreen</div>
+          <div class="mobile-frame-mock">
+            <div class="phone-status-bar">
+              <span class="time">9:41 AM</span>
+              <div class="status-icons">📶 🔋</div>
+            </div>
+            <div class="screen-content light-theme" data-inspect-component="RegisterScreen" data-description="Registration screen for new users. Captures patient details (Name, DOB, Gender) and performs initial phone verification.">
+              <div class="app-header-compact">
+                <span class="back-arrow" id="btnRegisterBack">←</span>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink: 0;"><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#logoGrad)"/><path d="M12 6V18M6 12H18" stroke="white" stroke-width="3" stroke-linecap="round"/><path d="M8 12.5h1.5l1-3 1.5 5 1-2.5h2" stroke="#E8A838" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <h2>Create Account</h2>
+              </div>
+              
+              <div class="scroll-content padding-20">
+                <div class="input-field" data-inspect-component="FullNameField">
+                  <label>Full Name</label>
+                  <div class="input-wrapper">
+                    <input type="text" placeholder="John Doe">
+                  </div>
+                </div>
+                
+                <div class="input-field" data-inspect-component="EmailField">
+                  <label>Email Address</label>
+                  <div class="input-wrapper">
+                    <input type="email" placeholder="john.doe@example.com">
+                  </div>
+                </div>
+
+                <div class="input-field" data-inspect-component="PhoneField">
+                  <label>Mobile Number (for OTP)</label>
+                  <div class="input-wrapper">
+                    <span class="phone-prefix">+91</span>
+                    <input type="tel" placeholder="10-digit number">
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="input-field half-width" data-inspect-component="DobField">
+                    <label>Date of Birth</label>
+                    <div class="input-wrapper">
+                      <input type="date">
+                    </div>
+                  </div>
+                  <div class="input-field half-width" data-inspect-component="GenderField">
+                    <label>Gender</label>
+                    <div class="input-wrapper select-wrapper">
+                      <select>
+                        <option>Male</option>
+                        <option>Female</option>
+                        <option>Other</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="input-field" data-inspect-component="PasswordField">
+                  <label>Password</label>
+                  <div class="input-wrapper">
+                    <input type="password" placeholder="Min. 8 characters">
+                  </div>
+                </div>
+
+                <div class="consent-row" data-inspect-component="MedicalDisclaimerCheckbox">
+                  <input type="checkbox" id="chkDisclaimer">
+                  <label for="chkDisclaimer">I agree that this app is not a medical device and does not provide clinical advice.</label>
+                </div>
+
+                <button class="primary-btn mt-10" id="btnRegisterSubmit">Verify & Register</button>
+
+                <div class="auth-footer mt-20">
+                  Already have an account? <span class="text-link" id="lnkGoLogin">Sign In</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen 3: Home Screen -->
+        <div class="screen-wrapper" data-screen-id="home">
+          <div class="screen-title-badge">HomeScreen</div>
+          <div class="mobile-frame-mock">
+            <div class="phone-status-bar">
+              <span class="time">9:41 AM</span>
+              <div class="status-icons">📶 🔋</div>
+            </div>
+            <div class="screen-content light-theme" data-inspect-component="HomeScreen" data-description="Primary dashboard providing quick launcher tiles to core modules. Features global actions in the Top Bar.">
+              <!-- Material Top App Bar -->
+              <div class="app-bar" data-inspect-component="HomeTopBar">
+                <div class="bar-left">
+                  <div class="icon-btn" id="btnHomeAccount" title="Account">👤</div>
+                  <div class="icon-btn" id="btnHomeChat" title="AI Chat">💬</div>
+                </div>
+                <div class="bar-center">
+                  <div class="logo-box">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink: 0;"><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#logoGrad)"/><path d="M12 6V18M6 12H18" stroke="white" stroke-width="3" stroke-linecap="round"/><path d="M8 12.5h1.5l1-3 1.5 5 1-2.5h2" stroke="#E8A838" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="logo-text">Medical Assist</span>
+                  </div>
+                  <div class="icon-btn small-btn" id="btnHomeRefresh">🔄</div>
+                </div>
+                <div class="bar-right">
+                  <div class="icon-btn" id="btnHomeCompare" title="Compare Reports">⇄</div>
+                  <div class="icon-btn" id="btnHomeLanguage" title="Language">🌐</div>
+                </div>
+              </div>
+
+              <!-- Main Home Grid -->
+              <div class="grid-content">
+                <!-- Action Tiles -->
+                <div class="action-grid">
+                  <div class="grid-tile tile-scan" id="tileScan" data-inspect-component="ScanReportTile" data-color-token="StatusNormal">
+                    <div class="tile-icon">📸</div>
+                    <span class="tile-label">Scan Report</span>
+                  </div>
+                  <div class="grid-tile tile-records" id="tileRecords" data-inspect-component="RecordsTile">
+                    <div class="tile-icon">📜</div>
+                    <span class="tile-label">Records</span>
+                  </div>
+                  <div class="grid-tile tile-reminders" id="tileReminders" data-inspect-component="RemindersTile">
+                    <div class="tile-icon">⏰</div>
+                    <span class="tile-label">Reminders</span>
+                  </div>
+                  <div class="grid-tile tile-meds" id="tileMeds" data-inspect-component="MedicationTrackerTile">
+                    <div class="tile-icon">💊</div>
+                    <span class="tile-label">Medications</span>
+                  </div>
+                  <div class="grid-tile tile-tests" id="tileTests" data-inspect-component="PendingTestsTile">
+                    <div class="tile-icon">🚨</div>
+                    <span class="tile-label">Pending Tests</span>
+                  </div>
+                  <div class="grid-tile tile-trends" id="tileTrends" data-inspect-component="TrendsTile">
+                    <div class="tile-icon">📈</div>
+                    <span class="tile-label">Trends</span>
+                  </div>
+                </div>
+
+                <!-- Recent Activity / Scan Progress -->
+                <div class="dashboard-activity-panel" data-inspect-component="ScanProgressBar" id="homeProgressPanel">
+                  <div class="activity-header">
+                    <h4>Active Ingestion</h4>
+                    <span class="badge pulse">Processing</span>
+                  </div>
+                  <p class="activity-desc">Analyzing: prescription_july14.pdf</p>
+                  <div class="progress-bar-container">
+                    <div class="progress-fill" style="width: 65%;"></div>
+                  </div>
+                  <div class="progress-steps">
+                    <span>OCR Extractor</span> • <span class="active">Gemini Analysis</span> • <span>Database Sync</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen 4: Scan Screen -->
+        <div class="screen-wrapper" data-screen-id="scan">
+          <div class="screen-title-badge">ScanScreen</div>
+          <div class="mobile-frame-mock">
+            <div class="phone-status-bar">
+              <span class="time">9:41 AM</span>
+              <div class="status-icons">📶 🔋</div>
+            </div>
+            <div class="screen-content light-theme" data-inspect-component="ScanScreen" data-description="Scanner terminal supporting photo capture, document browsing, QR code parsing, and automatic email scan attachment review.">
+              <div class="app-header-compact">
+                <span class="back-arrow" id="btnScanBack">←</span>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink: 0;"><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#logoGrad)"/><path d="M12 6V18M6 12H18" stroke="white" stroke-width="3" stroke-linecap="round"/><path d="M8 12.5h1.5l1-3 1.5 5 1-2.5h2" stroke="#E8A838" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <h2>Scan Document</h2>
+              </div>
+
+              <div class="scroll-content padding-16">
+                <!-- Dropzone / Viewfinder mock -->
+                <div class="scanner-viewport" data-inspect-component="ScanViewport" id="btnChooseImage">
+                  <div class="viewport-placeholder" id="viewportPlaceholder">
+                    <div class="vp-icon">📷</div>
+                    <h3>Capture or Upload</h3>
+                    <p>Tap here to select an image, PDF or doc from your device, or snap a photo.</p>
+                  </div>
+                  <div class="viewport-preview hidden" id="viewportPreview">
+                    <!-- Dynamic preview loaded by JS -->
+                  </div>
+                </div>
+
+                <!-- Input form for Scan Tuning -->
+                <div class="scan-form" data-inspect-component="ScanForm">
+                  <div class="input-field">
+                    <label>Patient Name (Optional)</label>
+                    <input type="text" placeholder="e.g. John Doe (Auto-detect if blank)" id="scanPatientName">
+                  </div>
+
+                  <label class="section-sub">Scanning Mode</label>
+                  <div class="segment-control">
+                    <button class="segment-item active" data-type="prescription">Medicine Scan</button>
+                    <button class="segment-item" data-type="report">Reports Scan</button>
+                  </div>
+
+                  <div class="category-pills hidden" id="reportCategoryRow">
+                    <span class="pill active" data-cat="blood_test">Blood Test</span>
+                    <span class="pill" data-cat="sonography">Sonography</span>
+                    <span class="pill" data-cat="2d_echo">2D Echo</span>
+                    <span class="pill" data-cat="xray">X-Ray</span>
+                    <span class="pill" data-cat="other">Other</span>
+                  </div>
+                </div>
+
+                <!-- Action Button Matrix -->
+                <div class="scan-actions-grid" data-inspect-component="ScanActionMatrix">
+                  <button class="icon-action-btn" id="btnCamera">
+                    <span class="btn-icon">📷</span>
+                    <span>Camera</span>
+                  </button>
+                  <button class="icon-action-btn" id="btnFromDevice">
+                    <span class="btn-icon">📁</span>
+                    <span>From Device</span>
+                  </button>
+                  <button class="icon-action-btn" id="btnQrCode">
+                    <span class="btn-icon">🔍</span>
+                    <span>Scan QR</span>
+                  </button>
+                  <button class="icon-action-btn" id="btnScanEmail">
+                    <span class="btn-icon">✉️</span>
+                    <span>Scan Email</span>
+                  </button>
+                </div>
+
+                <!-- Analyze Trigger -->
+                <button class="action-btn primary-bg" id="btnAnalyze" data-inspect-component="AnalyzeButton">Analyze Document</button>
+
+                <!-- Found in Email Queue -->
+                <div class="email-queue-section" data-inspect-component="EmailQueueList">
+                  <h4>Found in Email (Pending Review)</h4>
+                  <div class="email-item-card">
+                    <div class="email-info">
+                      <div class="email-sender">From: lalpathlabs@gmail.com</div>
+                      <div class="email-subject">Subject: Lab Report - John Doe</div>
+                      <div class="attachment-name">📎 JohnDoe_CBC_14Jul.pdf</div>
+                    </div>
+                    <button class="email-analyze-btn" id="btnAnalyzeEmailCard">Analyze</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen 5: Records Screen -->
+        <div class="screen-wrapper" data-screen-id="records">
+          <div class="screen-title-badge">RecordsScreen</div>
+          <div class="mobile-frame-mock">
+            <div class="phone-status-bar">
+              <span class="time">9:41 AM</span>
+              <div class="status-icons">📶 🔋</div>
+            </div>
+            <div class="screen-content light-theme" data-inspect-component="RecordsScreen" data-description="History of all scanned prescription and lab records with date filtering, full-text search, and clinical highlights panel.">
+              <div class="app-bar">
+                <div class="bar-left">
+                  <span class="back-arrow" id="btnRecordsBack">←</span>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-left: 4px; flex-shrink: 0;"><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#logoGrad)"/><path d="M12 6V18M6 12H18" stroke="white" stroke-width="3" stroke-linecap="round"/><path d="M8 12.5h1.5l1-3 1.5 5 1-2.5h2" stroke="#E8A838" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="bar-title">Records</span>
+                </div>
+                <div class="bar-right">
+                  <div class="icon-btn" id="btnRecordsChat">💬</div>
+                </div>
+              </div>
+
+              <div class="scroll-content">
+                <!-- Search Bar -->
+                <div class="search-wrapper-padding">
+                  <div class="search-input-field" data-inspect-component="SearchField">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" placeholder="Search reports, patient, or text..." id="recordsSearch">
+                  </div>
+                </div>
+
+                <!-- Date Chips -->
+                <div class="chips-row" data-inspect-component="FilterChips">
+                  <span class="chip active" data-period="all">All Time</span>
+                  <span class="chip" data-period="1m">1 Month</span>
+                  <span class="chip" data-period="3m">3 Months</span>
+                  <span class="chip" data-period="6m">6 Months</span>
+                </div>
+
+                <!-- Insights Panel -->
+                <div class="insights-panel" data-inspect-component="ClinicalInsightsPanel">
+                  <div class="panel-header">
+                    <span class="panel-title-icon">💡</span>
+                    <h5>Clinical Insights</h5>
+                  </div>
+                  <p class="panel-body">HbA1c level shows a decreasing trend (8.2% down to 7.4%). Continue prescribed medications.</p>
+                </div>
+
+                <!-- Report List -->
+                <div class="records-list" data-inspect-component="RecordsList" id="recordsListContainer">
+                  <!-- Scanned Records -->
+                  <div class="record-item" data-id="rep1" data-inspect-component="ReportItemCard">
+                    <div class="record-badge lab-badge">Lab Report</div>
+                    <div class="record-main-info">
+                      <div class="record-patient">Patient: John Doe</div>
+                      <div class="record-facility">Metro Diagnostics (14 Jul 2026)</div>
+                    </div>
+                    <div class="record-tags">
+                      <span class="tag tag-alert">HbA1c: 7.4% (High)</span>
+                    </div>
+                  </div>
+
+                  <div class="record-item" data-id="rep2" data-inspect-component="ReportItemCard">
+                    <div class="record-badge prescription-badge">Prescription</div>
+                    <div class="record-main-info">
+                      <div class="record-patient">Patient: John Doe</div>
+                      <div class="record-facility">Dr. A. K. Sharma (10 Jul 2026)</div>
+                    </div>
+                    <div class="record-tags">
+                      <span class="tag">Metformin 500mg</span>
+                      <span class="tag">Atorvastatin 10mg</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Floating Action Button -->
+              <div class="fab-container" id="fabScan" data-inspect-component="FloatingActionButton">
+                <div class="fab-btn">➕</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen 6: Reminders Screen -->
+        <div class="screen-wrapper" data-screen-id="reminders">
+          <div class="screen-title-badge">RemindersScreen</div>
+          <div class="mobile-frame-mock">
+            <div class="phone-status-bar">
+              <span class="time">9:41 AM</span>
+              <div class="status-icons">📶 🔋</div>
+            </div>
+            <div class="screen-content light-theme" data-inspect-component="RemindersScreen" data-description="Medication schedule alarms mapped by time of day, doctor appointments tracker, and alarm permission panels.">
+              <div class="app-bar">
+                <div class="bar-left">
+                  <span class="back-arrow" id="btnRemindersBack">←</span>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-left: 4px; flex-shrink: 0;"><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#logoGrad)"/><path d="M12 6V18M6 12H18" stroke="white" stroke-width="3" stroke-linecap="round"/><path d="M8 12.5h1.5l1-3 1.5 5 1-2.5h2" stroke="#E8A838" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="bar-title">Reminders</span>
+                </div>
+                <div class="bar-right">
+                  <div class="icon-btn" id="btnRemindersChat">💬</div>
+                </div>
+              </div>
+
+              <div class="scroll-content padding-16">
+                <!-- Permission Banner -->
+                <div class="banner-card warning-banner" data-inspect-component="PermissionBanner">
+                  <div class="banner-icon">🔔</div>
+                  <div class="banner-body">
+                    <h6>Allow Notifications</h6>
+                    <p>Enable alerts so medication timers show on your phone and watch.</p>
+                  </div>
+                  <button class="banner-btn warning-btn">Allow</button>
+                </div>
+
+                <!-- Quick Action Buttons -->
+                <div class="action-buttons-row" data-inspect-component="QuickAddRemindersRow">
+                  <button class="med-btn" id="btnAddMed">➕ Add Med</button>
+                  <button class="appt-btn" id="btnAddAppt">📅 Add Appt</button>
+                </div>
+
+                <!-- Slot Section: Morning -->
+                <div class="slot-section" data-inspect-component="TimeSlotSection">
+                  <div class="slot-header morning-slot">
+                    <span class="slot-title">☀️ Morning</span>
+                    <span class="slot-now-tag">NOW</span>
+                    <span class="slot-time">08:00 AM</span>
+                  </div>
+                  <div class="slot-card" data-inspect-component="MedicineCard">
+                    <div class="card-left">
+                      <div class="med-icon-box morning-icon">💊</div>
+                      <div class="med-details">
+                        <h5>Metformin 500mg</h5>
+                        <p>1 tablet • John Doe</p>
+                      </div>
+                    </div>
+                    <div class="card-right">
+                      <div class="time-edit">✏️ 08:00</div>
+                      <div class="toggle-switch active"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Slot Section: Night -->
+                <div class="slot-section" data-inspect-component="TimeSlotSection">
+                  <div class="slot-header night-slot">
+                    <span class="slot-title">🌙 Night</span>
+                    <span class="slot-time">09:30 PM</span>
+                  </div>
+                  <div class="slot-card" data-inspect-component="MedicineCard">
+                    <div class="card-left">
+                      <div class="med-icon-box night-icon">💊</div>
+                      <div class="med-details">
+                        <h5>Atorvastatin 10mg</h5>
+                        <p>1 tablet • John Doe</p>
+                      </div>
+                    </div>
+                    <div class="card-right">
+                      <div class="time-edit">✏️ 21:30</div>
+                      <div class="toggle-switch active"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Appointments list -->
+                <div class="appointments-section">
+                  <h4 class="section-title">Doctor Appointments</h4>
+                  <div class="appointment-card" data-inspect-component="AppointmentCard">
+                    <div class="appt-main">
+                      <div class="appt-info">
+                        <h5>Dr. Amit Verma (Cardio)</h5>
+                        <p>Fortis Hospital • 18 Jul 2026 at 4:30 PM</p>
+                      </div>
+                      <div class="appt-controls">
+                        <span>✏️</span>
+                        <span>🗑️</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen 7: Medication Tracker Screen -->
+        <div class="screen-wrapper" data-screen-id="meds">
+          <div class="screen-title-badge">MedicationTrackerScreen</div>
+          <div class="mobile-frame-mock">
+            <div class="phone-status-bar">
+              <span class="time">9:41 AM</span>
+              <div class="status-icons">📶 🔋</div>
+            </div>
+            <div class="screen-content light-theme" data-inspect-component="MedicationTrackerScreen" data-description="Overview of active medications extracted from reports, enabling multi-select bulk operations like schedule updates and record deletion.">
+              <div class="app-bar">
+                <div class="bar-left">
+                  <span class="back-arrow" id="btnMedsBack">←</span>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-left: 4px; flex-shrink: 0;"><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#logoGrad)"/><path d="M12 6V18M6 12H18" stroke="white" stroke-width="3" stroke-linecap="round"/><path d="M8 12.5h1.5l1-3 1.5 5 1-2.5h2" stroke="#E8A838" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="bar-title">Medications</span>
+                </div>
+                <div class="bar-right">
+                  <div class="icon-btn" id="btnMedsChat">💬</div>
+                </div>
+              </div>
+
+              <!-- Selection Mode Bottom Bar (Structured to show when active) -->
+              <div class="bulk-action-bar hidden" id="bulkActionBar" data-inspect-component="SelectionModeBottomBar">
+                <span class="close-select" id="btnExitSelection">✕</span>
+                <span class="count-selected"><strong id="selectedCountText">0</strong> selected</span>
+                <div class="bulk-buttons">
+                  <button class="bulk-btn freq-btn" id="btnBulkFreq">🕒 Freq</button>
+                  <button class="bulk-btn del-btn" id="btnBulkDel">🗑️ Delete</button>
+                </div>
+              </div>
+
+              <div class="scroll-content">
+                <div class="search-wrapper-padding">
+                  <div class="search-input-field" data-inspect-component="MedsSearchField">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" placeholder="Search medicine name, dosage..." id="medsSearch">
+                  </div>
+                </div>
+
+                <div class="meds-list" data-inspect-component="MedicationsList" id="medsListContainer">
+                  <div class="med-item-row" data-key="med1" data-inspect-component="MedicationHistoryCard">
+                    <div class="select-checkbox hidden"></div>
+                    <div class="med-info-main">
+                      <div class="med-header">
+                        <h5>Metformin</h5>
+                        <span class="med-dosage-badge">500mg</span>
+                      </div>
+                      <p class="med-pat">Patient: John Doe</p>
+                      <p class="med-freq">Frequency: 1-0-1 (Twice daily)</p>
+                      <p class="med-origin">Source: Prescription (10 Jul 2026)</p>
+                    </div>
+                  </div>
+
+                  <div class="med-item-row" data-key="med2" data-inspect-component="MedicationHistoryCard">
+                    <div class="select-checkbox hidden"></div>
+                    <div class="med-info-main">
+                      <div class="med-header">
+                        <h5>Atorvastatin</h5>
+                        <span class="med-dosage-badge">10mg</span>
+                      </div>
+                      <p class="med-pat">Patient: John Doe</p>
+                      <p class="med-freq">Frequency: 0-0-1 (Nightly)</p>
+                      <p class="med-origin">Source: Prescription (10 Jul 2026)</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen 8: Pending Tests Screen -->
+        <div class="screen-wrapper" data-screen-id="tests">
+          <div class="screen-title-badge">PendingTestsScreen</div>
+          <div class="mobile-frame-mock">
+            <div class="phone-status-bar">
+              <span class="time">9:41 AM</span>
+              <div class="status-icons">📶 🔋</div>
+            </div>
+            <div class="screen-content light-theme" data-inspect-component="PendingTestsScreen" data-description="Maintains reminders for medical tests suggested in reports. Clicking resolved links them to matching scanned lab reports.">
+              <div class="app-bar">
+                <div class="bar-left">
+                  <span class="back-arrow" id="btnTestsBack">←</span>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-left: 4px; flex-shrink: 0;"><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#logoGrad)"/><path d="M12 6V18M6 12H18" stroke="white" stroke-width="3" stroke-linecap="round"/><path d="M8 12.5h1.5l1-3 1.5 5 1-2.5h2" stroke="#E8A838" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="bar-title">Pending Tests</span>
+                </div>
+                <div class="bar-right">
+                  <div class="icon-btn" id="btnTestsChat">💬</div>
+                </div>
+              </div>
+
+              <div class="scroll-content">
+                <div class="search-wrapper-padding">
+                  <div class="search-input-field" data-inspect-component="TestsSearchField">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" placeholder="Search test name, patient..." id="testsSearch">
+                  </div>
+                </div>
+
+                <div class="tests-list" data-inspect-component="PendingTestsList">
+                  <div class="test-item-card critical-test" data-inspect-component="PendingTestCard">
+                    <div class="test-header">
+                      <h5>HbA1c & Fasting Glucose</h5>
+                      <span class="status-indicator critical-bg">Overdue</span>
+                    </div>
+                    <p class="test-detail">Patient: John Doe • Due: 10 Jul 2026</p>
+                    <div class="test-footer">
+                      <span class="origin-note">Recommended: Dr. Sharma</span>
+                      <button class="resolve-test-btn disabled">Link Scanned Report</button>
+                    </div>
+                  </div>
+
+                  <div class="test-item-card resolved-test" data-inspect-component="PendingTestCard">
+                    <div class="test-header">
+                      <h5>Lipid Profile</h5>
+                      <span class="status-indicator resolved-bg">Completed</span>
+                    </div>
+                    <p class="test-detail">Patient: John Doe • Due: 20 Jul 2026</p>
+                    <div class="test-footer">
+                      <span class="origin-note">Linked to Metro Labs</span>
+                      <button class="resolve-test-btn active" id="btnViewResolvedReport">View Result</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Floating Action Button for Manual Test Entry -->
+              <div class="fab-container" id="fabAddTest" data-inspect-component="AddTestFloatingActionButton">
+                <div class="fab-btn">➕</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen 9: Trends Screen -->
+        <div class="screen-wrapper" data-screen-id="trends">
+          <div class="screen-title-badge">TrendsScreen</div>
+          <div class="mobile-frame-mock">
+            <div class="phone-status-bar">
+              <span class="time">9:41 AM</span>
+              <div class="status-icons">📶 🔋</div>
+            </div>
+            <div class="screen-content light-theme" data-inspect-component="TrendsScreen" data-description="Analytical data visualization rendering health metric fluctuations over time. Shows trends graphs.">
+              <div class="app-bar">
+                <div class="bar-left">
+                  <span class="back-arrow" id="btnTrendsBack">←</span>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-left: 4px; flex-shrink: 0;"><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#logoGrad)"/><path d="M12 6V18M6 12H18" stroke="white" stroke-width="3" stroke-linecap="round"/><path d="M8 12.5h1.5l1-3 1.5 5 1-2.5h2" stroke="#E8A838" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="bar-title">Trends Analysis</span>
+                </div>
+                <div class="bar-right">
+                  <div class="icon-btn">🌐</div>
+                </div>
+              </div>
+
+              <div class="scroll-content padding-16">
+                <!-- Dropdown Selector -->
+                <div class="metric-selector-wrapper" data-inspect-component="MetricDropdownSelector">
+                  <label>Select Bio-Marker</label>
+                  <select class="metric-select">
+                    <option>Glycated Hemoglobin (HbA1c)</option>
+                    <option>Total Cholesterol</option>
+                    <option>Fasting Blood Sugar</option>
+                  </select>
+                </div>
+
+                <!-- Custom SVG Graph -->
+                <div class="chart-container" data-inspect-component="TrendsChart">
+                  <svg viewBox="0 0 300 150" class="metric-svg-chart">
+                    <!-- Grid Lines -->
+                    <line x1="30" y1="20" x2="280" y2="20" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="4"/>
+                    <line x1="30" y1="60" x2="280" y2="60" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="4"/>
+                    <line x1="30" y1="100" x2="280" y2="100" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="4"/>
+                    
+                    <!-- Area Under Curve -->
+                    <path d="M 40 100 L 100 85 L 160 80 L 220 50 L 280 40 L 280 120 L 40 120 Z" fill="rgba(13, 115, 119, 0.15)"/>
+                    
+                    <!-- Chart Line -->
+                    <path d="M 40 100 L 100 85 L 160 80 L 220 50 L 280 40" fill="none" stroke="#0D7377" stroke-width="3"/>
+                    
+                    <!-- Data points -->
+                    <circle cx="40" cy="100" r="4" fill="#0D7377"/>
+                    <circle cx="100" cy="85" r="4" fill="#0D7377"/>
+                    <circle cx="160" cy="80" r="4" fill="#0D7377"/>
+                    <circle cx="220" cy="50" r="4" fill="#0D7377"/>
+                    <circle cx="280" cy="40" r="4" fill="#0D7377"/>
+
+                    <!-- Y-Axis Labels -->
+                    <text x="5" y="25" class="chart-axis-label">9.0%</text>
+                    <text x="5" y="65" class="chart-axis-label">7.5%</text>
+                    <text x="5" y="105" class="chart-axis-label">6.0%</text>
+
+                    <!-- X-Axis Labels -->
+                    <text x="40" y="140" class="chart-axis-label text-center">Feb</text>
+                    <text x="100" y="140" class="chart-axis-label text-center">Mar</text>
+                    <text x="160" y="140" class="chart-axis-label text-center">Apr</text>
+                    <text x="220" y="140" class="chart-axis-label text-center">May</text>
+                    <text x="280" y="140" class="chart-axis-label text-center">Jun</text>
+                  </svg>
+                </div>
+
+                <div class="metrics-summary-card">
+                  <h5>Overall Health Direction</h5>
+                  <p class="summary-status status-improved">🟢 IMPROVING</p>
+                  <p class="summary-details">A 1.6% net drop in HbA1c since February. Target range (&lt; 6.5%) is approaching.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen 10: Detailed Analysis Screen -->
+        <div class="screen-wrapper" data-screen-id="detail">
+          <div class="screen-title-badge">ReportDetailScreen</div>
+          <div class="mobile-frame-mock">
+            <div class="phone-status-bar">
+              <span class="time">9:41 AM</span>
+              <div class="status-icons">📶 🔋</div>
+            </div>
+            <div class="screen-content light-theme" data-inspect-component="ReportDetailScreen" data-description="Renders detailed extracted parameters, values, reference ranges, and AI interpretation after scanning a report.">
+              <div class="app-bar">
+                <div class="bar-left">
+                  <span class="back-arrow" id="btnDetailBack">←</span>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-left: 4px; flex-shrink: 0;"><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#logoGrad)"/><path d="M12 6V18M6 12H18" stroke="white" stroke-width="3" stroke-linecap="round"/><path d="M8 12.5h1.5l1-3 1.5 5 1-2.5h2" stroke="#E8A838" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="bar-title">Report Details</span>
+                </div>
+                <div class="bar-right">
+                  <div class="icon-btn">💬</div>
+                </div>
+              </div>
+
+              <div class="scroll-content padding-16">
+                <!-- Meta block -->
+                <div class="detail-meta-card">
+                  <h3>Complete Blood Count (CBC)</h3>
+                  <p class="detail-pat">Patient: John Doe • Date: 14 Jul 2026</p>
+                  <p class="detail-lab">Facility: Metro Diagnostics</p>
+                </div>
+
+                <!-- Parameters list -->
+                <div class="parameters-section">
+                  <h4 class="section-title">Tested Parameters</h4>
+                  
+                  <div class="param-row" data-inspect-component="ParameterRow">
+                    <div class="param-left">
+                      <h5>Hemoglobin</h5>
+                      <p>Reference: 13.8 - 17.2 g/dL</p>
+                    </div>
+                    <div class="param-right">
+                      <span class="param-val">14.2 g/dL</span>
+                      <span class="status-badge normal-bg">Normal</span>
+                    </div>
+                  </div>
+
+                  <div class="param-row" data-inspect-component="ParameterRow">
+                    <div class="param-left">
+                      <h5>White Blood Cell (WBC)</h5>
+                      <p>Reference: 4,500 - 11,000 /mcL</p>
+                    </div>
+                    <div class="param-right">
+                      <span class="param-val text-high">12,400 /mcL</span>
+                      <span class="status-badge high-bg">High</span>
+                    </div>
+                  </div>
+
+                  <div class="param-row" data-inspect-component="ParameterRow">
+                    <div class="param-left">
+                      <h5>Platelets</h5>
+                      <p>Reference: 150k - 450k /mcL</p>
+                    </div>
+                    <div class="param-right">
+                      <span class="param-val">280,000 /mcL</span>
+                      <span class="status-badge normal-bg">Normal</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- AI Translation & Explanation -->
+                <div class="ai-explanation" data-inspect-component="AiExplanationCard">
+                  <div class="ai-explain-header">
+                    <span>✨ AI Interpretation</span>
+                    <span class="ai-translate-pills">Hindi / En</span>
+                  </div>
+                  <p class="ai-explain-body">Your WBC count is elevated, indicating possible mild inflammation or response to an active infection. Other blood indices are stable within reference boundaries.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen 11: Chat Screen -->
+        <div class="screen-wrapper" data-screen-id="chat">
+          <div class="screen-title-badge">ChatScreen</div>
+          <div class="mobile-frame-mock">
+            <div class="phone-status-bar">
+              <span class="time">9:41 AM</span>
+              <div class="status-icons">📶 🔋</div>
+            </div>
+            <div class="screen-content light-theme" data-inspect-component="ChatScreen" data-description="Conversational chat interface allowing questions. Captures and targets the context of the calling page.">
+              <div class="app-bar">
+                <div class="bar-left">
+                  <span class="back-arrow" id="btnChatBack">←</span>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-left: 4px; flex-shrink: 0;"><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#logoGrad)"/><path d="M12 6V18M6 12H18" stroke="white" stroke-width="3" stroke-linecap="round"/><path d="M8 12.5h1.5l1-3 1.5 5 1-2.5h2" stroke="#E8A838" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="bar-title">AI Assistant</span>
+                </div>
+                <div class="bar-right">
+                  <div class="icon-btn">🗑️</div>
+                </div>
+              </div>
+
+              <!-- Context header indicator -->
+              <div class="chat-context-bar" data-inspect-component="ChatContextIndicator" id="chatContextIndicator">
+                Asking about: <strong id="chatContextText">HomeScreen</strong>
+              </div>
+
+              <div class="chat-messages" data-inspect-component="ChatMessagesList" id="chatMessagesContainer">
+                <div class="msg bubble-assistant">
+                  Hello! I can help you understand your reports, reminders, or general dosage schedules. Ask me anything.
+                </div>
+                <div class="msg bubble-user">
+                  Why is my WBC count showing high?
+                </div>
+                <div class="msg bubble-assistant">
+                  An elevated White Blood Cell (WBC) count of 12,400 /mcL usually suggests that your immune system is responding to infection, injury, or inflammation. It is best to consult Dr. Verma to evaluate it in the context of any symptoms.
+                </div>
+              </div>
+
+              <!-- Message Input Dock -->
+              <div class="chat-input-bar" data-inspect-component="ChatInputDock">
+                <input type="text" placeholder="Type a message..." id="chatInput">
+                <button class="send-message-btn" id="btnSendMessage">Send</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen 12: Account Screen -->
+        <div class="screen-wrapper" data-screen-id="account">
+          <div class="screen-title-badge">AccountScreen</div>
+          <div class="mobile-frame-mock">
+            <div class="phone-status-bar">
+              <span class="time">9:41 AM</span>
+              <div class="status-icons">📶 🔋</div>
+            </div>
+            <div class="screen-content light-theme" data-inspect-component="AccountScreen" data-description="Account profile dashboard including preferred live AI languages, scan schedules, and Google/IMAP scan authentication links.">
+              <div class="app-bar">
+                <div class="bar-left">
+                  <span class="back-arrow" id="btnAccountBack">←</span>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-left: 4px; flex-shrink: 0;"><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#logoGrad)"/><path d="M12 6V18M6 12H18" stroke="white" stroke-width="3" stroke-linecap="round"/><path d="M8 12.5h1.5l1-3 1.5 5 1-2.5h2" stroke="#E8A838" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="bar-title">Account Details</span>
+                </div>
+                <div class="bar-right">
+                  <button class="logout-link-btn" id="btnAccountLogout">Log Out</button>
+                </div>
+              </div>
+
+              <div class="scroll-content padding-16">
+                <!-- Profile snapshot -->
+                <div class="profile-card" data-inspect-component="ProfileHeader">
+                  <div class="profile-avatar">JD</div>
+                  <div class="profile-meta">
+                    <h4>John Doe</h4>
+                    <p>john.doe@example.com • Male, 34y</p>
+                  </div>
+                </div>
+
+                <!-- Language config -->
+                <div class="setting-group" data-inspect-component="LanguagePreferenceSelector">
+                  <h4 class="setting-title">Preferred Language (AI Translate)</h4>
+                  <div class="setting-row">
+                    <span class="setting-label font-medium">Select Language</span>
+                    <select class="settings-select" id="preferredLangSelect">
+                      <option>English</option>
+                      <option>Hindi</option>
+                      <option>Tamil</option>
+                      <option>Telugu</option>
+                      <option>Bengali</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Email report scanning configuration -->
+                <div class="setting-group" data-inspect-component="GmailScannerConfigGroup">
+                  <h4 class="setting-title">Email Report Scanner</h4>
+                  
+                  <div class="setting-row border-bottom">
+                    <span class="setting-label">Automatic Scanning</span>
+                    <div class="toggle-switch active"></div>
+                  </div>
+
+                  <div class="setting-row border-bottom">
+                    <span class="setting-label">Daily Scan Time</span>
+                    <span class="setting-value">07:00 PM</span>
+                  </div>
+
+                  <div class="setting-row border-bottom">
+                    <span class="setting-label">Google Account Status</span>
+                    <span class="status-badge normal-bg">Linked</span>
+                  </div>
+                  
+                  <div class="setting-row">
+                    <span class="setting-label">Inbox Keywords</span>
+                    <span class="setting-value">"report, medical..."</span>
+                  </div>
+
+                  <button class="action-btn outline-btn mt-10" id="btnResetEmailHistory">Clear Scan History</button>
+                </div>
+
+                <!-- Safety settings -->
+                <div class="setting-group" data-inspect-component="SecurityConfigGroup">
+                  <h4 class="setting-title">Security & Passwords</h4>
+                  <div class="setting-row border-bottom">
+                    <span class="setting-label">Biometric Verification</span>
+                    <div class="toggle-switch active"></div>
+                  </div>
+                  <div class="setting-row">
+                    <span class="setting-label">Local Database Encryption</span>
+                    <span class="status-badge normal-bg">AES-SQLCipher</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen 13: Compare Screen -->
+        <div class="screen-wrapper" data-screen-id="compare">
+          <div class="screen-title-badge">CompareScreen</div>
+          <div class="mobile-frame-mock">
+            <div class="phone-status-bar">
+              <span class="time">9:41 AM</span>
+              <div class="status-icons">📶 🔋</div>
+            </div>
+            <div class="screen-content light-theme" data-inspect-component="CompareScreen" data-description="Enables side-by-side comparative parameter checking between two lab reports to see biomarkers changes.">
+              <div class="app-bar">
+                <div class="bar-left">
+                  <span class="back-arrow" id="btnCompareBack">←</span>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-left: 4px; flex-shrink: 0;"><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#logoGrad)"/><path d="M12 6V18M6 12H18" stroke="white" stroke-width="3" stroke-linecap="round"/><path d="M8 12.5h1.5l1-3 1.5 5 1-2.5h2" stroke="#E8A838" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="bar-title">Compare Reports</span>
+                </div>
+                <div class="bar-right">
+                  <div class="icon-btn">📊</div>
+                </div>
+              </div>
+
+              <div class="scroll-content padding-16">
+                <!-- Selectors -->
+                <div class="compare-selectors" data-inspect-component="CompareSelectors">
+                  <div class="select-box">
+                    <label>Report A</label>
+                    <div class="mock-dropdown">Metro Labs (14 Jul 2026)</div>
+                  </div>
+                  <div class="select-box">
+                    <label>Report B</label>
+                    <div class="mock-dropdown">Dr. Lal Labs (12 Feb 2026)</div>
+                  </div>
+                </div>
+
+                <!-- Comparison Matrix -->
+                <div class="compare-matrix" data-inspect-component="ComparisonMatrix">
+                  <div class="matrix-header">
+                    <span class="col-marker">Parameter</span>
+                    <span class="col-val text-center">Jul 2026</span>
+                    <span class="col-val text-center">Feb 2026</span>
+                  </div>
+
+                  <div class="matrix-row">
+                    <span class="col-marker font-medium">Hemoglobin</span>
+                    <span class="col-val text-center">14.2 g/dL</span>
+                    <span class="col-val text-center">13.9 g/dL</span>
+                  </div>
+
+                  <div class="matrix-row critical-row">
+                    <span class="col-marker font-medium">WBC Count</span>
+                    <span class="col-val text-center text-high">12,400 /mcL 📈</span>
+                    <span class="col-val text-center">8,500 /mcL</span>
+                  </div>
+
+                  <div class="matrix-row">
+                    <span class="col-marker font-medium">Platelets</span>
+                    <span class="col-val text-center">280,000 /mcL</span>
+                    <span class="col-val text-center">295,000 /mcL</span>
+                  </div>
+                </div>
+
+                <div class="compare-summary-card">
+                  <h5>Comparative Summary</h5>
+                  <p>A notable increase is detected in White Blood Cells (WBC), representing a shift of +3,900/mcL. Hemoglobin and platelet counts remain stable.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- DESIGN TOKENS PAGE (rendered as an overlay/alternate canvas layout in Design view) -->
+      <div class="tokens-container hidden" id="tokensContainer">
+        <h2>HealthDecoder Design System Tokens</h2>
+        <p class="tokens-intro">A precise catalog of visual components, typography rules, spacing standards and theme tokens matched exactly to <code>Color.kt</code> and <code>Theme.kt</code>.</p>
+        
+        <div class="tokens-section">
+          <h3>Palette Colors</h3>
+          <div class="tokens-grid">
+            <div class="token-color-card">
+              <div class="color-swatch" style="background-color: #0D7377;"></div>
+              <div class="color-details">
+                <strong>MedicalTeal (Primary)</strong>
+                <code>#0D7377</code>
+                <span class="compose-token">val MedicalTeal = Color(0xFF0D7377)</span>
+              </div>
+            </div>
+            <div class="token-color-card">
+              <div class="color-swatch" style="background-color: #1B3A4B;"></div>
+              <div class="color-details">
+                <strong>MedicalNavy (Secondary)</strong>
+                <code>#1B3A4B</code>
+                <span class="compose-token">val MedicalNavy = Color(0xFF1B3A4B)</span>
+              </div>
+            </div>
+            <div class="token-color-card">
+              <div class="color-swatch" style="background-color: #E8A838;"></div>
+              <div class="color-details">
+                <strong>MedicalAmber (Tertiary)</strong>
+                <code>#E8A838</code>
+                <span class="compose-token">val MedicalAmber = Color(0xFFE8A838)</span>
+              </div>
+            </div>
+            <div class="token-color-card">
+              <div class="color-swatch" style="background-color: #F8F9FA; border: 1px solid #D2D6DC;"></div>
+              <div class="color-details">
+                <strong>MedicalBackground</strong>
+                <code>#F8F9FA</code>
+                <span class="compose-token">val MedicalBackground = Color(0xFFF8F9FA)</span>
+              </div>
+            </div>
+            <div class="token-color-card">
+              <div class="color-swatch" style="background-color: #FFFFFF; border: 1px solid #D2D6DC;"></div>
+              <div class="color-details">
+                <strong>MedicalSurface</strong>
+                <code>#FFFFFF</code>
+                <span class="compose-token">val MedicalSurface = Color(0xFFFFFFFF)</span>
+              </div>
+            </div>
+            <div class="token-color-card">
+              <div class="color-swatch" style="background-color: #ECF5F5;"></div>
+              <div class="color-details">
+                <strong>MedicalSurfaceVariant</strong>
+                <code>#ECF5F5</code>
+                <span class="compose-token">val MedicalSurfaceVariant = Color(0xFFECF5F5)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tokens-section">
+          <h3>Medical Status Colors</h3>
+          <div class="tokens-grid">
+            <div class="token-color-card">
+              <div class="color-swatch" style="background-color: #2E7D32;"></div>
+              <div class="color-details">
+                <strong>StatusNormal (Green)</strong>
+                <code>#2E7D32</code>
+                <span class="compose-token">val StatusNormal = Color(0xFF2E7D32)</span>
+              </div>
+            </div>
+            <div class="token-color-card">
+              <div class="color-swatch" style="background-color: #C62828;"></div>
+              <div class="color-details">
+                <strong>StatusHigh (Red)</strong>
+                <code>#C62828</code>
+                <span class="compose-token">val StatusHigh = Color(0xFFC62828)</span>
+              </div>
+            </div>
+            <div class="token-color-card">
+              <div class="color-swatch" style="background-color: #E65100;"></div>
+              <div class="color-details">
+                <strong>StatusLow (Orange)</strong>
+                <code>#E65100</code>
+                <span class="compose-token">val StatusLow = Color(0xFFE65100)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tokens-section">
+          <h3>Time Slots Accents</h3>
+          <div class="tokens-grid">
+            <div class="token-color-card">
+              <div class="color-swatch" style="background-color: #FFF8E1; border: 2px solid #F57F17;"></div>
+              <div class="color-details">
+                <strong>Morning (Yellow Accent)</strong>
+                <code>Bg: #FFF8E1 • Fg: #F57F17</code>
+                <span class="compose-token">SlotMorningBg / SlotMorningAccent</span>
+              </div>
+            </div>
+            <div class="token-color-card">
+              <div class="color-swatch" style="background-color: #E3F2FD; border: 2px solid #1565C0;"></div>
+              <div class="color-details">
+                <strong>Afternoon (Blue Accent)</strong>
+                <code>Bg: #E3F2FD • Fg: #1565C0</code>
+                <span class="compose-token">SlotAfternoonBg / SlotAfternoonAccent</span>
+              </div>
+            </div>
+            <div class="token-color-card">
+              <div class="color-swatch" style="background-color: #E8F5E9; border: 2px solid #2E7D32;"></div>
+              <div class="color-details">
+                <strong>Evening (Green Accent)</strong>
+                <code>Bg: #E8F5E9 • Fg: #2E7D32</code>
+                <span class="compose-token">SlotEveningBg / SlotEveningAccent</span>
+              </div>
+            </div>
+            <div class="token-color-card">
+              <div class="color-swatch" style="background-color: #F3E5F5; border: 2px solid #6A1B9A;"></div>
+              <div class="color-details">
+                <strong>Night (Purple Accent)</strong>
+                <code>Bg: #F3E5F5 • Fg: #6A1B9A</code>
+                <span class="compose-token">SlotNightBg / SlotNightAccent</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tokens-section">
+          <h3>Typography Standards</h3>
+          <div class="typography-tokens-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Compose Typography Token</th>
+                  <th>Font Weight</th>
+                  <th>Font Size</th>
+                  <th>Line Height</th>
+                  <th>Usage Scenario</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>MaterialTheme.typography.displayLarge</code></td>
+                  <td>Bold (800)</td>
+                  <td>30sp</td>
+                  <td>36sp</td>
+                  <td>App branding, big stats</td>
+                </tr>
+                <tr>
+                  <td><code>MaterialTheme.typography.titleLarge</code></td>
+                  <td>ExtraBold (800)</td>
+                  <td>22sp</td>
+                  <td>26sp</td>
+                  <td>Screen main headers, medicine names</td>
+                </tr>
+                <tr>
+                  <td><code>MaterialTheme.typography.titleMedium</code></td>
+                  <td>Bold (700)</td>
+                  <td>19sp</td>
+                  <td>24sp</td>
+                  <td>Card names, sections titles</td>
+                </tr>
+                <tr>
+                  <td><code>MaterialTheme.typography.bodyLarge</code></td>
+                  <td>SemiBold (600)</td>
+                  <td>17sp</td>
+                  <td>22sp</td>
+                  <td>Dosage details, critical status tags</td>
+                </tr>
+                <tr>
+                  <td><code>MaterialTheme.typography.bodyMedium</code></td>
+                  <td>Normal (400)</td>
+                  <td>14sp</td>
+                  <td>20sp</td>
+                  <td>AI messages, metadata text</td>
+                </tr>
+                <tr>
+                  <td><code>MaterialTheme.typography.labelSmall</code></td>
+                  <td>Medium (500)</td>
+                  <td>11sp</td>
+                  <td>14sp</td>
+                  <td>Badge tags, axis labels</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Right Sidebar: Properties & Code Inspector -->
+    <aside class="figma-sidebar sidebar-right">
+      <div class="inspector-tabs">
+        <button class="inspect-tab active" data-tab="properties">Design</button>
+        <button class="inspect-tab" data-tab="code">Compose Code</button>
+      </div>
+
+      <!-- Tab 1: Design Properties (Active initially) -->
+      <div class="inspector-panel-content" id="panelProperties">
+        <div class="inspector-group">
+          <div class="inspector-group-title">Component Info</div>
+          <div class="property-row">
+            <span class="prop-key">Class</span>
+            <span class="prop-val text-highlight" id="inspectClassName">LoginScreen</span>
+          </div>
+          <div class="property-row flex-column">
+            <span class="prop-key">Description</span>
+            <span class="prop-val" id="inspectDescription">Main login gateway supporting email/password, firebase phone OTP, and local biometrics.</span>
+          </div>
+        </div>
+
+        <div class="inspector-group">
+          <div class="inspector-group-title">Layout Parameters</div>
+          <div class="property-row">
+            <span class="prop-key">Width</span>
+            <span class="prop-val" id="inspectWidth">360 dp (fillMaxSize)</span>
+          </div>
+          <div class="property-row">
+            <span class="prop-key">Height</span>
+            <span class="prop-val" id="inspectHeight">740 dp (fillMaxSize)</span>
+          </div>
+          <div class="property-row">
+            <span class="prop-key">Padding</span>
+            <span class="prop-val" id="inspectPadding">16.dp</span>
+          </div>
+          <div class="property-row">
+            <span class="prop-key">Alignment</span>
+            <span class="prop-val" id="inspectAlignment">Center / Column</span>
+          </div>
+        </div>
+
+        <div class="inspector-group">
+          <div class="inspector-group-title">Theme Tokens</div>
+          <div class="property-row">
+            <span class="prop-key">Background</span>
+            <span class="prop-val" id="inspectBg">MedicalBackground (#F8F9FA)</span>
+          </div>
+          <div class="property-row">
+            <span class="prop-key">Primary Color</span>
+            <span class="prop-val" id="inspectPrimary">MedicalTeal (#0D7377)</span>
+          </div>
+          <div class="property-row">
+            <span class="prop-key">Font Family</span>
+            <span class="prop-val">Inter, System Default</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Compose Source Code Spec -->
+      <div class="inspector-panel-content hidden" id="panelCode">
+        <div class="code-header">
+          <span>Jetpack Compose Kotlin Code</span>
+          <button class="copy-code-btn" id="btnCopyCode">Copy</button>
+        </div>
+        <pre class="code-block"><code id="codeSpecBlock">@Composable
+fun LoginScreen(
+    onLoggedIn: () -> Unit,
+    onNavigateToRegister: (String?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Jetpack Compose view code...
+}</code></pre>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- Popups / Dialogs in Prototype Mode -->
+  <!-- 1. BioOnboarding Dialog -->
+  <div class="dialog-overlay hidden" id="dlgBioOnboard">
+    <div class="dialog-card">
+      <div class="dialog-icon">🧬</div>
+      <h4>Enable Biometric Login?</h4>
+      <p>Would you like to register your fingerprint for quick sign-in to your reports profile?</p>
+      <div class="dialog-actions">
+        <button class="dialog-btn secondary-btn" id="btnBioDismiss">Maybe Later</button>
+        <button class="dialog-btn primary-btn" id="btnBioConfirm">Enable</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Medical Disclaimer (Shown on register or home first time) -->
+  <div class="dialog-overlay hidden" id="dlgMedicalDisclaimer">
+    <div class="dialog-card">
+      <div class="dialog-icon">⚠️</div>
+      <h4>Medical Disclaimer</h4>
+      <p>This software is an AI scanner and does not provide clinical diagnoses or professional medical consultations. Always verify results with a physician before taking action.</p>
+      <div class="dialog-actions">
+        <button class="dialog-btn primary-btn width-full" id="btnDisclaimerAccept">I Understand & Accept</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div class="loader-overlay hidden" id="globalLoader">
+    <div class="spinner"></div>
+    <div class="loader-text" id="loaderText">Processing Report...</div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast-notification" id="toastMessage">Verification successful!</div>
+
+  <script src="app.js"></script>
+</body>
+</html>

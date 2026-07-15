@@ -928,7 +928,7 @@ fun ScanScreen(
                     }
                 }
 
-                // Two clean ways to add: Camera and From Device Folder (images, PDF, Word — any folder)
+                // Two clean rows of actions: Camera & From Device (Row 1), and Scan QR & Scan Email (Row 2)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -961,35 +961,38 @@ fun ScanScreen(
                     }
                 }
 
-                // Scan the QR code printed on the report — most labs link it to the official
-                // digital copy, which imports through the same pipeline as any other file.
-                OutlinedButton(
-                    onClick = { showQrScanner = true },
-                    modifier = Modifier.fillMaxWidth().height(54.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.QrCodeScanner, contentDescription = "Scan QR Code")
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Scan QR Code", fontWeight = FontWeight.Bold)
-                }
+                Spacer(modifier = Modifier.height(12.dp))
 
-                // Email scan integration manual option
-                OutlinedButton(
-                    onClick = {
-                        if (!AppSettings.isEmailConsentGranted(context)) {
-                            showConsentDialog = true
-                        } else if (AppSettings.getLinkedEmail(context).isNullOrBlank()) {
-                            showSetupAlert = true
-                        } else {
-                            triggerEmailScan()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(54.dp),
-                    shape = RoundedCornerShape(12.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Email, contentDescription = "Scan from Email")
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Import from Linked Email", fontWeight = FontWeight.Bold)
+                    OutlinedButton(
+                        onClick = { showQrScanner = true },
+                        modifier = Modifier.weight(1f).height(54.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.QrCodeScanner, contentDescription = "Scan QR Code")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Scan QR", fontWeight = FontWeight.Bold)
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            if (!AppSettings.isEmailConsentGranted(context)) {
+                                showConsentDialog = true
+                            } else if (AppSettings.getLinkedEmail(context).isNullOrBlank()) {
+                                showSetupAlert = true
+                            } else {
+                                triggerEmailScan()
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(54.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Email, contentDescription = "Scan from Email")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Scan Email", fontWeight = FontWeight.Bold)
+                    }
                 }
 
                 // Reports a background scan (Scan Now / the 7 PM daily alarm) already downloaded

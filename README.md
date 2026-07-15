@@ -6,11 +6,24 @@ Indic OCR/translation), and account-based access with phone-OTP or email/passwor
 
 Repo: [github.com/bhagwatshree/HealthDecoder](https://github.com/bhagwatshree/HealthDecoder)
 
+## Interactive Mockup & Figma UI Spec
+
+An interactive, high-fidelity HTML/CSS/JS mockup and design system spec is available in this repository:
+- **[Interactive Clickable Mockup & Figma Canvas Workspace](mockup/index.html)**
+
+This single-page design sandbox features:
+1. **Interactive Prototype Simulator**: A realistic mobile device frame letting you click through and simulate all 13 application screens (including Login, Home, Scan, Records, Reminders, Medications, Pending Tests, Trends, AI Chat, etc.) with real form actions, verification modals, and contextual help cues.
+2. **Figma Canvas mode**: All screens laid out side-by-side on an infinite design workspace. Click on any screen component to inspect its Jetpack Compose code snippets, visual dimensions, padding, alignment, and HSL design tokens matching the codebase theme.
+3. **Design Tokens Catalog**: A dedicated Spec Sheet page mapping the exact color variables, status colors, time slot accents, and typography classes defined in `Color.kt` and `Theme.kt`.
+
+To open it, simply double-click or open [mockup/index.html](mockup/index.html) in any web browser.
+
 ## Repo structure
 
 ```
 backend/        Express API, deployed as a single AWS Lambda (see backend/DEPLOY.md)
 android-app/    Kotlin/Compose Android app
+mockup/         Interactive clickable mobile prototype & Figma UI specification inspector
 releases/       Hand-picked APK builds committed for direct download (see releases/README.md)
 ```
 
