@@ -117,6 +117,22 @@ fun ReportDetailScreen(
             errorMessage = "No app available to open this file type."
         }
     }
+    // Share the original file straight to WhatsApp / email / etc. — for sending to a doctor.
+    fun shareSource(sf: com.example.medicalscanner.model.SourceFile) {
+        try {
+            val fileUri = androidx.core.content.FileProvider.getUriForFile(
+                context, "${context.packageName}.fileprovider", java.io.File(sf.path)
+            )
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = sf.mimeType.ifBlank { "*/*" }
+                putExtra(android.content.Intent.EXTRA_STREAM, fileUri)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(android.content.Intent.createChooser(intent, "Share report"))
+        } catch (e: Exception) {
+            errorMessage = "Couldn't share this file."
+        }
+    }
 
     // Fetch report details from backend
     val loadReportDetails = {
@@ -337,7 +353,41 @@ fun ReportDetailScreen(
                         }
                     }
 
-                    // Original file(s): open or download the exact file the user imported
+                    // Uploaded-but-not-analyzed banner with a prominent one-tap analyze action.
+                    if (!currentReport.analyzed) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Icon(Icons.Default.CloudDone, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                    Text(tr("Uploaded — not analyzed yet"), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                                }
+                                Text(
+                                    tr("This report's file is saved but hasn't been analyzed by AI, so it has no test values, trends or insights yet. Analyze it whenever you're ready (uses some API quota)."),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Button(
+                                    onClick = { showReprocessDialog = true },
+                                    enabled = !isReprocessing,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    if (isReprocessing) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                                    else {
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(tr("Analyze Now"), fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Original file(s): open, share (to a doctor) or download the exact file the user imported
                     if (currentReport.sourceFiles.isNotEmpty()) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -356,6 +406,9 @@ fun ReportDetailScreen(
                                         Text(sf.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         IconButton(onClick = { openSource(sf) }) {
                                             Icon(Icons.Default.OpenInNew, contentDescription = tr("Open"))
+                                        }
+                                        IconButton(onClick = { shareSource(sf) }) {
+                                            Icon(Icons.Default.Share, contentDescription = tr("Share"))
                                         }
                                         IconButton(onClick = { pendingSave = sf; saveLauncher.launch(sf.name) }) {
                                             Icon(Icons.Default.Download, contentDescription = tr("Download"))

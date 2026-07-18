@@ -115,6 +115,56 @@ object BackgroundScanScheduler {
         return scanJob.id
     }
 
+    /**
+     * Upload-only counterpart of [startScan]: stores the file(s) as a report WITHOUT any AI
+     * analysis (no API calls), for archiving old data. The report is flagged unanalyzed and can
+     * be analyzed later from its detail screen. Emits the new report id on [onJobCompleted].
+     */
+    fun startUpload(
+        context: Context,
+        pageUris: List<Uri>,
+        sourceUris: List<Triple<Uri, String, String>>,
+        category: String,
+        patientName: String
+    ): String {
+        val scanJob = ScanJob(
+            patientName = patientName.ifBlank { "Unknown Patient" },
+            scanType = "upload",
+            category = category,
+            status = ScanJobStatus.UPLOADING,
+            progress = 0.2f
+        )
+        activeJobs.add(scanJob)
+        val appContext = context.applicationContext
+
+        scope.launch(Dispatchers.Default) {
+            try {
+                val pageData = pageUris.mapNotNull { uri ->
+                    ImageUtil.compressForScan(appContext, uri)?.let { it to "image/jpeg" }
+                }
+                val sourceData = sourceUris.mapNotNull { (uri, name, mime) ->
+                    val b = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    if (b != null) Triple(b, name, mime) else null
+                }
+                if (pageData.isEmpty() && sourceData.isEmpty()) {
+                    updateJobProgress(scanJob.id, ScanJobStatus.ERROR, 1.0f, error = "Failed to read the selected file(s).")
+                    return@launch
+                }
+                updateJobProgress(scanJob.id, ScanJobStatus.SAVING, 0.8f)
+                val report = LocalRepository.saveUploadOnly(appContext, pageData, sourceData, category, patientName)
+                updateJobProgress(scanJob.id, ScanJobStatus.COMPLETED, 1.0f, resultReportId = report.id)
+                _onJobCompleted.emit(report.id)
+            } catch (dup: DuplicateReportException) {
+                val who = dup.existing.patientName ?: "this patient"
+                updateJobProgress(scanJob.id, ScanJobStatus.ERROR, 1.0f, error = "This file is already saved for $who.")
+            } catch (e: Exception) {
+                e.printStackTrace()
+                updateJobProgress(scanJob.id, ScanJobStatus.ERROR, 1.0f, error = "Upload failed. Please try again.")
+            }
+        }
+        return scanJob.id
+    }
+
     fun removeJob(jobId: String) {
         scope.launch(Dispatchers.Main) {
             activeJobs.removeAll { it.id == jobId }

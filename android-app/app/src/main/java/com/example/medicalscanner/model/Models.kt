@@ -106,7 +106,12 @@ data class TrendDataPoint(
     // false either when no conversion was needed or when the unit couldn't be safely converted.
     @SerializedName("originalValue") val originalValue: String = "",
     @SerializedName("originalUnit") val originalUnit: String = "",
-    @SerializedName("converted") val converted: Boolean = false
+    @SerializedName("converted") val converted: Boolean = false,
+    // The reading's healthy reference range, parsed from the report and expressed in the SAME
+    // (possibly converted) unit as `value` above, so the chart can shade a normal-range band.
+    // Null when the report stated no range, or a one-sided limit (e.g. "<200") leaves a bound open.
+    @SerializedName("refLow") val refLow: Float? = null,
+    @SerializedName("refHigh") val refHigh: Float? = null
 )
 
 data class ParameterTrend(
@@ -175,7 +180,15 @@ data class MedicalReport(
     /** SHA-256 of each scanned page / imported file, used to detect duplicate scans. */
     @ColumnInfo(defaultValue = "'[]'")
     @SerializedName("page_hashes") val pageHashes: List<String> = emptyList(),
-    @SerializedName("user_email") val userEmail: String? = null
+    @SerializedName("user_email") val userEmail: String? = null,
+    /**
+     * False for a report the user only UPLOADED (stored the file, no AI analysis yet) to save
+     * API calls when archiving old data — the detail screen offers to analyze it on demand. True
+     * for anything that has been through AI extraction. Defaults to 1 so every report that
+     * existed before this flag is correctly treated as already analyzed.
+     */
+    @ColumnInfo(defaultValue = "1")
+    @SerializedName("analyzed") val analyzed: Boolean = true
 )
 
 data class ReportUpdateRequest(

@@ -61,6 +61,49 @@ object MedicineScheduleStore {
         saveAll(context, list)
     }
 
+    /**
+     * Renames a patient's medicine reminder schedule (keeping its slot times/dosage) when the
+     * medicine is renamed, so the reminder keeps firing under the corrected name. Optionally
+     * refreshes the shown [dosage]/[frequency]. If a schedule already exists under [newName],
+     * the old one is dropped in its favour (the corrected name wins, no duplicate reminders).
+     * No-op when the medicine has no schedule. Caller must run MedicineReminderManager.scheduleAll.
+     */
+    fun rename(
+        context: Context,
+        patientName: String,
+        oldName: String,
+        newName: String,
+        dosage: String? = null,
+        frequency: String? = null
+    ) {
+        if (newName.isBlank() || oldName.equals(newName, ignoreCase = true)) {
+            // Same name — just refresh dosage/frequency if given.
+            if (dosage != null || frequency != null) {
+                val list = loadAll(context).toMutableList()
+                val idx = list.indexOfFirst { it.matches(oldName, patientName) }
+                if (idx >= 0) list[idx] = list[idx].copy(
+                    dosage = dosage ?: list[idx].dosage,
+                    frequency = frequency ?: list[idx].frequency
+                )
+                saveAll(context, list)
+            }
+            return
+        }
+        val list = loadAll(context).toMutableList()
+        val oldIdx = list.indexOfFirst { it.matches(oldName, patientName) }
+        if (oldIdx < 0) return
+        val renamed = list[oldIdx].copy(
+            medicineName = newName,
+            dosage = dosage ?: list[oldIdx].dosage,
+            frequency = frequency ?: list[oldIdx].frequency
+        )
+        // Drop any pre-existing schedule under the new name so we don't end up with two.
+        list.removeAll { it.matches(newName, patientName) }
+        val insertAt = list.indexOfFirst { it.matches(oldName, patientName) }
+        if (insertAt >= 0) list[insertAt] = renamed else list.add(renamed)
+        saveAll(context, list)
+    }
+
     fun autoSeedIfAbsent(
         context: Context,
         medicineName: String,

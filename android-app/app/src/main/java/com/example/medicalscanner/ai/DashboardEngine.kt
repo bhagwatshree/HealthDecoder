@@ -211,6 +211,28 @@ object DashboardEngine {
         return out
     }
 
+    /**
+     * Parses a printed reference range into numeric (low, high) bounds, or nulls where a bound is
+     * open. Handles the common lab spellings: "70-100", "70 – 100 mg/dL", "<200", "> 40",
+     * "Up to 5.5", "Less than 200". Returns (null, null) for non-numeric ranges (e.g. "Negative").
+     */
+    private fun parseRefRange(raw: String?): Pair<Float?, Float?> {
+        val s = raw?.trim()?.lowercase() ?: return null to null
+        if (s.isEmpty()) return null to null
+        // First number(s) found, ignoring any trailing unit text.
+        val nums = Regex("[-+]?\\d*\\.?\\d+").findAll(s).map { it.value.toFloatOrNull() }.filterNotNull().toList()
+        return when {
+            s.startsWith("<") || s.startsWith("less than") || s.startsWith("up to") || s.startsWith("upto") || s.startsWith("below") ->
+                null to nums.firstOrNull()
+            s.startsWith(">") || s.startsWith("greater than") || s.startsWith("more than") || s.startsWith("above") || s.startsWith("at least") ->
+                nums.firstOrNull() to null
+            // A hyphen/dash/"to" between two numbers is a closed range.
+            nums.size >= 2 && Regex("\\d\\s*(?:-|–|—|to)\\s*\\d").containsMatchIn(s) ->
+                nums[0] to nums[1]
+            else -> null to null // single bare number with no direction — can't place a band safely
+        }
+    }
+
     /** Formats a converted value without noisy trailing zeros (e.g. 8.0 -> "8", 0.4400 -> "0.44"). */
     private fun fmtNum(v: Float): String =
         if (v == v.toLong().toFloat()) v.toLong().toString()
@@ -260,8 +282,15 @@ object DashboardEngine {
                         // else: no verified factor — leave value/unit as printed, converted=false.
                     }
                 }
+                // Normal-range band: parse the report's reference range, then express it in the
+                // same unit as the plotted value (converting the bounds too when the value was).
+                var (refLow, refHigh) = parseRefRange(p.referenceRange)
+                if (converted && (refLow != null || refHigh != null)) {
+                    refLow = refLow?.let { UnitConverter.convert(canon, it, rawUnit, unit) }
+                    refHigh = refHigh?.let { UnitConverter.convert(canon, it, rawUnit, unit) }
+                }
                 paramMap.getOrPut(canon) { mutableListOf() }.add(
-                    TrendDataPoint(date, value, unit, p.status ?: "", r.id, context, origValue, origUnit, converted)
+                    TrendDataPoint(date, value, unit, p.status ?: "", r.id, context, origValue, origUnit, converted, refLow, refHigh)
                 )
             }
         }

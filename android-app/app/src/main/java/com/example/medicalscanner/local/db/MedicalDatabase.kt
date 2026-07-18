@@ -20,7 +20,7 @@ import com.example.medicalscanner.model.ProcessedEmail
  */
 @Database(
     entities = [MedicalReport::class, ReportFts::class, PendingTest::class, MedLogEntry::class, ProcessedEmail::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -55,6 +55,14 @@ abstract class MedicalDatabase : RoomDatabase() {
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `reports` ADD COLUMN `userEmail` TEXT")
+            }
+        }
+
+        /** v5: `analyzed` flag so a report can be uploaded (file stored) without AI analysis and
+         *  scanned later on demand. Defaults to 1 so pre-existing reports stay "analyzed". */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `reports` ADD COLUMN `analyzed` INTEGER NOT NULL DEFAULT 1")
             }
         }
     }

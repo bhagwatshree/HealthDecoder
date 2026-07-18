@@ -835,6 +835,7 @@ fun MedicationDetailsDialog(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     
+    var medName by remember { mutableStateOf(med.medicineName) }
     var dosage by remember { mutableStateOf(med.currentDosage) }
     var frequency by remember { mutableStateOf(med.currentFrequency) }
     var duration by remember { mutableStateOf(med.currentDuration) }
@@ -971,7 +972,19 @@ fun MedicationDetailsDialog(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        
+
+                        OutlinedTextField(
+                            value = medName,
+                            onValueChange = { medName = it },
+                            label = { Text(tr("Medicine Name")) },
+                            placeholder = { Text(tr("e.g. Metformin 500mg")) },
+                            singleLine = true,
+                            supportingText = {
+                                Text(tr("Fixing a mis-scanned name updates it in every report, reminder and log for this patient."))
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
                         OutlinedTextField(
                             value = dosage,
                             onValueChange = { dosage = it },
@@ -1173,8 +1186,8 @@ fun MedicationDetailsDialog(
                     coroutineScope.launch {
                         isSaving = true
                         try {
-                            LocalRepository.updateMedicationDetails(
-                                context, med.reportId, med.medicineName, med.patientName,
+                            LocalRepository.updateMedicineEverywhere(
+                                context, med.reportId, med.patientName, med.medicineName, medName,
                                 dosage, frequency, duration, isOptional, weeklySchedule, notes
                             )
                             onUpdateSuccess()
@@ -1185,7 +1198,7 @@ fun MedicationDetailsDialog(
                         }
                     }
                 },
-                enabled = !isSaving && dosage.isNotEmpty() && frequency.isNotEmpty()
+                enabled = !isSaving && medName.isNotBlank() && dosage.isNotEmpty() && frequency.isNotEmpty()
             ) {
                 if (isSaving) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)

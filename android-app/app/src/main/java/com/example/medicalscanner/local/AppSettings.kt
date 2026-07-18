@@ -50,6 +50,28 @@ object AppSettings {
         prefs(context).edit().putBoolean(KEY_DISCLAIMER_ACCEPTED, accepted).apply()
     }
 
+    /** Unit system trend charts standardise every reading to. Conventional (Indian/US: mg/dL,
+     *  g/dL, ng/mL …) is the default since that's what Indian labs mostly print; SI (mmol/L,
+     *  µmol/L, g/L …) is the international/research convention. This single value is the ONLY
+     *  thing stored — the actual per-test unit comes from UnitConverter's table, keyed off it. */
+    const val UNIT_SYSTEM_CONVENTIONAL = "conventional"
+    const val UNIT_SYSTEM_SI = "si"
+    private const val KEY_UNIT_SYSTEM = "trend_unit_system"
+
+    fun getUnitSystem(context: Context): String =
+        prefs(context).getString(KEY_UNIT_SYSTEM, UNIT_SYSTEM_CONVENTIONAL) ?: UNIT_SYSTEM_CONVENTIONAL
+
+    fun setUnitSystem(context: Context, system: String) {
+        prefs(context).edit().putString(KEY_UNIT_SYSTEM, system).apply()
+    }
+
+    /** Resolves the stored preference to the enum the converter uses. */
+    fun getUnitSystemEnum(context: Context): com.example.medicalscanner.ai.UnitConverter.System =
+        if (getUnitSystem(context) == UNIT_SYSTEM_SI)
+            com.example.medicalscanner.ai.UnitConverter.System.SI
+        else
+            com.example.medicalscanner.ai.UnitConverter.System.CONVENTIONAL
+
     /** Medicine reminder styles: a standard notification, or a full-screen alarm page
      *  with very large text so elderly users can read the medicine names clearly. */
     const val REMINDER_STYLE_NORMAL = "normal"

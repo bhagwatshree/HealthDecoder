@@ -4,6 +4,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.draw.clip
 import android.graphics.Paint
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -20,11 +22,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -409,8 +413,23 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
         Text(tr("No numeric values to chart."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
-    val minV = validIdx.minOf { nums[it]!! }
-    val maxV = validIdx.maxOf { nums[it]!! }
+
+    // Normal-range band bounds (the reading's healthy range, already in the plotted unit). Use the
+    // most recent point that carries a range so the band reflects the current lab's reference.
+    val bandLow = points.lastOrNull { it.refLow != null }?.refLow
+    val bandHigh = points.lastOrNull { it.refHigh != null }?.refHigh
+
+    // Data extent, widened to include the band, then given ~8% headroom top and bottom so the
+    // line and its labels never sit flush against the plot edges.
+    val dataMin = validIdx.minOf { nums[it]!! }
+    val dataMax = validIdx.maxOf { nums[it]!! }
+    val loCandidates = listOfNotNull(dataMin, bandLow)
+    val hiCandidates = listOfNotNull(dataMax, bandHigh)
+    val rawMin = loCandidates.min()
+    val rawMax = hiCandidates.max()
+    val pad = (rawMax - rawMin).let { if (it == 0f) (if (rawMax == 0f) 1f else kotlin.math.abs(rawMax) * 0.1f) else it * 0.08f }
+    val minV = rawMin - pad
+    val maxV = rawMax + pad
     val range = (maxV - minV).let { if (it == 0f) 1f else it }
 
     // Position points by their real date (full year+month+day), not evenly by index.
@@ -422,27 +441,33 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
 
     val density = LocalDensity.current
     val primary = MaterialTheme.colorScheme.primary
-    val axisColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+    val axisColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val bandColor = Color(0xFF2E7D32) // healthy green
+    val surface = MaterialTheme.colorScheme.surface
+    val normalLabel = tr("Normal") // hoisted: tr() is @Composable, can't run inside Canvas draw
 
-    val labelPaint = remember {
-        Paint().apply { textAlign = Paint.Align.CENTER; isAntiAlias = true }
-    }
+    val labelPaint = remember { Paint().apply { textAlign = Paint.Align.CENTER; isAntiAlias = true } }
     labelPaint.color = labelColor.toArgb()
     labelPaint.textSize = with(density) { 10.sp.toPx() }
-
-    val axisLabelPaint = remember {
-        Paint().apply { textAlign = Paint.Align.LEFT; isAntiAlias = true }
-    }
-    axisLabelPaint.color = labelColor.toArgb()
+    val valuePaint = remember { Paint().apply { textAlign = Paint.Align.CENTER; isAntiAlias = true; isFakeBoldText = true } }
+    valuePaint.color = MaterialTheme.colorScheme.onSurface.toArgb()
+    valuePaint.textSize = with(density) { 10.sp.toPx() }
+    val axisLabelPaint = remember { Paint().apply { textAlign = Paint.Align.LEFT; isAntiAlias = true } }
+    axisLabelPaint.color = labelColor.copy(alpha = 0.7f).toArgb()
     axisLabelPaint.textSize = with(density) { 9.sp.toPx() }
+
+    // Grow the line/fill in from the left, and fade the points/labels in, on first composition.
+    val progress by animateFloatAsState(
+        targetValue = 1f, animationSpec = tween(700), label = "trendGrow"
+    )
 
     var positions by remember { mutableStateOf<List<Pair<Offset, TrendDataPoint>>>(emptyList()) }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(190.dp)
+            .height(196.dp)
             .pointerInput(points) {
                 detectTapGestures { tap ->
                     val hit = positions.minByOrNull { (o, _) -> (o - tap).getDistance() }
@@ -453,7 +478,7 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
         Canvas(modifier = Modifier.fillMaxSize()) {
             val padL = with(density) { 6.dp.toPx() }
             val padR = with(density) { 6.dp.toPx() }
-            val padT = with(density) { 22.dp.toPx() }
+            val padT = with(density) { 24.dp.toPx() }
             val padB = with(density) { 22.dp.toPx() }
             val w = size.width; val h = size.height
             val n = points.size
@@ -464,53 +489,99 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
             }
             fun yFor(v: Float) = padT + (h - padT - padB) * (1f - (v - minV) / range)
 
-            // Dashed horizontal gridlines with value labels, evenly spaced across the plot area.
-            val dashEffect = PathEffect.dashPathEffect(floatArrayOf(with(density) { 4.dp.toPx() }, with(density) { 4.dp.toPx() }))
+            // Shaded healthy normal-range band (drawn first, behind everything).
+            if (bandLow != null || bandHigh != null) {
+                val yTop = yFor(bandHigh ?: maxV).coerceIn(padT, h - padB)
+                val yBot = yFor(bandLow ?: minV).coerceIn(padT, h - padB)
+                drawRect(
+                    color = bandColor.copy(alpha = 0.10f),
+                    topLeft = Offset(padL, minOf(yTop, yBot)),
+                    size = androidx.compose.ui.geometry.Size(w - padL - padR, kotlin.math.abs(yBot - yTop))
+                )
+                listOfNotNull(bandHigh, bandLow).forEach { b ->
+                    val y = yFor(b).coerceIn(padT, h - padB)
+                    drawLine(bandColor.copy(alpha = 0.35f), Offset(padL, y), Offset(w - padR, y),
+                        strokeWidth = 1f,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(with(density) { 3.dp.toPx() }, with(density) { 3.dp.toPx() })))
+                }
+                drawContext.canvas.nativeCanvas.drawText(
+                    normalLabel, w - padR - with(density) { 2.dp.toPx() },
+                    yFor(bandHigh ?: maxV).coerceIn(padT + 8f, h - padB) + with(density) { 9.dp.toPx() },
+                    Paint().apply { color = bandColor.copy(alpha = 0.7f).toArgb(); textAlign = Paint.Align.RIGHT; textSize = with(density) { 8.sp.toPx() }; isAntiAlias = true }
+                )
+            }
+
+            // Light gridlines with value labels.
+            val dashEffect = PathEffect.dashPathEffect(floatArrayOf(with(density) { 3.dp.toPx() }, with(density) { 5.dp.toPx() }))
             listOf(0f, 0.5f, 1f).forEach { frac ->
                 val y = padT + (h - padT - padB) * frac
                 drawLine(axisColor, Offset(padL, y), Offset(w - padR, y), strokeWidth = 1f, pathEffect = dashEffect)
                 val value = minV + range * (1f - frac)
-                drawContext.canvas.nativeCanvas.drawText(
-                    "%.1f".format(value), padL, y - with(density) { 3.dp.toPx() }, axisLabelPaint
-                )
+                drawContext.canvas.nativeCanvas.drawText("%.1f".format(value), padL, y - with(density) { 3.dp.toPx() }, axisLabelPaint)
             }
-
-            // baseline
-            drawLine(axisColor, Offset(padL, h - padB), Offset(w - padR, h - padB), strokeWidth = 1.5f)
 
             val pos = validIdx.map { i -> Offset(xFor(i), yFor(nums[i]!!)) to points[i] }
             positions = pos
 
             if (pos.size >= 2) {
-                val path = Path()
-                pos.forEachIndexed { idx, (o, _) -> if (idx == 0) path.moveTo(o.x, o.y) else path.lineTo(o.x, o.y) }
+                // Smooth the line with cubic segments (Catmull-Rom → Bézier control points).
+                val pts = pos.map { it.first }
+                val line = Path().apply {
+                    moveTo(pts[0].x, pts[0].y)
+                    for (i in 0 until pts.size - 1) {
+                        val p0 = pts[if (i == 0) 0 else i - 1]
+                        val p1 = pts[i]
+                        val p2 = pts[i + 1]
+                        val p3 = pts[if (i + 2 < pts.size) i + 2 else i + 1]
+                        val c1 = Offset(p1.x + (p2.x - p0.x) / 6f, p1.y + (p2.y - p0.y) / 6f)
+                        val c2 = Offset(p2.x - (p3.x - p1.x) / 6f, p2.y - (p3.y - p1.y) / 6f)
+                        cubicTo(c1.x, c1.y, c2.x, c2.y, p2.x, p2.y)
+                    }
+                }
 
-                // Translucent fill under the line, down to the baseline.
+                // Gradient fill under the smoothed line.
                 val fillPath = Path().apply {
-                    addPath(path)
-                    lineTo(pos.last().first.x, h - padB)
-                    lineTo(pos.first().first.x, h - padB)
+                    addPath(line)
+                    lineTo(pts.last().x, h - padB)
+                    lineTo(pts.first().x, h - padB)
                     close()
                 }
-                drawPath(fillPath, color = primary.copy(alpha = 0.15f), style = Fill)
-
-                drawPath(path, color = primary, style = Stroke(width = with(density) { 2.5.dp.toPx() }))
+                clipRect(left = 0f, top = 0f, right = padL + (w - padL - padR) * progress, bottom = h) {
+                    drawPath(
+                        fillPath,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(primary.copy(alpha = 0.28f), primary.copy(alpha = 0.02f)),
+                            startY = padT, endY = h - padB
+                        ),
+                        style = Fill
+                    )
+                    drawPath(line, color = primary, style = Stroke(width = with(density) { 2.5.dp.toPx() }, cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+                }
             }
-            // Draw date labels with a minimum gap so they don't overlap when dates are close.
+
+            // Points + value labels + spaced date labels (fade in after the line has grown).
             var lastLabelX = -10000f
             val minGap = with(density) { 46.dp.toPx() }
+            val dotAlpha = ((progress - 0.5f) * 2f).coerceIn(0f, 1f)
             pos.forEach { (o, dp) ->
-                drawCircle(color = statusColor(dp.status, primary), radius = with(density) { 6.dp.toPx() }, center = o)
-                drawCircle(color = Color.White, radius = with(density) { 2.5.dp.toPx() }, center = o)
-                val pointLabel = buildString {
-                    append(dp.value)
-                    if (dp.context.isNotBlank()) append(" (${dp.context.first()})")
-                    if (dp.converted) append(" ↺") // this reading was unit-converted for comparison
-                }
-                drawContext.canvas.nativeCanvas.drawText(pointLabel, o.x, o.y - with(density) { 10.dp.toPx() }, labelPaint)
-                if (o.x - lastLabelX >= minGap) {
-                    drawContext.canvas.nativeCanvas.drawText(shortDate(dp.date), o.x, h - with(density) { 6.dp.toPx() }, labelPaint)
-                    lastLabelX = o.x
+                val c = statusColor(dp.status, primary)
+                drawCircle(color = c.copy(alpha = 0.18f * dotAlpha), radius = with(density) { 9.dp.toPx() }, center = o)
+                drawCircle(color = surface, radius = with(density) { 5.dp.toPx() } * dotAlpha, center = o)
+                drawCircle(color = c.copy(alpha = dotAlpha), radius = with(density) { 4.dp.toPx() } * dotAlpha, center = o)
+                drawCircle(color = Color.White.copy(alpha = dotAlpha), radius = with(density) { 1.5.dp.toPx() } * dotAlpha, center = o)
+                if (dotAlpha > 0.05f) {
+                    valuePaint.alpha = (255 * dotAlpha).toInt()
+                    labelPaint.alpha = (255 * dotAlpha).toInt()
+                    val pointLabel = buildString {
+                        append(dp.value)
+                        if (dp.context.isNotBlank()) append(" (${dp.context.first()})")
+                        if (dp.converted) append(" ↺")
+                    }
+                    drawContext.canvas.nativeCanvas.drawText(pointLabel, o.x, o.y - with(density) { 11.dp.toPx() }, valuePaint)
+                    if (o.x - lastLabelX >= minGap) {
+                        drawContext.canvas.nativeCanvas.drawText(shortDate(dp.date), o.x, h - with(density) { 6.dp.toPx() }, labelPaint)
+                        lastLabelX = o.x
+                    }
                 }
             }
         }

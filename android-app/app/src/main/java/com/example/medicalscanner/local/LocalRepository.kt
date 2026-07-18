@@ -6,8 +6,11 @@ import com.example.medicalscanner.ai.DateResolver
 import com.example.medicalscanner.ai.MedicalEngine
 import com.example.medicalscanner.ai.OcrEngine
 import com.example.medicalscanner.ai.ScanExtraction
+import com.example.medicalscanner.ai.UnitConverter
 import com.example.medicalscanner.backup.BackupManager
 import com.example.medicalscanner.backup.BackupSync
+import com.example.medicalscanner.reminder.MedicineReminderManager
+import com.example.medicalscanner.reminder.MedicineScheduleStore
 import com.example.medicalscanner.model.*
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
@@ -235,10 +238,62 @@ object LocalRepository {
     }
 
     /**
+     * Stores a report's file(s) WITHOUT running any AI analysis — the "upload only" path, for
+     * archiving old records without spending API calls. Creates one report per upload, flagged
+     * [MedicalReport.analyzed] = false so the detail screen can offer to analyze it later (via
+     * [reprocessReport], which reads these same stored images). Exact-duplicate uploads (same
+     * bytes) are rejected. Patient name / date / category come from the user since nothing is
+     * extracted; a blank name falls back to "Unknown Patient".
+     */
+    suspend fun saveUploadOnly(
+        context: Context,
+        pages: List<Pair<ByteArray, String>>,
+        sources: List<Triple<ByteArray, String, String>>,
+        reportCategory: String,
+        patientNameOverride: String = "",
+        reportDate: String? = null
+    ): MedicalReport = withContext(Dispatchers.IO) {
+        val incomingHashes = (pages.map { it.first } + sources.map { it.first })
+            .map { LocalStore.sha256(it) }.distinct()
+        LocalStore.findReportByAnyHash(context, incomingHashes)?.let { throw DuplicateReportException(it) }
+
+        val bundleId = LocalStore.newId()
+        val imagePaths = pages.mapIndexed { index, (bytes, _) ->
+            LocalStore.saveImage(context, if (index == 0) bundleId else "${bundleId}_$index", bytes)
+        }
+        val sourceFiles = sources.mapIndexed { index, (bytes, name, mime) ->
+            SourceFile(path = LocalStore.saveSourceFile(context, bundleId, index, name, bytes), name = name, mimeType = mime)
+        }
+        val category = reportCategory.ifBlank { "other" }
+        val report = MedicalReport(
+            id = bundleId,
+            patientName = patientNameOverride.trim().ifBlank { "Unknown Patient" },
+            reportDate = reportDate?.takeIf { it.isNotBlank() } ?: today(),
+            reportType = if (category == "prescription") "Prescription" else "Uploaded",
+            extractedText = "",
+            comments = "",
+            medications = emptyList(),
+            imagePath = imagePaths.firstOrNull() ?: "",
+            imagePaths = imagePaths,
+            sourceFiles = sourceFiles,
+            createdAt = nowIso(),
+            testResults = TestResults(),
+            comparisonResult = null,
+            reportCategory = category,
+            healthInsights = null,
+            pageHashes = incomingHashes,
+            analyzed = false
+        )
+        LocalStore.upsertReport(context, report)
+        afterWrite(context)
+        report
+    }
+
+    /**
      * Re-runs OCR/AI extraction on a report's originally scanned image(s) and refreshes its
-     * test parameters, medications and insights. For when the first scan came back incomplete
-     * (e.g. the AI API was briefly unavailable) — this is the only way to redo extraction
-     * without deleting and re-scanning the report from scratch.
+     * test parameters, medications and insights. Serves two cases: a first scan that came back
+     * incomplete (e.g. the AI API was briefly unavailable), and analyzing an "upload only" report
+     * on demand — either way it marks the report [MedicalReport.analyzed] = true.
      */
     suspend fun reprocessReport(context: Context, id: String): MedicalReport? = withContext(Dispatchers.IO) {
         val existing = LocalStore.getReport(context, id) ?: return@withContext null
@@ -261,7 +316,11 @@ object LocalRepository {
             testResults = section.testResults ?: existing.testResults,
             medications = dedupeMedications(section.medications.ifEmpty { existing.medications }),
             comments = existing.comments?.takeIf { it.isNotBlank() } ?: section.comments,
-            extractedText = existing.extractedText?.takeIf { it.isNotBlank() } ?: section.rawText
+            extractedText = existing.extractedText?.takeIf { it.isNotBlank() } ?: section.rawText,
+            // An upload-only report becomes a full, analyzed report once this succeeds. For a
+            // report the AI detected a type/date for, adopt those too if the upload had placeholders.
+            analyzed = true,
+            reportType = if (existing.reportType == "Uploaded") (section.reportName?.takeIf { it.isNotBlank() } ?: section.reportType ?: existing.reportType) else existing.reportType
         )
         val previous = findPrevious(context, updated.patientName, category, updated.reportDate ?: today(), excludeId = id)
         val comparison = MedicalEngine.compareReports(context, updated, previous)
@@ -312,17 +371,22 @@ object LocalRepository {
     }
 
     suspend fun getHealthSummary(context: Context, patientName: String, period: String?): HealthSummary = withContext(Dispatchers.IO) {
-        // Resolve each test's standard unit from the patient's FULL history (so the period chip
-        // can't change it) and lock any not-yet-seen ones, then read the locked map back so the
-        // standard survives deleting/filtering the report it first came from.
+        // Standard unit per test: for any test UnitConverter knows, it's fixed by the user's
+        // unit-system setting (Conventional/Indian by default, or SI) so it's consistent across
+        // patients and independent of which report was scanned first. For tests it doesn't know
+        // (no conversion factor anyway), fall back to the first-seen unit — locked so it survives
+        // deleting/filtering the report it first came from.
         val all = LocalStore.getReports(context).filter { it.patientName.equals(patientName, true) }
+        val system = AppSettings.getUnitSystemEnum(context)
         val derived = DashboardEngine.resolveStandardUnits(all)
         derived.forEach { (canon, unit) ->
             AppSettings.lockTrendStandardUnitIfAbsent(context, "$patientName|$canon", unit)
         }
         val locked = AppSettings.getTrendStandardUnits(context)
         val standardUnits = derived.keys.associateWith { canon ->
-            locked["$patientName|$canon"] ?: derived.getValue(canon)
+            UnitConverter.standardUnitFor(canon, system)
+                ?: locked["$patientName|$canon"]
+                ?: derived.getValue(canon)
         }
         val reports = filterByPeriod(all, period)
         DashboardEngine.buildHealthSummary(patientName, reports, standardUnits)
@@ -373,6 +437,64 @@ object LocalRepository {
         if (!found) meds.add(Medication(medicineName, dosage ?: "", frequency ?: "", duration ?: "", isOptional ?: false, weeklySchedule ?: listOf("Everyday"), notes ?: ""))
         LocalStore.upsertReport(context, report.copy(medications = meds))
         LocalStore.addMedLog(context, MedLogEntry(LocalStore.newId(), patientName, medicineName, "UPDATE_DETAILS", frequency, "Dosage: ${dosage ?: ""}", nowIso()))
+        afterWrite(context)
+    }
+
+    /**
+     * Corrects a medicine (e.g. a name mis-read from a handwritten prescription) and propagates
+     * the fix everywhere it lives for that patient, so the user only edits it once:
+     *
+     *  - **Name**: renamed in EVERY report of the patient that carries the old name (a repeated
+     *    mis-scan is fixed in one action), and the reminder schedule + intake logs are re-keyed to
+     *    the new name so neither orphans.
+     *  - **Dosage / frequency / duration / schedule / notes**: applied to the specific [reportId]
+     *    instance only, so the per-report medication timeline (dosage changes over time) stays
+     *    intact; the reminder schedule's shown dosage/frequency is refreshed to match.
+     *
+     * The medication tracker/history is derived from reports, so it updates automatically.
+     */
+    suspend fun updateMedicineEverywhere(
+        context: Context, reportId: String, patientName: String, oldName: String, newName: String,
+        dosage: String?, frequency: String?, duration: String?, isOptional: Boolean?,
+        weeklySchedule: List<String>?, notes: String?
+    ) = withContext(Dispatchers.IO) {
+        val from = oldName.trim()
+        val to = newName.trim().ifBlank { from }
+        val nameChanged = !to.equals(from, ignoreCase = true)
+
+        val patientReports = LocalStore.getReports(context)
+            .filter { it.patientName.equals(patientName, ignoreCase = true) }
+        for (r in patientReports) {
+            var changed = false
+            val meds = r.medications.map { m ->
+                if (!m.name.trim().equals(from, ignoreCase = true)) return@map m
+                changed = true
+                if (r.id == reportId) {
+                    // The edited occurrence: apply the new name AND the field edits.
+                    m.copy(
+                        name = to,
+                        dosage = dosage ?: m.dosage, frequency = frequency ?: m.frequency,
+                        duration = duration ?: m.duration, isOptional = isOptional ?: m.isOptional,
+                        weeklySchedule = weeklySchedule ?: m.weeklySchedule, notes = notes ?: m.notes
+                    )
+                } else if (nameChanged) {
+                    // Other reports: only the identity (name) propagates; their own dosage/history stays.
+                    m.copy(name = to)
+                } else m
+            }
+            if (changed) LocalStore.upsertReport(context, r.copy(medications = meds))
+        }
+
+        // Re-key the reminder schedule to the new name and refresh its dosage/frequency.
+        MedicineScheduleStore.rename(context, patientName, from, to, dosage, frequency)
+        MedicineReminderManager.scheduleAll(context)
+
+        // Move intake history to the new name so it isn't orphaned.
+        if (nameChanged) LocalStore.renameMedLogs(context, patientName, from, to)
+        LocalStore.addMedLog(context, MedLogEntry(
+            LocalStore.newId(), patientName, to, "UPDATE_DETAILS", frequency,
+            if (nameChanged) "Renamed from \"$from\"" else "Dosage: ${dosage ?: ""}", nowIso()
+        ))
         afterWrite(context)
     }
 

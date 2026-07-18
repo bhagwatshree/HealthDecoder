@@ -301,6 +301,43 @@ fun AccountScreen(
                     }
                 }
 
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Lab Units", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "The unit every trend chart standardises readings to. Reports in a different " +
+                                "unit are converted automatically; each report still shows its original value.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        var currentUnitSystem by remember { mutableStateOf(AppSettings.getUnitSystem(context)) }
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            SegmentedButton(
+                                selected = currentUnitSystem == AppSettings.UNIT_SYSTEM_CONVENTIONAL,
+                                onClick = {
+                                    currentUnitSystem = AppSettings.UNIT_SYSTEM_CONVENTIONAL
+                                    AppSettings.setUnitSystem(context, AppSettings.UNIT_SYSTEM_CONVENTIONAL)
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                            ) { Text("Indian (mg/dL)") }
+                            SegmentedButton(
+                                selected = currentUnitSystem == AppSettings.UNIT_SYSTEM_SI,
+                                onClick = {
+                                    currentUnitSystem = AppSettings.UNIT_SYSTEM_SI
+                                    AppSettings.setUnitSystem(context, AppSettings.UNIT_SYSTEM_SI)
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                            ) { Text("International (SI)") }
+                        }
+                    }
+                }
+
                 if (BiometricHelper.isBiometricsAvailable(context)) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),

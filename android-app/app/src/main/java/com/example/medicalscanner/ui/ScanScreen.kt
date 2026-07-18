@@ -1147,6 +1147,43 @@ fun ScanScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(tr("Analyze & Scan Document"), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
+
+                // Upload-only: store the file now, no AI call. For archiving old records without
+                // spending API quota — the report's detail screen can analyze it later on demand.
+                // (Document-only text can't be re-analyzed from a stored image, so require pages.)
+                if (pages.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = {
+                            val category = if (selectedScanType == "report") selectedReportCategory else "prescription"
+                            BackgroundScanScheduler.startUpload(
+                                context = context,
+                                pageUris = pages.toList(),
+                                sourceUris = sources.toList(),
+                                category = category,
+                                patientName = patientName
+                            )
+                            android.widget.Toast.makeText(
+                                context,
+                                "Uploaded. Open it later to analyze when you're ready.",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                            onNavigateBack()
+                        },
+                        enabled = uploadingState == null,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.SaveAlt, contentDescription = tr("Upload only"))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(tr("Upload Only (No Scan)"), fontWeight = FontWeight.Bold)
+                    }
+                    Text(
+                        text = tr("Stores the file without using AI — no API calls. You can analyze it anytime from its details."),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
 
             if (showQrScanner) {

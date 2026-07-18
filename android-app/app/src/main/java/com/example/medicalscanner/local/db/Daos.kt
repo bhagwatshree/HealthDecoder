@@ -120,6 +120,15 @@ interface MedLogDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertAll(entries: List<MedLogEntry>)
+
+    /** Re-keys a patient's intake history when a medicine is renamed (e.g. correcting a bad
+     *  handwriting scan), so its logs follow the new name instead of orphaning. Case-insensitive
+     *  on the old name to match how medicines are compared everywhere else. */
+    @Query(
+        """UPDATE med_logs SET medicineName = :newName
+           WHERE patientName = :patientName AND medicineName = :oldName COLLATE NOCASE"""
+    )
+    fun renameMedicine(patientName: String, oldName: String, newName: String)
 }
 
 @Dao
