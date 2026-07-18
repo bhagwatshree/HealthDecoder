@@ -983,10 +983,18 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast("Please choose a file to analyze first.");
       return;
     }
+    
+    // Inject scanning sweep line
+    const sweepLine = document.createElement('div');
+    sweepLine.className = 'scanner-sweep-line';
+    document.getElementById('btnChooseImage').appendChild(sweepLine);
+
     showLoader("Uploading to serverless Node API...", 1500, () => {
       showLoader("Running OCR with Google Vision...", 1500, () => {
         showLoader("Gemini AI analyzing report structures...", 2000, () => {
           showToast("Scanned Successfully! Added to Records.");
+          // Remove sweep line
+          sweepLine.remove();
           // Clear scan screen state
           viewportPreview.classList.add('hidden');
           viewportPlaceholder.classList.remove('hidden');
@@ -1002,9 +1010,16 @@ document.addEventListener('DOMContentLoaded', () => {
   // Found in Email card trigger
   const btnAnalyzeEmailCard = document.getElementById('btnAnalyzeEmailCard');
   btnAnalyzeEmailCard.addEventListener('click', () => {
+    // Inject scanning sweep line
+    const sweepLine = document.createElement('div');
+    sweepLine.className = 'scanner-sweep-line';
+    document.getElementById('btnChooseImage').appendChild(sweepLine);
+
     showLoader("Downloading PDF attachment from Gmail...", 1200, () => {
       showLoader("Running OCR and extraction pipeline...", 1800, () => {
         showToast("Analysis Complete! Record added.");
+        // Remove sweep line
+        sweepLine.remove();
         // Hide email queue
         document.querySelector('.email-queue-section').classList.add('hidden');
         navigateToScreen('detail');
@@ -1151,14 +1166,35 @@ document.addEventListener('DOMContentLoaded', () => {
     chatInput.value = '';
     chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
 
+    // Create typing indicator bubble
+    const typingBubble = document.createElement('div');
+    typingBubble.className = 'msg bubble-assistant';
+    typingBubble.style.padding = '10px 14px';
+    typingBubble.innerHTML = `
+      <div class="typing-indicator">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    `;
+    
+    // Add typing bubble after a tiny delay
+    setTimeout(() => {
+      chatMessagesContainer.appendChild(typingBubble);
+      chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+    }, 200);
+
     // Create assistant answer delay simulation
     setTimeout(() => {
+      // Remove typing bubble
+      typingBubble.remove();
+      
       const helperBubble = document.createElement('div');
       helperBubble.className = 'msg bubble-assistant';
       helperBubble.textContent = "Analyzing database models relating to: '" + query + "'... Consult your practitioner for certified checkups.";
       chatMessagesContainer.appendChild(helperBubble);
       chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
-    }, 1200);
+    }, 1600);
   }
 
   btnSendMessage.addEventListener('click', sendChatMessage);

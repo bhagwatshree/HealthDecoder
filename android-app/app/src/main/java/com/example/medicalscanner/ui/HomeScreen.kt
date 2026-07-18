@@ -19,6 +19,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.graphicsLayer
+
 
 private data class HomeAction(
     val label: String,
@@ -151,13 +159,33 @@ fun HomeScreen(
 @Composable
 private fun ActionSquare(action: HomeAction, modifier: Modifier = Modifier) {
     val label = tr(action.label)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        label = "scale"
+    )
+    val elevation by animateFloatAsState(
+        targetValue = if (isPressed) 0f else 3f,
+        label = "elevation"
+    )
+
     Card(
         modifier = modifier
             .aspectRatio(1f)
-            .clickable(onClick = action.onClick),
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = action.onClick
+            ),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = action.containerColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = elevation.dp)
     ) {
         Column(
             modifier = Modifier

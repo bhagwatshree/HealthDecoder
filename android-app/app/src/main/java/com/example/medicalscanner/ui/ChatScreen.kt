@@ -18,6 +18,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.RepeatMode
+
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -318,11 +324,23 @@ fun ChatScreen(
                         if (isLoading) {
                             item {
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Start
                                 ) {
-                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                    Text(tr("Thinking…"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Box(
+                                        modifier = Modifier
+                                            .widthIn(max = 320.dp)
+                                            .clip(
+                                                RoundedCornerShape(
+                                                    topStart = 16.dp, topEnd = 16.dp,
+                                                    bottomStart = 4.dp, bottomEnd = 16.dp
+                                                )
+                                            )
+                                            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp))
+                                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                                    ) {
+                                        TypingIndicator()
+                                    }
                                 }
                             }
                         }
@@ -541,3 +559,45 @@ private fun ChatInputBar(
         }
     }
 }
+
+@Composable
+private fun TypingIndicator(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "typing")
+    val dotCount = 3
+    val dotSize = 8.dp
+    val delayUnit = 150
+
+    val dots = (0 until dotCount).map { index ->
+        transition.animateFloat(
+            initialValue = 0f,
+            targetValue = -6f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(
+                    durationMillis = 400,
+                    delayMillis = index * delayUnit
+                ),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "dot-$index"
+        )
+    }
+
+    Row(
+        modifier = modifier.padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        dots.forEach { dotOffset ->
+            Box(
+                modifier = Modifier
+                    .size(dotSize)
+                    .offset(y = dotOffset.value.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        shape = androidx.compose.foundation.shape.CircleShape
+                    )
+            )
+        }
+    }
+}
+

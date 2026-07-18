@@ -13,6 +13,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.animation.*
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -688,6 +696,9 @@ fun ScanScreen(
                                 textAlign = TextAlign.Center
                             )
                         }
+                    }
+                    if (importingFiles || localOcrRunning) {
+                        ScannerSweepLine()
                     }
                 }
 
@@ -1460,3 +1471,46 @@ private fun uriToMultipartBodyPart(context: Context, uri: Uri, partName: String)
         return null
     }
 }
+
+@Composable
+private fun ScannerSweepLine(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "sweep")
+    val sweepOffsetY by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2400, easing = androidx.compose.animation.core.LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "sweepOffset"
+    )
+
+    Canvas(modifier = modifier.fillMaxSize()) {
+        val y = size.height * sweepOffsetY
+        
+        // Draw the laser line with a glow brush
+        val laserBrush = Brush.verticalGradient(
+            colors = listOf(
+                Color(0x002E7D32),
+                Color(0xFF2E7D32),
+                Color(0x002E7D32)
+            ),
+            startY = y - 10.dp.toPx(),
+            endY = y + 10.dp.toPx()
+        )
+        drawRect(
+            brush = laserBrush,
+            topLeft = Offset(0f, y - 10.dp.toPx()),
+            size = androidx.compose.ui.geometry.Size(size.width, 20.dp.toPx())
+        )
+        
+        // Draw the main bright solid laser core line
+        drawLine(
+            color = Color(0xFF2E7D32),
+            start = Offset(0f, y),
+            end = Offset(size.width, y),
+            strokeWidth = 3.dp.toPx()
+        )
+    }
+}
+

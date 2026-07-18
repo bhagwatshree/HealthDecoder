@@ -318,12 +318,14 @@ body.figma-dark-theme {
 
 /* Prototype mode layouts (single phone in center) */
 .canvas-container.mode-prototype-layout {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  place-items: center;
   width: 100%;
   height: 100%;
   padding: 0;
+  position: relative;
 }
 
 .screen-wrapper {
@@ -456,11 +458,21 @@ body.figma-dark-theme {
 
 /* Hide screens in prototype mode except active */
 .canvas-container.mode-prototype-layout .screen-wrapper {
-  display: none;
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  opacity: 0;
+  transform: translateY(16px) scale(0.98);
+  pointer-events: none;
+  transition: opacity 0.25s ease-out, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 1;
 }
 
 .canvas-container.mode-prototype-layout .screen-wrapper.active-prototype {
-  display: flex;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  z-index: 2;
 }
 
 .canvas-container.mode-prototype-layout .screen-title-badge {
@@ -819,32 +831,41 @@ body.figma-dark-theme {
   padding: 16px;
   cursor: pointer;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease, border-color 0.3s ease;
   border: 1px solid transparent;
 }
 
 .grid-tile:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+  transform: translateY(-6px) scale(1.03);
+}
+
+.grid-tile:active {
+  transform: translateY(-2px) scale(0.98);
 }
 
 .tile-scan { background-color: #E8F5E9; border-color: #C8E6C9; }
 .tile-scan .tile-label, .tile-scan .tile-icon { color: #2E7D32; }
+.tile-scan:hover { box-shadow: 0 14px 28px rgba(46, 125, 50, 0.12), 0 10px 10px rgba(46, 125, 50, 0.06); }
 
 .tile-records { background-color: #ECEFF1; border-color: #CFD8DC; }
 .tile-records .tile-label, .tile-records .tile-icon { color: #455A64; }
+.tile-records:hover { box-shadow: 0 14px 28px rgba(69, 90, 100, 0.12), 0 10px 10px rgba(69, 90, 100, 0.06); }
 
 .tile-reminders { background-color: #FFF3E0; border-color: #FFE0B2; }
 .tile-reminders .tile-label, .tile-reminders .tile-icon { color: #E65100; }
+.tile-reminders:hover { box-shadow: 0 14px 28px rgba(230, 81, 0, 0.12), 0 10px 10px rgba(230, 81, 0, 0.06); }
 
 .tile-meds { background-color: #F3E5F5; border-color: #E1BEE7; }
 .tile-meds .tile-label, .tile-meds .tile-icon { color: #6A1B9A; }
+.tile-meds:hover { box-shadow: 0 14px 28px rgba(106, 27, 154, 0.12), 0 10px 10px rgba(106, 27, 154, 0.06); }
 
 .tile-tests { background-color: #FFFFEBEE; border-color: #FFCDD2; }
 .tile-tests .tile-label, .tile-tests .tile-icon { color: #C62828; }
+.tile-tests:hover { box-shadow: 0 14px 28px rgba(198, 40, 40, 0.12), 0 10px 10px rgba(198, 40, 40, 0.06); }
 
 .tile-trends { background-color: #E3F2FD; border-color: #BBDEFB; }
 .tile-trends .tile-label, .tile-trends .tile-icon { color: #1565C0; }
+.tile-trends:hover { box-shadow: 0 14px 28px rgba(21, 101, 192, 0.12), 0 10px 10px rgba(21, 101, 192, 0.06); }
 
 .tile-icon {
   font-size: 34px;
@@ -2238,6 +2259,15 @@ body.figma-dark-theme {
   z-index: 1000;
   padding: 24px;
   border-radius: 40px; /* match mobile frame */
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 0.25s ease-out;
+}
+
+.dialog-overlay.hidden {
+  display: flex !important; /* Keep flex display to animate opacity transition */
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 .dialog-card {
@@ -2251,6 +2281,12 @@ body.figma-dark-theme {
   align-items: center;
   text-align: center;
   box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  transform: scale(1);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dialog-overlay.hidden .dialog-card {
+  transform: scale(0.85);
 }
 
 .dialog-icon {
@@ -2286,6 +2322,11 @@ body.figma-dark-theme {
   border-radius: 8px;
   border: none;
   cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.dialog-btn:active {
+  transform: scale(0.95);
 }
 
 .width-full {
@@ -2299,7 +2340,7 @@ body.figma-dark-theme {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(255,255,255,0.85);
+  background-color: rgba(255,255,255,0.92);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2307,11 +2348,20 @@ body.figma-dark-theme {
   gap: 12px;
   z-index: 2000;
   border-radius: 40px;
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 0.25s ease-out;
+}
+
+.loader-overlay.hidden {
+  display: flex !important; /* Keep flex display to animate opacity transition */
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 .spinner {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border: 4px solid var(--app-surface-variant);
   border-top-color: var(--app-primary);
   border-radius: 50%;
@@ -2344,7 +2394,7 @@ body.figma-dark-theme {
   box-shadow: 0 4px 10px rgba(0,0,0,0.15);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .toast-notification.show {
@@ -2611,3 +2661,88 @@ body.figma-dark-theme {
 .consent-row input { margin-top: 2px; }
 .border-bottom { border-bottom: 1px solid var(--app-outline-variant); border-bottom-left-radius: 0 !important; border-bottom-right-radius: 0 !important; }
 .font-medium { font-weight: 700; }
+
+/* Scanner Viewport Scanning sweep animation */
+.scanner-viewport {
+  position: relative;
+}
+
+.scanner-sweep-line {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 6px;
+  background: linear-gradient(to bottom, rgba(13, 115, 119, 0), rgba(13, 115, 119, 0.85), rgba(13, 115, 119, 0));
+  box-shadow: 0 0 12px var(--app-primary);
+  z-index: 10;
+  animation: scan-sweep 2.2s ease-in-out infinite;
+}
+
+@keyframes scan-sweep {
+  0% { top: 0%; }
+  50% { top: 100%; }
+  100% { top: 0%; }
+}
+
+/* AI Chat Typing Indicator */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  height: 18px;
+}
+
+.typing-indicator span {
+  width: 6px;
+  height: 6px;
+  background-color: var(--app-on-surface-variant);
+  border-radius: 50%;
+  animation: dotBounce 1.4s infinite ease-in-out both;
+  opacity: 0.6;
+}
+
+.typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+.typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes dotBounce {
+  0%, 80%, 100% { transform: scale(0.3); }
+  40% { transform: scale(1); }
+}
+
+/* SVG Trends Chart Self-Drawing effect */
+.chart-container svg path[fill="none"] {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: draw-chart-line 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.chart-container svg path:not([fill="none"]) {
+  opacity: 0;
+  animation: fade-in-area 1.5s ease-out 1s forwards;
+}
+
+.chart-container svg circle {
+  transform: scale(0);
+  transform-origin: center;
+  animation: pop-point 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Staggered delay for data points */
+.chart-container svg circle:nth-of-type(1) { animation-delay: 0.6s; }
+.chart-container svg circle:nth-of-type(2) { animation-delay: 0.9s; }
+.chart-container svg circle:nth-of-type(3) { animation-delay: 1.2s; }
+.chart-container svg circle:nth-of-type(4) { animation-delay: 1.5s; }
+.chart-container svg circle:nth-of-type(5) { animation-delay: 1.8s; }
+
+@keyframes draw-chart-line {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes fade-in-area {
+  to { opacity: 1; }
+}
+
+@keyframes pop-point {
+  to { transform: scale(1); }
+}
