@@ -1,5 +1,8 @@
 package com.example.medicalscanner.ui
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.clip
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -19,7 +22,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -125,18 +130,24 @@ fun TrendsScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text("Health Trends", fontWeight = FontWeight.Bold)
-                        Text("Tap any point to open that report", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TopBarLogo()
+                        Column {
+                            Text(tr("Health Trends"), fontWeight = FontWeight.Bold)
+                            Text(tr("Tap any point to open that report"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") }
+                    IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, contentDescription = tr("Back")) }
                 },
                 actions = {
                     IconButton(onClick = { refreshTick++ }, enabled = !isLoading && selectedPatient != null) {
                         if (isLoading) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        else Icon(Icons.Default.Refresh, contentDescription = "Refresh trends")
+                        else Icon(Icons.Default.Refresh, contentDescription = tr("Refresh trends"))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp))
@@ -162,7 +173,7 @@ fun TrendsScreen(
                             value = selectedPatient ?: "",
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Patient") },
+                            label = { Text(tr("Patient")) },
                             leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(18.dp)) },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = patientMenu) },
                             shape = RoundedCornerShape(12.dp),
@@ -180,7 +191,7 @@ fun TrendsScreen(
                 FilterChip(
                     selected = keyOnly,
                     onClick = { keyOnly = !keyOnly },
-                    label = { Text(if (keyOnly) "Key tests" else "All tests", fontSize = 12.sp) },
+                    label = { Text(if (keyOnly) tr("Key tests") else tr("All tests"), fontSize = 12.sp) },
                     leadingIcon = { Icon(if (keyOnly) Icons.Default.Star else Icons.Default.StarBorder, contentDescription = null, modifier = Modifier.size(16.dp)) }
                 )
             }
@@ -194,7 +205,7 @@ fun TrendsScreen(
                     FilterChip(
                         selected = period == value,
                         onClick = { period = value },
-                        label = { Text(label, fontSize = 12.sp) },
+                        label = { Text(tr(label), fontSize = 12.sp) },
                         shape = RoundedCornerShape(20.dp)
                     )
                 }
@@ -205,8 +216,8 @@ fun TrendsScreen(
             Box(modifier = Modifier.weight(1f)) {
                 when {
                     isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                    selectedPatient == null -> EmptyStateView(Icons.Default.ShowChart, "No reports yet", "Scan lab reports (blood test, thyroid, etc.) and their trends will appear here.")
-                    visibleTrends.isEmpty() -> EmptyStateView(Icons.Default.ShowChart, "No test values to chart", "Trends appear once you have reports with numeric test values like TSH, sugar, hemoglobin, cholesterol.")
+                    selectedPatient == null -> EmptyStateView(Icons.Default.ShowChart, tr("No reports yet"), tr("Scan lab reports (blood test, thyroid, etc.) and their trends will appear here."))
+                    visibleTrends.isEmpty() -> EmptyStateView(Icons.Default.ShowChart, tr("No test values to chart"), tr("Trends appear once you have reports with numeric test values like TSH, sugar, hemoglobin, cholesterol."))
                     else -> LazyColumn(
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -395,7 +406,7 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
     val nums = points.map { parseNum(it.value) }
     val validIdx = points.indices.filter { nums[it] != null }
     if (validIdx.isEmpty()) {
-        Text("No numeric values to chart.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(tr("No numeric values to chart."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
     val minV = validIdx.minOf { nums[it]!! }
@@ -419,6 +430,12 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
     }
     labelPaint.color = labelColor.toArgb()
     labelPaint.textSize = with(density) { 10.sp.toPx() }
+
+    val axisLabelPaint = remember {
+        Paint().apply { textAlign = Paint.Align.LEFT; isAntiAlias = true }
+    }
+    axisLabelPaint.color = labelColor.toArgb()
+    axisLabelPaint.textSize = with(density) { 9.sp.toPx() }
 
     var positions by remember { mutableStateOf<List<Pair<Offset, TrendDataPoint>>>(emptyList()) }
 
@@ -447,6 +464,17 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
             }
             fun yFor(v: Float) = padT + (h - padT - padB) * (1f - (v - minV) / range)
 
+            // Dashed horizontal gridlines with value labels, evenly spaced across the plot area.
+            val dashEffect = PathEffect.dashPathEffect(floatArrayOf(with(density) { 4.dp.toPx() }, with(density) { 4.dp.toPx() }))
+            listOf(0f, 0.5f, 1f).forEach { frac ->
+                val y = padT + (h - padT - padB) * frac
+                drawLine(axisColor, Offset(padL, y), Offset(w - padR, y), strokeWidth = 1f, pathEffect = dashEffect)
+                val value = minV + range * (1f - frac)
+                drawContext.canvas.nativeCanvas.drawText(
+                    "%.1f".format(value), padL, y - with(density) { 3.dp.toPx() }, axisLabelPaint
+                )
+            }
+
             // baseline
             drawLine(axisColor, Offset(padL, h - padB), Offset(w - padR, h - padB), strokeWidth = 1.5f)
 
@@ -456,6 +484,16 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
             if (pos.size >= 2) {
                 val path = Path()
                 pos.forEachIndexed { idx, (o, _) -> if (idx == 0) path.moveTo(o.x, o.y) else path.lineTo(o.x, o.y) }
+
+                // Translucent fill under the line, down to the baseline.
+                val fillPath = Path().apply {
+                    addPath(path)
+                    lineTo(pos.last().first.x, h - padB)
+                    lineTo(pos.first().first.x, h - padB)
+                    close()
+                }
+                drawPath(fillPath, color = primary.copy(alpha = 0.15f), style = Fill)
+
                 drawPath(path, color = primary, style = Stroke(width = with(density) { 2.5.dp.toPx() }))
             }
             // Draw date labels with a minimum gap so they don't overlap when dates are close.

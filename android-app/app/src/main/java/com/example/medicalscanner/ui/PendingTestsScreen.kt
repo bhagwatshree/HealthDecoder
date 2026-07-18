@@ -1,5 +1,8 @@
 package com.example.medicalscanner.ui
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -59,7 +62,15 @@ fun PendingTestsScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text(tr("Pending Tests"), fontWeight = FontWeight.Bold) },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TopBarLogo()
+                        Text(tr("Pending Tests"), fontWeight = FontWeight.Bold)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(imageVector = Icons.Default.ArrowBack, contentDescription = tr("Back"))
@@ -86,8 +97,8 @@ fun PendingTestsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = "Add Test")
-                    Text("Add Test Reminder", fontWeight = FontWeight.Bold)
+                    Icon(imageVector = Icons.Default.Add, contentDescription = tr("Add Test"))
+                    Text(tr("Add Test Reminder"), fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -102,7 +113,7 @@ fun PendingTestsScreen(
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(imageVector = Icons.Default.Clear, contentDescription = "Clear")
+                            Icon(imageVector = Icons.Default.Clear, contentDescription = tr("Clear"))
                         }
                     }
                 },
@@ -142,8 +153,8 @@ fun PendingTestsScreen(
                     if (filteredTests.isEmpty()) {
                         EmptyStateView(
                             icon = Icons.Default.NotificationsActive,
-                            title = if (searchQuery.isNotEmpty()) "No matching tests" else "No pending tests",
-                            description = "Tests recommended in prescriptions are automatically tracked. You can also add them manually."
+                            title = if (searchQuery.isNotEmpty()) tr("No matching tests") else tr("No pending tests"),
+                            description = tr("Tests recommended in prescriptions are automatically tracked. You can also add them manually.")
                         )
                     } else {
                         LazyColumn(
@@ -180,7 +191,7 @@ fun PendingTestsScreen(
         if (showAddTestDialog) {
             AlertDialog(
                 onDismissRequest = { showAddTestDialog = false },
-                title = { Text("Add Recommended Test", fontWeight = FontWeight.Bold) },
+                title = { Text(tr("Add Recommended Test"), fontWeight = FontWeight.Bold) },
                 text = {
                     Column(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -189,24 +200,24 @@ fun PendingTestsScreen(
                         OutlinedTextField(
                             value = newPatientName,
                             onValueChange = { newPatientName = it },
-                            label = { Text("Patient Name") },
-                            placeholder = { Text("e.g. John Doe") },
+                            label = { Text(tr("Patient Name")) },
+                            placeholder = { Text(tr("e.g. John Doe")) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
                         OutlinedTextField(
                             value = newTestName,
                             onValueChange = { newTestName = it },
-                            label = { Text("Recommended Test Name") },
-                            placeholder = { Text("e.g. Blood Sugar Fasting (BSF)") },
+                            label = { Text(tr("Recommended Test Name")) },
+                            placeholder = { Text(tr("e.g. Blood Sugar Fasting (BSF)")) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
                         OutlinedTextField(
                             value = newDueDate,
                             onValueChange = { newDueDate = it },
-                            label = { Text("Estimated Due Date (YYYY-MM-DD)") },
-                            placeholder = { Text("e.g. 2026-09-22") },
+                            label = { Text(tr("Estimated Due Date (YYYY-MM-DD)")) },
+                            placeholder = { Text(tr("e.g. 2026-09-22")) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -237,12 +248,12 @@ fun PendingTestsScreen(
                         },
                         enabled = newPatientName.isNotBlank() && newTestName.isNotBlank()
                     ) {
-                        Text("Add Reminder")
+                        Text(tr("Add Reminder"))
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showAddTestDialog = false }) {
-                        Text("Cancel")
+                        Text(tr("Cancel"))
                     }
                 }
             )

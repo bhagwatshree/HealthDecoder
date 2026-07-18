@@ -1,5 +1,8 @@
 package com.example.medicalscanner.ui
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.clip
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -152,7 +155,15 @@ fun ReportDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (isEditing) "Edit Details" else "Report Details", fontWeight = FontWeight.Bold) },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TopBarLogo()
+                        Text(if (isEditing) tr("Edit Details") else tr("Report Details"), fontWeight = FontWeight.Bold)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = {
                         if (isEditing) {
@@ -173,7 +184,7 @@ fun ReportDetailScreen(
                     }) {
                         Icon(
                             imageVector = if (isEditing) Icons.Default.Close else Icons.Default.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = tr("Back")
                         )
                     }
                 },
@@ -205,7 +216,7 @@ fun ReportDetailScreen(
                                     }
                                 }
                             }) {
-                                Icon(imageVector = Icons.Default.Check, contentDescription = "Save", tint = MaterialTheme.colorScheme.primary)
+                                Icon(imageVector = Icons.Default.Check, contentDescription = tr("Save"), tint = MaterialTheme.colorScheme.primary)
                             }
                         } else {
                             // Reprocess Button — re-run AI extraction from the original scanned
@@ -213,16 +224,16 @@ fun ReportDetailScreen(
                             if (report?.imagePaths?.isNotEmpty() == true) {
                                 IconButton(onClick = { showReprocessDialog = true }, enabled = !isReprocessing) {
                                     if (isReprocessing) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                    else Icon(imageVector = Icons.Default.Autorenew, contentDescription = "Reprocess")
+                                    else Icon(imageVector = Icons.Default.Autorenew, contentDescription = tr("Reprocess"))
                                 }
                             }
                             // Edit Button
                             IconButton(onClick = { isEditing = true }) {
-                                Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit")
+                                Icon(imageVector = Icons.Default.Edit, contentDescription = tr("Edit"))
                             }
                             // Delete Button
                             IconButton(onClick = { showDeleteDialog = true }) {
-                                Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                                Icon(imageVector = Icons.Default.Delete, contentDescription = tr("Delete"), tint = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
@@ -247,9 +258,9 @@ fun ReportDetailScreen(
             } else if (report == null) {
                 Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(imageVector = Icons.Default.Warning, contentDescription = "Error", modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.error)
-                        Text(text = errorMessage.ifEmpty { "Report not found." })
-                        Button(onClick = { loadReportDetails() }) { Text("Retry") }
+                        Icon(imageVector = Icons.Default.Warning, contentDescription = tr("Error"), modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.error)
+                        Text(text = tr(errorMessage.ifEmpty { "Report not found." }))
+                        Button(onClick = { loadReportDetails() }) { Text(tr("Retry")) }
                     }
                 }
             } else {
@@ -318,8 +329,8 @@ fun ReportDetailScreen(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        Icon(Icons.Default.Fullscreen, contentDescription = "Expand", tint = Color.White, modifier = Modifier.size(14.dp))
-                                        Text(if (pagePaths.size > 1) "Page ${idx + 1}" else "Tap to view", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Icon(Icons.Default.Fullscreen, contentDescription = tr("Expand"), tint = Color.White, modifier = Modifier.size(14.dp))
+                                        Text(if (pagePaths.size > 1) "Page ${idx + 1}" else tr("Tap to view"), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -334,7 +345,7 @@ fun ReportDetailScreen(
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
                             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("Original file(s)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                                Text(tr("Original file(s)"), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
                                 currentReport.sourceFiles.forEach { sf ->
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -344,10 +355,10 @@ fun ReportDetailScreen(
                                         Icon(Icons.Default.InsertDriveFile, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                         Text(sf.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         IconButton(onClick = { openSource(sf) }) {
-                                            Icon(Icons.Default.OpenInNew, contentDescription = "Open")
+                                            Icon(Icons.Default.OpenInNew, contentDescription = tr("Open"))
                                         }
                                         IconButton(onClick = { pendingSave = sf; saveLauncher.launch(sf.name) }) {
-                                            Icon(Icons.Default.Download, contentDescription = "Download")
+                                            Icon(Icons.Default.Download, contentDescription = tr("Download"))
                                         }
                                     }
                                 }
@@ -376,12 +387,12 @@ fun ReportDetailScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Info,
-                                            contentDescription = "Info",
+                                            contentDescription = tr("Info"),
                                             tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(20.dp)
                                         )
                                         Text(
-                                            text = "You can manually correct spelling mistakes in the Patient Name, Date, or Type below. Tapping the Save (Checkmark) icon in the top right will update the history database.",
+                                            text = tr("You can manually correct spelling mistakes in the Patient Name, Date, or Type below. Tapping the Save (Checkmark) icon in the top right will update the history database."),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                                             lineHeight = 16.sp
@@ -391,21 +402,21 @@ fun ReportDetailScreen(
                                 OutlinedTextField(
                                     value = editPatientName,
                                     onValueChange = { editPatientName = it },
-                                    label = { Text("Patient Name") },
+                                    label = { Text(tr("Patient Name")) },
                                     modifier = Modifier.fillMaxWidth(),
                                     singleLine = true
                                 )
                                 OutlinedTextField(
                                     value = editReportDate,
                                     onValueChange = { editReportDate = it },
-                                    label = { Text("Report Date (YYYY-MM-DD)") },
+                                    label = { Text(tr("Report Date (YYYY-MM-DD)")) },
                                     modifier = Modifier.fillMaxWidth(),
                                     singleLine = true
                                 )
                                 OutlinedTextField(
                                     value = editReportType,
                                     onValueChange = { editReportType = it },
-                                    label = { Text("Report Type") },
+                                    label = { Text(tr("Report Type")) },
                                     modifier = Modifier.fillMaxWidth(),
                                     singleLine = true
                                 )
@@ -414,7 +425,8 @@ fun ReportDetailScreen(
                     } else {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Row(
                                 modifier = Modifier
@@ -423,29 +435,30 @@ fun ReportDetailScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text("Patient Name", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(currentReport.patientName ?: "Unknown", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                    
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text("Date of Report", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(currentReport.reportDate ?: "Unknown", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        text = "Patient: ${currentReport.patientName ?: "Unknown"}",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Date: ${currentReport.reportDate ?: "Unknown"}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text("Report Type", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(MaterialTheme.colorScheme.primaryContainer)
-                                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                                    ) {
-                                        Text(
-                                            text = currentReport.reportType ?: "Other",
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp
-                                        )
-                                    }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(MaterialTheme.colorScheme.primaryContainer)
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = currentReport.reportType ?: "Other",
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
                                 }
                             }
                         }
@@ -480,7 +493,7 @@ fun ReportDetailScreen(
                                             "worsened" -> Icons.Default.TrendingDown
                                             else -> Icons.Default.Info
                                         },
-                                        contentDescription = "Trend",
+                                        contentDescription = tr("Trend"),
                                         tint = when (comp.status?.lowercase()) {
                                             "improved" -> Color(0xFF2E7D32)
                                             "worsened" -> Color(0xFFC62828)
@@ -488,7 +501,7 @@ fun ReportDetailScreen(
                                         }
                                     )
                                     Text(
-                                        text = "Clinical Insight & Progress",
+                                        text = tr("Clinical Insight & Progress"),
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.titleSmall,
                                         color = when (comp.status?.lowercase()) {
@@ -508,7 +521,7 @@ fun ReportDetailScreen(
                                 if (comp.differences.isNotEmpty()) {
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "Parameter Changes:",
+                                        text = tr("Parameter Changes:"),
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -533,7 +546,7 @@ fun ReportDetailScreen(
                                 if (medChg != null && (medChg.added.isNotEmpty() || medChg.removed.isNotEmpty() || medChg.changed.isNotEmpty())) {
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "Medication Adjustments:",
+                                        text = tr("Medication Adjustments:"),
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -562,8 +575,8 @@ fun ReportDetailScreen(
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Icon(imageVector = Icons.Default.Visibility, contentDescription = "View", modifier = Modifier.size(14.dp))
-                                            Text("View Previous Report", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Icon(imageVector = Icons.Default.Visibility, contentDescription = tr("View"), modifier = Modifier.size(14.dp))
+                                            Text(tr("View Previous Report"), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
@@ -583,7 +596,7 @@ fun ReportDetailScreen(
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Text(
-                                    text = "Extracted Test Findings & Metrics",
+                                    text = tr("Tested Parameters"),
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
@@ -602,9 +615,9 @@ fun ReportDetailScreen(
                                                 .padding(8.dp),
                                             horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
-                                            Text(text = "Parameter", modifier = Modifier.weight(2f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                            Text(text = "Value", modifier = Modifier.weight(1.2f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.End)
-                                            Text(text = "Ref Range", modifier = Modifier.weight(1.8f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.End)
+                                            Text(text = tr("Parameter"), modifier = Modifier.weight(2f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                            Text(text = tr("Value"), modifier = Modifier.weight(1.2f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.End)
+                                            Text(text = tr("Ref Range"), modifier = Modifier.weight(1.8f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.End)
                                         }
                                         
                                         testRes.parameters.forEach { param ->
@@ -642,19 +655,27 @@ fun ReportDetailScreen(
                                                     Text(text = param.referenceRange.ifEmpty { "-" }, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                     
                                                     val paramStatus = param.status ?: ""
-                                                    if (paramStatus.isNotEmpty() && paramStatus.lowercase() != "normal") {
+                                                    if (paramStatus.isNotEmpty()) {
                                                         Spacer(modifier = Modifier.width(4.dp))
                                                         Box(
                                                             modifier = Modifier
                                                                 .clip(RoundedCornerShape(4.dp))
                                                                 .background(
-                                                                    if (paramStatus.lowercase() == "high") Color(0xFFFFEBEE) else Color(0xFFE3F2FD)
+                                                                    when (paramStatus.lowercase()) {
+                                                                        "high" -> Color(0xFFFFEBEE)
+                                                                        "normal" -> Color(0xFFE8F5E9)
+                                                                        else -> Color(0xFFE3F2FD)
+                                                                    }
                                                                 )
                                                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                                                         ) {
                                                             Text(
                                                                 text = paramStatus.uppercase(),
-                                                                color = if (paramStatus.lowercase() == "high") Color(0xFFC62828) else Color(0xFF1565C0),
+                                                                color = when (paramStatus.lowercase()) {
+                                                                    "high" -> Color(0xFFC62828)
+                                                                    "normal" -> Color(0xFF2E7D32)
+                                                                    else -> Color(0xFF1565C0)
+                                                                },
                                                                 fontSize = 9.sp,
                                                                 fontWeight = FontWeight.Bold
                                                             )
@@ -671,7 +692,7 @@ fun ReportDetailScreen(
                                         Spacer(modifier = Modifier.height(4.dp))
                                     }
                                     Text(
-                                        text = "Observations / Impressions:",
+                                        text = tr("Observations / Impressions:"),
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -717,13 +738,13 @@ fun ReportDetailScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Psychology,
-                                            contentDescription = "Insights",
+                                            contentDescription = tr("Insights"),
                                             tint = Color.White,
                                             modifier = Modifier.size(20.dp)
                                         )
                                     }
                                     Text(
-                                        text = "What This Report Means",
+                                        text = tr("What This Report Means"),
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.titleSmall,
                                         color = Color(0xFF1A237E)
@@ -740,7 +761,7 @@ fun ReportDetailScreen(
                                 if (hi.specialistRecommendations.isNotEmpty()) {
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "Recommended Specialist(s):",
+                                        text = tr("Recommended Specialist(s):"),
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Color(0xFF3F51B5)
@@ -820,20 +841,20 @@ fun ReportDetailScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Article,
-                                    contentDescription = "Detailed analysis",
+                                    contentDescription = tr("Detailed analysis"),
                                     tint = Color.White,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "View Detailed Analysis",
+                                    text = tr("View Detailed Analysis"),
                                     fontWeight = FontWeight.Bold,
                                     style = MaterialTheme.typography.titleSmall,
                                     color = Color.White
                                 )
                                 Text(
-                                    text = "In-depth, plain-language breakdown of this report",
+                                    text = tr("In-depth, plain-language breakdown of this report"),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Color.White.copy(alpha = 0.85f)
                                 )
@@ -875,12 +896,12 @@ fun ReportDetailScreen(
                                     ) {
                                         Icon(
                                             imageVector = iconVec,
-                                            contentDescription = "Alignment",
+                                            contentDescription = tr("Alignment"),
                                             tint = headerColor,
                                             modifier = Modifier.size(22.dp)
                                         )
                                         Text(
-                                            text = "Prescription Alignment",
+                                            text = tr("Prescription Alignment"),
                                             fontWeight = FontWeight.Bold,
                                             style = MaterialTheme.typography.titleSmall,
                                             color = headerColor
@@ -963,20 +984,20 @@ fun ReportDetailScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Medication,
-                                            contentDescription = "Side Effects",
+                                            contentDescription = tr("Side Effects"),
                                             tint = Color.White,
                                             modifier = Modifier.size(20.dp)
                                         )
                                     }
                                     Column {
                                         Text(
-                                            text = "Medicine Side-Effects",
+                                            text = tr("Medicine Side-Effects"),
                                             fontWeight = FontWeight.Bold,
                                             style = MaterialTheme.typography.titleSmall,
                                             color = Color(0xFF4A148C)
                                         )
                                         Text(
-                                            text = "Tap a medicine to expand",
+                                            text = tr("Tap a medicine to expand"),
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -1048,7 +1069,7 @@ fun ReportDetailScreen(
                                                 }
                                                 Icon(
                                                     imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                                    contentDescription = "Toggle",
+                                                    contentDescription = tr("Toggle"),
                                                     modifier = Modifier.size(18.dp),
                                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
@@ -1065,7 +1086,7 @@ fun ReportDetailScreen(
                                             ) {
                                                 if (se.commonEffects.isNotEmpty()) {
                                                     Text(
-                                                        text = "Common Side-Effects:",
+                                                        text = tr("Common Side-Effects:"),
                                                         fontWeight = FontWeight.Bold,
                                                         fontSize = 12.sp,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1082,7 +1103,7 @@ fun ReportDetailScreen(
                                                 }
                                                 if (se.seriousEffects.isNotEmpty()) {
                                                     Text(
-                                                        text = "Watch Out For:",
+                                                        text = tr("Watch Out For:"),
                                                         fontWeight = FontWeight.Bold,
                                                         fontSize = 12.sp,
                                                         color = Color(0xFFC62828)
@@ -1140,7 +1161,7 @@ fun ReportDetailScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "Doctor's Comments & Instructions",
+                                text = tr("Doctor's Comments & Instructions"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -1150,7 +1171,7 @@ fun ReportDetailScreen(
                                     value = editComments,
                                     onValueChange = { editComments = it },
                                     modifier = Modifier.fillMaxWidth().height(120.dp),
-                                    placeholder = { Text("Enter doctor's comments or notes here...") }
+                                    placeholder = { Text(tr("Enter doctor's comments or notes here...")) }
                                 )
                             } else {
                                 Text(
@@ -1178,7 +1199,7 @@ fun ReportDetailScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Prescribed Medications",
+                                    text = tr("Prescribed Medications"),
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
@@ -1187,7 +1208,7 @@ fun ReportDetailScreen(
                                     IconButton(onClick = {
                                         editMedications.add(Medication(name = "New Medicine", dosage = "", frequency = "", duration = ""))
                                     }) {
-                                        Icon(imageVector = Icons.Default.Add, contentDescription = "Add Medicine", tint = MaterialTheme.colorScheme.primary)
+                                        Icon(imageVector = Icons.Default.Add, contentDescription = tr("Add Medicine"), tint = MaterialTheme.colorScheme.primary)
                                     }
                                 }
                             }
@@ -1210,13 +1231,13 @@ fun ReportDetailScreen(
                                                 ) {
                                                     Text("Medication #${index + 1}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
                                                     IconButton(onClick = { editMedications.removeAt(index) }) {
-                                                        Icon(imageVector = Icons.Default.Delete, contentDescription = "Remove", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                                                        Icon(imageVector = Icons.Default.Delete, contentDescription = tr("Remove"), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
                                                     }
                                                 }
                                                 OutlinedTextField(
                                                     value = med.name,
                                                     onValueChange = { editMedications[index] = med.copy(name = it) },
-                                                    label = { Text("Name") },
+                                                    label = { Text(tr("Name")) },
                                                     modifier = Modifier.fillMaxWidth(),
                                                     singleLine = true
                                                 )
@@ -1224,14 +1245,14 @@ fun ReportDetailScreen(
                                                     OutlinedTextField(
                                                         value = med.dosage,
                                                         onValueChange = { editMedications[index] = med.copy(dosage = it) },
-                                                        label = { Text("Dosage") },
+                                                        label = { Text(tr("Dosage")) },
                                                         modifier = Modifier.weight(1f),
                                                         singleLine = true
                                                     )
                                                     OutlinedTextField(
                                                         value = med.frequency,
                                                         onValueChange = { editMedications[index] = med.copy(frequency = it) },
-                                                        label = { Text("Frequency") },
+                                                        label = { Text(tr("Frequency")) },
                                                         modifier = Modifier.weight(1f),
                                                         singleLine = true
                                                     )
@@ -1239,7 +1260,7 @@ fun ReportDetailScreen(
                                                 OutlinedTextField(
                                                     value = med.duration ?: "",
                                                     onValueChange = { editMedications[index] = med.copy(duration = it) },
-                                                    label = { Text("Duration") },
+                                                    label = { Text(tr("Duration")) },
                                                     modifier = Modifier.fillMaxWidth(),
                                                     singleLine = true
                                                 )
@@ -1249,7 +1270,7 @@ fun ReportDetailScreen(
                                 }
                             } else {
                                 if (currentReport.medications.isEmpty()) {
-                                    Text("No medications extracted.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(tr("No medications extracted."), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 } else {
                                     currentReport.medications.forEach { med ->
                                         Column(
@@ -1266,7 +1287,7 @@ fun ReportDetailScreen(
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Default.Medication,
-                                                    contentDescription = "Medication",
+                                                    contentDescription = tr("Medication"),
                                                     tint = MaterialTheme.colorScheme.primary,
                                                     modifier = Modifier.size(28.dp)
                                                 )
@@ -1305,7 +1326,7 @@ fun ReportDetailScreen(
                                                     modifier = Modifier.size(16.dp)
                                                 )
                                                 Text(
-                                                    text = "What is this medicine for?",
+                                                    text = tr("What is this medicine for?"),
                                                     style = MaterialTheme.typography.bodySmall,
                                                     fontWeight = FontWeight.SemiBold,
                                                     color = MaterialTheme.colorScheme.primary,
@@ -1339,14 +1360,14 @@ fun ReportDetailScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Raw Transcribed Text",
+                                    text = tr("Raw Transcribed Text"),
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Icon(
                                     imageVector = if (rawTextExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                    contentDescription = "Toggle text"
+                                    contentDescription = tr("Toggle text")
                                 )
                             }
                             
@@ -1357,7 +1378,7 @@ fun ReportDetailScreen(
                                             value = editRawText,
                                             onValueChange = { editRawText = it },
                                             modifier = Modifier.fillMaxWidth().height(200.dp),
-                                            label = { Text("Raw Text") }
+                                            label = { Text(tr("Raw Text")) }
                                         )
                                     } else {
                                         Text(
@@ -1399,7 +1420,7 @@ fun ReportDetailScreen(
                         ) {
                             Image(
                                 painter = rememberAsyncImagePainter(model = fullImageUrl),
-                                contentDescription = "Full Screen Preview",
+                                contentDescription = tr("Full Screen Preview"),
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .graphicsLayer(
@@ -1423,14 +1444,14 @@ fun ReportDetailScreen(
                                         }
                                         .padding(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
-                                    Text("Reset Zoom", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text(tr("Reset Zoom"), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
                     },
                     confirmButton = {
                         TextButton(onClick = { showFullImageDialog = false }) {
-                            Text("Close")
+                            Text(tr("Close"))
                         }
                     }
                 )
@@ -1440,8 +1461,8 @@ fun ReportDetailScreen(
             if (showDeleteDialog) {
                 AlertDialog(
                     onDismissRequest = { showDeleteDialog = false },
-                    title = { Text("Delete Report?") },
-                    text = { Text("Are you sure you want to delete this medical report? This will permanently remove the record from your database and delete the uploaded image file.") },
+                    title = { Text(tr("Delete Report?")) },
+                    text = { Text(tr("Are you sure you want to delete this medical report? This will permanently remove the record from your database and delete the uploaded image file.")) },
                     confirmButton = {
                         Button(
                             onClick = {
@@ -1460,12 +1481,12 @@ fun ReportDetailScreen(
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                         ) {
-                            Text("Delete")
+                            Text(tr("Delete"))
                         }
                     },
                     dismissButton = {
                         TextButton(onClick = { showDeleteDialog = false }) {
-                            Text("Cancel")
+                            Text(tr("Cancel"))
                         }
                     }
                 )
@@ -1475,8 +1496,8 @@ fun ReportDetailScreen(
             if (showReprocessDialog) {
                 AlertDialog(
                     onDismissRequest = { showReprocessDialog = false },
-                    title = { Text("Reprocess this report?") },
-                    text = { Text("This re-runs AI analysis on the originally scanned image and refreshes the extracted test values, medicines and insights below. Useful if the earlier scan came back incomplete (e.g. the API was briefly unavailable). It may use some of your API quota.") },
+                    title = { Text(tr("Reprocess this report?")) },
+                    text = { Text(tr("This re-runs AI analysis on the originally scanned image and refreshes the extracted test values, medicines and insights below. Useful if the earlier scan came back incomplete (e.g. the API was briefly unavailable). It may use some of your API quota.")) },
                     confirmButton = {
                         Button(onClick = {
                             showReprocessDialog = false
@@ -1495,12 +1516,12 @@ fun ReportDetailScreen(
                                 }
                             }
                         }) {
-                            Text("Reprocess")
+                            Text(tr("Reprocess"))
                         }
                     },
                     dismissButton = {
                         TextButton(onClick = { showReprocessDialog = false }) {
-                            Text("Cancel")
+                            Text(tr("Cancel"))
                         }
                     }
                 )

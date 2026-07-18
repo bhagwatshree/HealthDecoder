@@ -21,10 +21,15 @@ import java.util.concurrent.TimeUnit
 object GmailApiClient {
     private const val BASE_URL = "https://gmail.googleapis.com/gmail/v1/users/me"
 
+    // Carries the user's Google OAuth access token and Gmail message contents — never log
+    // full bodies in a release build.
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
-        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
+        .addInterceptor(HttpLoggingInterceptor().apply {
+            level = if (com.example.medicalscanner.BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                else HttpLoggingInterceptor.Level.NONE
+        })
         .build()
 
     /** A PDF attachment located on a message, ready to download. */

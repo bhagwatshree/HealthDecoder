@@ -213,6 +213,42 @@ object AppSettings {
             .apply()
     }
 
+    // ── OAuth deep-link nonce ────────────────────────────────────────────────
+    // "Link Google Account" opens a browser flow that redirects back into the app via the
+    // medicalscanner://oauth2(-link) custom scheme — which any other app on the device can
+    // also fire directly, since a custom scheme isn't exclusive. A single-use nonce generated
+    // right before launching the flow, and required to match on the way back (Navigation.kt),
+    // is what stops an unsolicited deep link from being trusted as a real OAuth result.
+    private const val KEY_PENDING_OAUTH_NONCE = "pending_oauth_nonce"
+    private const val KEY_PENDING_OAUTH_NONCE_AT = "pending_oauth_nonce_at"
+    private const val OAUTH_NONCE_TTL_MS = 5 * 60 * 1000L // 5 minutes — plenty for a login round trip
+
+    fun setPendingOAuthNonce(context: Context, nonce: String) {
+        prefs(context).edit()
+            .putString(KEY_PENDING_OAUTH_NONCE, nonce)
+            .putLong(KEY_PENDING_OAUTH_NONCE_AT, System.currentTimeMillis())
+            .apply()
+    }
+
+    /**
+     * Non-destructive: returns the pending nonce (or null if none/expired) WITHOUT clearing it.
+     * Deliberately not "consume on read" — a stray/attacker-fired deep link with no or a wrong
+     * nonce must not burn a legitimate flow that's still in flight. Only [clearPendingOAuthNonce]
+     * (called once the real match is confirmed) actually consumes it.
+     */
+    fun peekPendingOAuthNonce(context: Context): String? {
+        val p = prefs(context)
+        val nonce = p.getString(KEY_PENDING_OAUTH_NONCE, null)
+        val setAt = p.getLong(KEY_PENDING_OAUTH_NONCE_AT, 0L)
+        if (nonce.isNullOrBlank()) return null
+        if (System.currentTimeMillis() - setAt > OAUTH_NONCE_TTL_MS) return null
+        return nonce
+    }
+
+    fun clearPendingOAuthNonce(context: Context) {
+        prefs(context).edit().remove(KEY_PENDING_OAUTH_NONCE).remove(KEY_PENDING_OAUTH_NONCE_AT).apply()
+    }
+
     const val THEME_SYSTEM = "system"
     const val THEME_LIGHT = "light"
     const val THEME_DARK = "dark"

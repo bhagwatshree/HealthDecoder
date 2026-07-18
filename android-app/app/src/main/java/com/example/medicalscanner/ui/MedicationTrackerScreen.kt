@@ -1,5 +1,8 @@
 package com.example.medicalscanner.ui
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -69,7 +72,15 @@ fun MedicationTrackerScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text(tr("Medication Tracker"), fontWeight = FontWeight.Bold) },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TopBarLogo()
+                        Text(tr("Medications"), fontWeight = FontWeight.Bold)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(imageVector = Icons.Default.ArrowBack, contentDescription = tr("Back"))
@@ -102,7 +113,7 @@ fun MedicationTrackerScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         IconButton(onClick = { exitSelection() }) {
-                            Icon(imageVector = Icons.Default.Close, contentDescription = "Cancel selection")
+                            Icon(imageVector = Icons.Default.Close, contentDescription = tr("Cancel selection"))
                         }
                         Text(text = "${selected.size} selected", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                         OutlinedButton(
@@ -112,7 +123,7 @@ fun MedicationTrackerScreen(
                         ) {
                             Icon(imageVector = Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Frequency")
+                            Text(tr("Frequency"))
                         }
                         Button(
                             onClick = {
@@ -136,7 +147,7 @@ fun MedicationTrackerScreen(
                         ) {
                             Icon(imageVector = Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Delete")
+                            Text(tr("Delete"))
                         }
                     }
                 }
@@ -158,7 +169,7 @@ fun MedicationTrackerScreen(
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(imageVector = Icons.Default.Clear, contentDescription = "Clear")
+                            Icon(imageVector = Icons.Default.Clear, contentDescription = tr("Clear"))
                         }
                     }
                 },
@@ -198,8 +209,8 @@ fun MedicationTrackerScreen(
                     if (filteredMeds.isEmpty()) {
                         EmptyStateView(
                             icon = Icons.Default.Medication,
-                            title = if (searchQuery.isNotEmpty()) "No matching medications" else "No medication history",
-                            description = "All medications extracted from prescriptions will show up here along with their dosage history."
+                            title = if (searchQuery.isNotEmpty()) tr("No matching medications") else tr("No medication history"),
+                            description = tr("All medications extracted from prescriptions will show up here along with their dosage history.")
                         )
                     } else {
                         LazyColumn(
@@ -244,7 +255,7 @@ fun MedicationTrackerScreen(
             var bulkFrequency by remember { mutableStateOf("") }
             AlertDialog(
                 onDismissRequest = { showBulkFrequencyDialog = false },
-                title = { Text("Change Frequency", fontWeight = FontWeight.Bold) },
+                title = { Text(tr("Change Frequency"), fontWeight = FontWeight.Bold) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(
@@ -254,13 +265,13 @@ fun MedicationTrackerScreen(
                         OutlinedTextField(
                             value = bulkFrequency,
                             onValueChange = { bulkFrequency = it },
-                            label = { Text("New Frequency") },
-                            placeholder = { Text("e.g. 1-0-1, twice daily, as needed") },
+                            label = { Text(tr("New Frequency")) },
+                            placeholder = { Text(tr("e.g. 1-0-1, twice daily, as needed")) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
                         Text(
-                            "Tip: 1-0-1 = morning & night, 1-1-1 = three times a day.",
+                            tr("Tip: 1-0-1 = morning & night, 1-1-1 = three times a day."),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -299,7 +310,7 @@ fun MedicationTrackerScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showBulkFrequencyDialog = false }) {
-                        Text("Cancel")
+                        Text(tr("Cancel"))
                     }
                 }
             )

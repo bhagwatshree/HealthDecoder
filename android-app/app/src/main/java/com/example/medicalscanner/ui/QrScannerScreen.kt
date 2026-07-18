@@ -142,7 +142,7 @@ fun QrScannerScreen(
             }
 
             Text(
-                "Point the camera at the QR code printed on the report",
+                tr("Point the camera at the QR code printed on the report"),
                 color = Color.White,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
@@ -158,12 +158,12 @@ fun QrScannerScreen(
             ) {
                 Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = Color.White)
                 Text(
-                    "Camera permission is needed to scan a QR code.",
+                    tr("Camera permission is needed to scan a QR code."),
                     color = Color.White,
                     textAlign = TextAlign.Center
                 )
                 Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
-                    Text("Grant permission")
+                    Text(tr("Grant permission"))
                 }
             }
         }
@@ -176,7 +176,7 @@ fun QrScannerScreen(
                 .clip(RoundedCornerShape(50))
                 .background(Color.Black.copy(alpha = 0.4f))
         ) {
-            Icon(Icons.Default.ArrowBack, contentDescription = "Close scanner", tint = Color.White)
+            Icon(Icons.Default.ArrowBack, contentDescription = tr("Close scanner"), tint = Color.White)
         }
     }
 }

@@ -20,7 +20,7 @@
         android:roundIcon="@drawable/medical_assist_logo"
         android:supportsRtl="true"
         android:windowSoftInputMode="adjustResize"
-        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/Theme.MedicalScanner">
 
         <provider

@@ -2,6 +2,9 @@ package com.example.medicalscanner.ui
 
 import android.app.Activity
 import android.content.Intent
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.clip
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -167,25 +170,31 @@ fun ChatScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text("AI Health Assistant", fontWeight = FontWeight.Bold)
-                        Text(
-                            text = contextHint?.let { "Asking about: $it" }
-                                ?: "Ask by text or voice — in your language",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TopBarLogo()
+                        Column {
+                            Text(tr("AI Health Assistant"), fontWeight = FontWeight.Bold)
+                            Text(
+                                text = contextHint?.let { "Asking about: $it" }
+                                    ?: tr("Ask by text or voice — in your language"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = tr("Back"))
                     }
                 },
                 actions = {
                     if (messages.isNotEmpty()) {
                         IconButton(onClick = { messages.clear() }) {
-                            Icon(imageVector = Icons.Default.DeleteSweep, contentDescription = "Clear chat")
+                            Icon(imageVector = Icons.Default.DeleteSweep, contentDescription = tr("Clear chat"))
                         }
                     }
                 },
@@ -211,6 +220,27 @@ fun ChatScreen(
                 .background(MaterialTheme.colorScheme.background)
                 .appWatermark()
         ) {
+            contextHint?.let { hint ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = tr("Asking about: "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = hint,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
             // Language selector + optional patient scope
             Row(
                 modifier = Modifier
@@ -229,7 +259,7 @@ fun ChatScreen(
                 OutlinedTextField(
                     value = patientName,
                     onValueChange = { patientName = it },
-                    label = { Text("Patient (optional)") },
+                    label = { Text(tr("Patient (optional)")) },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.weight(1.2f)
@@ -254,7 +284,7 @@ fun ChatScreen(
                     tint = MaterialTheme.colorScheme.onTertiaryContainer
                 )
                 Text(
-                    "Explains your records in simple terms. Not a doctor — always confirm with your physician.",
+                    tr("Explains your records in simple terms. Not a doctor — always confirm with your physician."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
@@ -292,7 +322,7 @@ fun ChatScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                    Text("Thinking…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(tr("Thinking…"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
@@ -336,7 +366,7 @@ private fun LanguageDropdown(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "Language",
+                            text = tr("Language"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -390,14 +420,14 @@ private fun ChatEmptyState(onQuestionClick: (String) -> Unit, onVoice: () -> Uni
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            "Ask by typing or tap the mic to speak",
+            tr("Ask by typing or tap the mic to speak"),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurface
         )
         Text(
-            "I explain test results, medicines, and doctor's notes in plain language.",
+            tr("I explain test results, medicines, and doctor's notes in plain language."),
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -406,7 +436,7 @@ private fun ChatEmptyState(onQuestionClick: (String) -> Unit, onVoice: () -> Uni
         Button(onClick = onVoice, shape = RoundedCornerShape(24.dp)) {
             Icon(Icons.Default.Mic, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("Speak your question")
+            Text(tr("Speak your question"))
         }
         Spacer(Modifier.height(16.dp))
         SUGGESTED_QUESTIONS.forEach { q ->
@@ -424,7 +454,7 @@ private fun ChatEmptyState(onQuestionClick: (String) -> Unit, onVoice: () -> Uni
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Icon(Icons.Default.ChatBubbleOutline, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                    Text(q, style = MaterialTheme.typography.bodyMedium)
+                    Text(tr(q), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
@@ -461,9 +491,9 @@ private fun ChatBubble(message: ChatMessage, onSpeak: (() -> Unit)?) {
             }
             if (onSpeak != null) {
                 TextButton(onClick = onSpeak, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
-                    Icon(Icons.Default.VolumeUp, contentDescription = "Read aloud", modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.VolumeUp, contentDescription = tr("Read aloud"), modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Listen", fontSize = 12.sp)
+                    Text(tr("Listen"), fontSize = 12.sp)
                 }
             }
         }
@@ -493,12 +523,12 @@ private fun ChatInputBar(
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             IconButton(onClick = onVoice) {
-                Icon(imageVector = Icons.Default.Mic, contentDescription = "Speak", tint = MaterialTheme.colorScheme.primary)
+                Icon(imageVector = Icons.Default.Mic, contentDescription = tr("Speak"), tint = MaterialTheme.colorScheme.primary)
             }
             OutlinedTextField(
                 value = input,
                 onValueChange = onInputChange,
-                placeholder = { Text("Type or tap mic…") },
+                placeholder = { Text(tr("Type or tap mic…")) },
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(24.dp),
                 maxLines = 4,
@@ -506,7 +536,7 @@ private fun ChatInputBar(
                 keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { onSend() })
             )
             FilledIconButton(onClick = onSend, enabled = enabled && input.isNotBlank()) {
-                Icon(imageVector = Icons.Default.Send, contentDescription = "Send")
+                Icon(imageVector = Icons.Default.Send, contentDescription = tr("Send"))
             }
         }
     }

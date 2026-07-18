@@ -13,6 +13,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -224,14 +228,17 @@ fun LoginScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(
-                imageVector = Icons.Default.Lock,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(48.dp)
+            Image(
+                painter = painterResource(id = com.example.medicalscanner.R.drawable.medical_assist_logo),
+                contentDescription = "Medical Assist Logo",
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(RoundedCornerShape(16.dp))
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(text = "Welcome back", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(text = "Medical Assist", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = "Secure Medical Report Analyzer", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Signing in gives you your own free daily AI usage allowance, separate from other users of this app.",
@@ -325,6 +332,7 @@ fun LoginScreen(
                     value = email,
                     onValueChange = { email = it },
                     label = { Text("Email") },
+                    leadingIcon = { Icon(imageVector = Icons.Default.Email, contentDescription = null) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     shape = RoundedCornerShape(12.dp),
@@ -335,6 +343,7 @@ fun LoginScreen(
                     value = password,
                     onValueChange = { password = it },
                     label = { Text("Password") },
+                    leadingIcon = { Icon(imageVector = Icons.Default.Lock, contentDescription = null) },
                     singleLine = true,
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
@@ -467,14 +476,13 @@ fun LoginScreen(
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
-                Text(
-                    text = "G ",
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF4285F4),
-                    fontSize = 18.sp
+                Image(
+                    painter = painterResource(id = com.example.medicalscanner.R.drawable.ic_google_logo),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Continue with Google", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(modifier = Modifier.width(10.dp))
+                Text("Sign In with Google", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
             }
 
 

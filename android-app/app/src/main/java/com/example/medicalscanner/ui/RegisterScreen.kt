@@ -2,6 +2,9 @@ package com.example.medicalscanner.ui
 
 import android.app.Activity
 import android.app.DatePickerDialog
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.clip
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.foundation.clickable
@@ -85,6 +88,7 @@ fun RegisterScreen(
     var isSendingOtp by remember { mutableStateOf(false) }
     var isVerifying by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var consentChecked by remember { mutableStateOf(false) }
 
     fun validateForm(): String? {
         if (firstName.trim().isEmpty() || lastName.trim().isEmpty()) return "Enter your first and last name."
@@ -177,10 +181,18 @@ fun RegisterScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Create your account", fontWeight = FontWeight.Bold) },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TopBarLogo()
+                        Text(tr("Create Account"), fontWeight = FontWeight.Bold)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = tr("Back"))
                     }
                 }
             )
@@ -200,7 +212,7 @@ fun RegisterScreen(
                     OutlinedTextField(
                         value = firstName,
                         onValueChange = { firstName = it },
-                        label = { Text("First name") },
+                        label = { Text(tr("First name")) },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
@@ -208,57 +220,60 @@ fun RegisterScreen(
                     OutlinedTextField(
                         value = lastName,
                         onValueChange = { lastName = it },
-                        label = { Text("Last name") },
+                        label = { Text(tr("Last name")) },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
                     )
                 }
 
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = dobDisplay,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Date of birth") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .clickable {
-                                val cal = Calendar.getInstance()
-                                DatePickerDialog(
-                                    context,
-                                    { _, year, month, dayOfMonth ->
-                                        val picked = Calendar.getInstance().apply { set(year, month, dayOfMonth, 0, 0, 0) }
-                                        dobMillis = picked.timeInMillis
-                                        dobDisplay = "%02d/%02d/%04d".format(dayOfMonth, month + 1, year)
-                                    },
-                                    cal.get(Calendar.YEAR) - 25, cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
-                                ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
-                            }
-                    )
-                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        OutlinedTextField(
+                            value = dobDisplay,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text(tr("Date of birth")) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clickable {
+                                    val cal = Calendar.getInstance()
+                                    DatePickerDialog(
+                                        context,
+                                        { _, year, month, dayOfMonth ->
+                                            val picked = Calendar.getInstance().apply { set(year, month, dayOfMonth, 0, 0, 0) }
+                                            dobMillis = picked.timeInMillis
+                                            dobDisplay = "%02d/%02d/%04d".format(dayOfMonth, month + 1, year)
+                                        },
+                                        cal.get(Calendar.YEAR) - 25, cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
+                                    ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
+                                }
+                        )
+                    }
 
-                ExposedDropdownMenuBox(
-                    expanded = genderMenuExpanded,
-                    onExpandedChange = { genderMenuExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = if (genderIndex >= 0) GENDER_OPTIONS[genderIndex].first else "",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Gender") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryEditable)
-                    )
-                    ExposedDropdownMenu(expanded = genderMenuExpanded, onDismissRequest = { genderMenuExpanded = false }) {
-                        GENDER_OPTIONS.forEachIndexed { index, (label, _) ->
-                            DropdownMenuItem(text = { Text(label) }, onClick = { genderIndex = index; genderMenuExpanded = false })
+                    ExposedDropdownMenuBox(
+                        expanded = genderMenuExpanded,
+                        onExpandedChange = { genderMenuExpanded = it },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        OutlinedTextField(
+                            value = if (genderIndex >= 0) GENDER_OPTIONS[genderIndex].first else "",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text(tr("Gender")) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryEditable)
+                        )
+                        ExposedDropdownMenu(expanded = genderMenuExpanded, onDismissRequest = { genderMenuExpanded = false }) {
+                            GENDER_OPTIONS.forEachIndexed { index, (label, _) ->
+                                DropdownMenuItem(text = { Text(label) }, onClick = { genderIndex = index; genderMenuExpanded = false })
+                            }
                         }
                     }
                 }
@@ -266,7 +281,7 @@ fun RegisterScreen(
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
-                    label = { Text("Email") },
+                    label = { Text(tr("Email")) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     shape = RoundedCornerShape(12.dp),
@@ -275,12 +290,12 @@ fun RegisterScreen(
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("Password") },
+                    label = { Text(tr("Password")) },
                     singleLine = true,
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         val image = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
-                        val description = if (passwordVisible) "Hide password" else "Show password"
+                        val description = if (passwordVisible) tr("Hide password") else tr("Show password")
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
                             Icon(imageVector = image, contentDescription = description)
                         }
@@ -292,13 +307,24 @@ fun RegisterScreen(
                 OutlinedTextField(
                     value = phoneDigits,
                     onValueChange = { phoneDigits = it.filter { c -> c.isDigit() }.take(10) },
-                    label = { Text("Mobile number") },
+                    label = { Text(tr("Mobile number")) },
                     singleLine = true,
-                    leadingIcon = { Text("+91", modifier = Modifier.padding(start = 12.dp)) },
+                    leadingIcon = { Text(tr("+91"), modifier = Modifier.padding(start = 12.dp)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { consentChecked = !consentChecked }
+                ) {
+                    Checkbox(checked = consentChecked, onCheckedChange = { consentChecked = it })
+                    Text(
+                        tr("I agree that this app is not a medical device and does not provide clinical advice."),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
 
                 errorMessage?.let {
                     Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -307,7 +333,7 @@ fun RegisterScreen(
                 Spacer(modifier = Modifier.height(4.dp))
                 Button(
                     onClick = { sendOtp() },
-                    enabled = !isSendingOtp,
+                    enabled = !isSendingOtp && consentChecked,
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
@@ -316,8 +342,14 @@ fun RegisterScreen(
                     } else {
                         Icon(imageVector = Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Send OTP", fontWeight = FontWeight.SemiBold)
+                        Text(tr("Send OTP"), fontWeight = FontWeight.SemiBold)
                     }
+                }
+                TextButton(
+                    onClick = onNavigateBack,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(tr("Already have an account? Sign In"))
                 }
             } else {
                 Text(
@@ -329,7 +361,7 @@ fun RegisterScreen(
                 OutlinedTextField(
                     value = otpCode,
                     onValueChange = { otpCode = it.filter { c -> c.isDigit() }.take(6) },
-                    label = { Text("OTP code") },
+                    label = { Text(tr("OTP code")) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     shape = RoundedCornerShape(12.dp),
@@ -349,11 +381,11 @@ fun RegisterScreen(
                     if (isVerifying) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("Verify & Create Account", fontWeight = FontWeight.SemiBold)
+                        Text(tr("Verify & Create Account"), fontWeight = FontWeight.SemiBold)
                     }
                 }
                 TextButton(onClick = { otpSent = false; otpCode = ""; errorMessage = null }) {
-                    Text("Change phone number")
+                    Text(tr("Change phone number"))
                 }
             }
         }

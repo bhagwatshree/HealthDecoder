@@ -15,6 +15,14 @@ object SecureKeyManager {
     private const val PREFS_FILE = "secure_key_prefs"
     private const val KEY_DB_PASSWORD = "db_passphrase_key"
 
+    // Set the moment either Keystore-backed path below throws and falls back to plain
+    // SharedPreferences (e.g. a corrupted/modified Keystore on some custom ROMs) — surfaced
+    // by AccountScreen.kt as a warning instead of silently downgrading with no indication.
+    @Volatile
+    private var usedInsecureFallback = false
+
+    fun isStorageHardwareBacked(): Boolean = !usedInsecureFallback
+
     /**
      * Retrieves the persisted database passphrase, generating a new one if it doesn't exist.
      * Returns the 32-byte key as a ByteArray.
@@ -40,6 +48,7 @@ object SecureKeyManager {
             Base64.decode(passStr, Base64.NO_WRAP)
         } catch (e: Exception) {
             e.printStackTrace()
+            usedInsecureFallback = true
             // Fallback (e.g., if Keystore has become corrupted or modified on custom ROMs)
             val legacyPrefs = context.getSharedPreferences("legacy_key_prefs", Context.MODE_PRIVATE)
             var passStr = legacyPrefs.getString(KEY_DB_PASSWORD, null)
@@ -65,6 +74,7 @@ object SecureKeyManager {
             )
         } catch (e: Exception) {
             e.printStackTrace()
+            usedInsecureFallback = true
             context.getSharedPreferences("legacy_secure_prefs", Context.MODE_PRIVATE)
         }
     }

@@ -101,6 +101,14 @@ async function runMigration() {
     `);
     console.log('Columns google_email, google_refresh_token checked/added to users table.');
 
+    // Token revocation: bumped on password change so previously-issued JWTs (which embed the
+    // version at sign time) stop verifying immediately, instead of staying valid for the full
+    // 30-day expiry after a password change/account compromise response.
+    await db.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0;
+    `);
+    console.log('Column token_version checked/added to users table.');
+
 
     // One row per external AI/SMS call — feeds the local cost dashboard (D:\Medical_Admin_Dashboard).
     await db.query(`

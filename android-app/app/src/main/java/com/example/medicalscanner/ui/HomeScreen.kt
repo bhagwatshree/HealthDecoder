@@ -18,10 +18,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 private data class HomeAction(
     val label: String,
-    val icon: ImageVector,
+    val emoji: String,
     val containerColor: Color,
     val contentColor: Color,
     val onClick: () -> Unit
@@ -46,27 +47,27 @@ fun HomeScreen(
     // Order matches the priority the user asked for: Scan first, Trends last.
     val actions = listOf(
         HomeAction(
-            "Scan Report", Icons.Default.AddPhotoAlternate,
+            "Scan Report", "📸",
             Color(0xFFE8F5E9), Color(0xFF2E7D32), onNavigateToScan
         ),
         HomeAction(
-            "Records", Icons.Default.History,
+            "Records", "📜",
             Color(0xFFECEFF1), Color(0xFF455A64), onNavigateToRecords
         ),
         HomeAction(
-            "Reminders", Icons.Default.Alarm,
+            "Reminders", "⏰",
             Color(0xFFFFF3E0), Color(0xFFE65100), onNavigateToReminders
         ),
         HomeAction(
-            "Medication Tracker", Icons.Default.Medication,
+            "Medications", "💊",
             Color(0xFFF3E5F5), Color(0xFF6A1B9A), onNavigateToMedicationTracker
         ),
         HomeAction(
-            "Pending Tests", Icons.Default.NotificationsActive,
-            Color(0xFFFFEBEE), Color(0xFFC62828), onNavigateToPendingTests
+            "Pending Tests", "🚨",
+            Color(0xFFFFF9C4), Color(0xFFC62828), onNavigateToPendingTests
         ),
         HomeAction(
-            "Trends", Icons.Default.ShowChart,
+            "Trends", "📈",
             Color(0xFFE3F2FD), Color(0xFF1565C0), onNavigateToTrends
         )
     )
@@ -87,32 +88,24 @@ fun HomeScreen(
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        // The source JPG has an opaque white background (no alpha channel), so it
-                        // sits in a deliberate white badge rather than floating directly on the
-                        // top bar — otherwise it shows as a stray white box in dark mode.
-                        Image(
-                            painter = painterResource(id = com.example.medicalscanner.R.drawable.medical_assist_logo),
-                            contentDescription = "Medical Assist",
-                            modifier = Modifier
-                                .height(32.dp)
-                                .width(32.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.White, RoundedCornerShape(8.dp))
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                        TopBarLogo(size = 24.dp)
+                        Text(
+                            text = "Medical Assist",
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary
                         )
-                        IconButton(onClick = onRefresh, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = tr("Refresh"),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
                     }
                 },
                 actions = {
-                    IconButton(onClick = onNavigateToCompare) {
+                    IconButton(onClick = onRefresh, modifier = Modifier.size(40.dp)) {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = tr("Refresh"))
+                    }
+                    IconButton(onClick = onNavigateToCompare, modifier = Modifier.size(40.dp)) {
                         Icon(imageVector = Icons.Default.CompareArrows, contentDescription = tr("Compare Reports"))
                     }
                     LanguagePickerIcon()
@@ -129,8 +122,6 @@ fun HomeScreen(
                 .padding(innerPadding)
                 .appWatermark()
         ) {
-            BackgroundScanProgressBar(onNavigateToDetail = onNavigateToDetail)
-
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -150,6 +141,8 @@ fun HomeScreen(
                         }
                     }
                 }
+
+                BackgroundScanProgressBar(onNavigateToDetail = onNavigateToDetail)
             }
         }
     }
@@ -173,13 +166,12 @@ private fun ActionSquare(action: HomeAction, modifier: Modifier = Modifier) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(
-                imageVector = action.icon,
-                contentDescription = label,
-                tint = action.contentColor,
-                modifier = Modifier.size(40.dp)
+            Text(
+                text = action.emoji,
+                fontSize = 38.sp,
+                modifier = Modifier.padding(bottom = 6.dp)
             )
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = label,
                 fontWeight = FontWeight.Bold,

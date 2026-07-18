@@ -57,7 +57,7 @@ fun EmptyStateView(
         ) {
             Icon(
                 imageVector = icon,
-                contentDescription = "Empty",
+                contentDescription = tr("Empty"),
                 modifier = Modifier.size(64.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
             )
@@ -234,11 +234,11 @@ fun MedicationHistoryCard(
                 ) {
                     Icon(
                         imageVector = if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                        contentDescription = if (selected) "Selected" else "Not selected",
+                        contentDescription = if (selected) tr("Selected") else tr("Not selected"),
                         tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = if (selected) "Selected" else "Tap to select",
+                        text = if (selected) tr("Selected") else tr("Tap to select"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -295,7 +295,7 @@ fun MedicationHistoryCard(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Restaurant,
-                            contentDescription = "Food instruction",
+                            contentDescription = tr("Food instruction"),
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(14.dp)
                         )
@@ -330,7 +330,7 @@ fun MedicationHistoryCard(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Info,
-                        contentDescription = "Instruction",
+                        contentDescription = tr("Instruction"),
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(18.dp)
                     )
@@ -346,7 +346,7 @@ fun MedicationHistoryCard(
             // Routine visual capsules
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = "Daily Dosage Routine",
+                    text = tr("Daily Dosage Routine"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium
@@ -413,7 +413,7 @@ fun MedicationHistoryCard(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Text("Dosage & Frequency", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(tr("Dosage & Frequency"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
                         text = if (med.currentFrequency.isNotEmpty()) "${med.currentDosage} (${med.currentFrequency})" else med.currentDosage,
                         style = MaterialTheme.typography.bodyMedium,
@@ -428,9 +428,9 @@ fun MedicationHistoryCard(
                     verticalAlignment = Alignment.Bottom
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Duration", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(tr("Duration"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(
-                            text = med.currentDuration.ifEmpty { "Ongoing" },
+                            text = med.currentDuration.ifEmpty { tr("Ongoing") },
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -454,14 +454,14 @@ fun MedicationHistoryCard(
                     // Calendar Days Strip (Active Highlighted)
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            text = if (med.isOptional) "Optional / As Needed" else "Weekly Schedule",
+                            text = if (med.isOptional) tr("Optional / As Needed") else tr("Weekly Schedule"),
                             style = MaterialTheme.typography.bodySmall,
                             color = if (med.isOptional) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = if (med.isOptional) FontWeight.SemiBold else FontWeight.Normal,
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            val dayLabels = listOf("M", "T", "W", "T", "F", "S", "S")
+                            val dayLabels = listOf(tr("M"), tr("T"), tr("W"), tr("T"), tr("F"), tr("S"), tr("S"))
                             dayLabels.forEachIndexed { idx, day ->
                                 val active = activeDays.getOrElse(idx) { true }
                                 Box(
@@ -560,7 +560,7 @@ fun PendingTestCard(
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = if (isPending) "Report not available" else "Completed",
+                        text = if (isPending) tr("Report not available") else tr("Completed"),
                         color = if (isPending) Color(0xFFC62828) else Color(0xFF2E7D32),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
@@ -585,7 +585,7 @@ fun PendingTestCard(
                 IconButton(onClick = onDeleteClick) {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete Reminder",
+                        contentDescription = tr("Delete Reminder"),
                         tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
                         modifier = Modifier.size(20.dp)
                     )
@@ -598,9 +598,9 @@ fun PendingTestCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Due Date", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(tr("Due Date"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
-                        text = test.dueDate ?: "No timeline specified",
+                        text = test.dueDate ?: tr("No timeline specified"),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = if (isPending) MaterialTheme.colorScheme.onSurface else Color(0xFF2E7D32)
@@ -610,8 +610,8 @@ fun PendingTestCard(
                 if (!isPending && test.resolvedReportId != null) {
                     TextButton(onClick = onResolveClick) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(imageVector = Icons.Default.Visibility, contentDescription = "View Report", modifier = Modifier.size(16.dp))
-                            Text("View Scanned Report", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Icon(imageVector = Icons.Default.Visibility, contentDescription = tr("View Report"), modifier = Modifier.size(16.dp))
+                            Text(tr("View Scanned Report"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -639,59 +639,63 @@ fun ReportItemCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            val typeColor = when (report.reportType?.lowercase()) {
+                "prescription" -> Pair(Color(0xFFE3F2FD), Color(0xFF1565C0)) // Blue
+                "lab report" -> Pair(Color(0xFFE8F5E9), Color(0xFF2E7D32)) // Green
+                else -> Pair(Color(0xFFECEFF1), Color(0xFF455A64)) // Grey
+            }
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(typeColor.first)
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = report.patientName ?: "Unknown Patient",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    text = (report.reportType ?: tr("Report")).uppercase(),
+                    color = typeColor.second,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
                 )
-                
-                val typeColor = when (report.reportType?.lowercase()) {
-                    "prescription" -> Pair(Color(0xFFE3F2FD), Color(0xFF1565C0)) // Blue
-                    "lab report" -> Pair(Color(0xFFE8F5E9), Color(0xFF2E7D32)) // Green
-                    else -> Pair(Color(0xFFECEFF1), Color(0xFF455A64)) // Grey
-                }
-                
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(typeColor.first)
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+            }
+
+            Text(
+                text = "Patient: ${report.patientName ?: "Unknown Patient"}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Text(
+                text = report.reportDate ?: tr("No Date"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (report.medications.isNotEmpty()) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = report.reportType ?: "Report",
-                        color = typeColor.second,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    report.medications.forEach { med ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            val medLabel = if (med.dosage.isNotBlank()) "${med.name} ${med.dosage}" else med.name
+                            Text(
+                                text = medLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = report.reportDate ?: "No Date",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                
-                if (report.medications.isNotEmpty()) {
-                    Text(
-                        text = "${report.medications.size} Med(s)",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-            
+
             if (!report.comments.isNullOrBlank()) {
                 Divider(modifier = Modifier.padding(vertical = 4.dp))
                 Text(
@@ -902,7 +906,7 @@ fun MedicationDetailsDialog(
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "DIRECTIONS FOR PATIENT",
+                            text = tr("DIRECTIONS FOR PATIENT"),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -927,7 +931,7 @@ fun MedicationDetailsDialog(
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = "RECORD INTAKE",
+                            text = tr("RECORD INTAKE"),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -952,8 +956,8 @@ fun MedicationDetailsDialog(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(imageVector = Icons.Default.Check, contentDescription = "Log Dose")
-                                Text("Log Dose Taken Now", fontWeight = FontWeight.Bold)
+                                Icon(imageVector = Icons.Default.Check, contentDescription = tr("Log Dose"))
+                                Text(tr("Log Dose Taken Now"), fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -962,7 +966,7 @@ fun MedicationDetailsDialog(
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(
-                            text = "EDIT PRESCRIPTION METADATA",
+                            text = tr("EDIT PRESCRIPTION METADATA"),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -971,8 +975,8 @@ fun MedicationDetailsDialog(
                         OutlinedTextField(
                             value = dosage,
                             onValueChange = { dosage = it },
-                            label = { Text("Dosage") },
-                            placeholder = { Text("e.g. 1 tablet") },
+                            label = { Text(tr("Dosage")) },
+                            placeholder = { Text(tr("e.g. 1 tablet")) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -980,8 +984,8 @@ fun MedicationDetailsDialog(
                         OutlinedTextField(
                             value = frequency,
                             onValueChange = { frequency = it },
-                            label = { Text("Frequency String") },
-                            placeholder = { Text("e.g. 1-0-1") },
+                            label = { Text(tr("Frequency String")) },
+                            placeholder = { Text(tr("e.g. 1-0-1")) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -989,8 +993,8 @@ fun MedicationDetailsDialog(
                         OutlinedTextField(
                             value = duration,
                             onValueChange = { duration = it },
-                            label = { Text("Duration") },
-                            placeholder = { Text("e.g. 5 days") },
+                            label = { Text(tr("Duration")) },
+                            placeholder = { Text(tr("e.g. 5 days")) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -998,8 +1002,8 @@ fun MedicationDetailsDialog(
                         OutlinedTextField(
                             value = notes,
                             onValueChange = { notes = it },
-                            label = { Text("Special Patient Notes") },
-                            placeholder = { Text("e.g. Take with warm water") },
+                            label = { Text(tr("Special Patient Notes")) },
+                            placeholder = { Text(tr("e.g. Take with warm water")) },
                             modifier = Modifier.fillMaxWidth()
                         )
                         
@@ -1009,8 +1013,8 @@ fun MedicationDetailsDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Optional / As Needed", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                Text("Check this if taken only when symptoms arise (e.g. SOS, PRN)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(tr("Optional / As Needed"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                Text(tr("Check this if taken only when symptoms arise (e.g. SOS, PRN)"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Switch(
                                 checked = isOptional,
@@ -1031,12 +1035,12 @@ fun MedicationDetailsDialog(
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
-                                text = "CUSTOM WEEKLY SCHEDULE",
+                                text = tr("CUSTOM WEEKLY SCHEDULE"),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
                             )
-                            Text("Select which days the patient should take this medicine:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(tr("Select which days the patient should take this medicine:"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             
                             val daysOfWeek = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
                             
@@ -1095,7 +1099,7 @@ fun MedicationDetailsDialog(
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = "RECENT ACTIVITY & HISTORY",
+                            text = tr("RECENT ACTIVITY & HISTORY"),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -1105,7 +1109,7 @@ fun MedicationDetailsDialog(
                             CircularProgressIndicator(modifier = Modifier.size(24.dp).align(Alignment.CenterHorizontally))
                         } else if (intakeLogs.isEmpty()) {
                             Text(
-                                text = "No recorded logs for this medicine yet.",
+                                text = tr("No recorded logs for this medicine yet."),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1117,8 +1121,8 @@ fun MedicationDetailsDialog(
                                     val logNotes = log.notes ?: ""
                                     
                                     val displayText = when (action) {
-                                        "TAKEN" -> "Dose recorded as taken"
-                                        "UPDATE_DETAILS" -> "Frequency/details updated"
+                                        "TAKEN" -> tr("Dose recorded as taken")
+                                        "UPDATE_DETAILS" -> tr("Frequency/details updated")
                                         else -> action
                                     }
                                     
@@ -1186,13 +1190,13 @@ fun MedicationDetailsDialog(
                 if (isSaving) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
                 } else {
-                    Text("Save Changes")
+                    Text(tr("Save Changes"))
                 }
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Close")
+                Text(tr("Close"))
             }
         }
     )
@@ -1206,37 +1210,43 @@ fun ClinicalInsightsPanel(
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
-        shape = RoundedCornerShape(16.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+        shape = RoundedCornerShape(16.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = "Insights",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Clinical Insights & Trends",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            
-            Text(
-                text = "Based on your latest uploaded reports, here is what has changed and the differences:",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(4.dp)
+                    .background(MaterialTheme.colorScheme.primary)
             )
-            
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Lightbulb,
+                        contentDescription = tr("Insights"),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = tr("Clinical Insights"),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Text(
+                    text = tr("Based on your latest uploaded reports, here is what has changed and the differences:"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 inferences.forEach { inference ->
                     Card(
                         modifier = Modifier
@@ -1255,12 +1265,12 @@ fun ClinicalInsightsPanel(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 val categoryLabel = when (inference.reportCategory.lowercase()) {
-                                    "blood_test" -> "Blood Test"
-                                    "sonography" -> "Sonography"
-                                    "2d_echo" -> "2D Echo"
-                                    "xray" -> "X-Ray"
-                                    "prescription" -> "Prescription"
-                                    else -> "Medical Scan"
+                                    "blood_test" -> tr("Blood Test")
+                                    "sonography" -> tr("Sonography")
+                                    "2d_echo" -> tr("2D Echo")
+                                    "xray" -> tr("X-Ray")
+                                    "prescription" -> tr("Prescription")
+                                    else -> tr("Medical Scan")
                                 }
                                 Text(
                                     text = "${inference.patientName} • $categoryLabel",
@@ -1309,14 +1319,14 @@ fun ClinicalInsightsPanel(
                                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
                                     Text(
-                                        text = "View details",
+                                        text = tr("View details"),
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                     Icon(
                                         imageVector = Icons.Default.ChevronRight,
-                                        contentDescription = "Details",
+                                        contentDescription = tr("Details"),
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(12.dp)
                                     )
@@ -1325,6 +1335,7 @@ fun ClinicalInsightsPanel(
                         }
                     }
                 }
+            }
             }
         }
     }
@@ -1360,69 +1371,92 @@ fun BackgroundScanProgressBar(
                 ),
                 elevation = CardDefaults.cardElevation(2.dp)
             ) {
-                Row(
+                Column(
                     modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (job.status != ScanJobStatus.COMPLETED && job.status != ScanJobStatus.ERROR) {
-                        CircularProgressIndicator(
-                            progress = { job.progress },
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.5.dp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    } else if (job.status == ScanJobStatus.COMPLETED) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = "Success",
-                            tint = Color(0xFF2E7D32),
-                            modifier = Modifier.size(24.dp)
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Error,
-                            contentDescription = "Error",
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        val statusText = when (job.status) {
-                            ScanJobStatus.UPLOADING -> "Uploading report..."
-                            ScanJobStatus.OCR -> "Analyzing with AI..."
-                            ScanJobStatus.SAVING -> "Saving details..."
-                            ScanJobStatus.COMPLETED -> "Report scan complete! Tap to view."
-                            ScanJobStatus.ERROR -> job.error ?: "Scan failed."
-                        }
-                        Text(
-                            text = statusText,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = when (job.status) {
-                                ScanJobStatus.ERROR -> MaterialTheme.colorScheme.onErrorContainer
-                                ScanJobStatus.COMPLETED -> Color(0xFF1B5E20)
-                                else -> MaterialTheme.colorScheme.onPrimaryContainer
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (job.status == ScanJobStatus.COMPLETED) {
+                                Icon(Icons.Default.CheckCircle, contentDescription = tr("Success"), tint = Color(0xFF2E7D32), modifier = Modifier.size(20.dp))
+                            } else if (job.status == ScanJobStatus.ERROR) {
+                                Icon(Icons.Default.Error, contentDescription = tr("Error"), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
                             }
-                        )
-                        Text(
-                            text = "Patient: ${job.patientName} (${job.scanType.replaceFirstChar { it.lowercase() }})",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                            Text(
+                                text = tr("Active Ingestion"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = when (job.status) {
+                                    ScanJobStatus.ERROR -> MaterialTheme.colorScheme.onErrorContainer
+                                    ScanJobStatus.COMPLETED -> Color(0xFF1B5E20)
+                                    else -> MaterialTheme.colorScheme.onPrimaryContainer
+                                }
+                            )
+                        }
+                        val (badgeText, badgeColor) = when (job.status) {
+                            ScanJobStatus.COMPLETED -> tr("DONE") to Color(0xFF2E7D32)
+                            ScanJobStatus.ERROR -> tr("FAILED") to MaterialTheme.colorScheme.error
+                            else -> tr("PROCESSING") to MaterialTheme.colorScheme.primary
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(badgeColor.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(text = badgeText, color = badgeColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                        if (job.status == ScanJobStatus.COMPLETED || job.status == ScanJobStatus.ERROR) {
+                            IconButton(
+                                onClick = { BackgroundScanScheduler.removeJob(job.id) },
+                                modifier = Modifier.size(20.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Close, contentDescription = tr("Close"), modifier = Modifier.size(16.dp))
+                            }
+                        }
                     }
 
-                    if (job.status == ScanJobStatus.COMPLETED || job.status == ScanJobStatus.ERROR) {
-                        IconButton(
-                            onClick = { BackgroundScanScheduler.removeJob(job.id) },
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close",
-                                modifier = Modifier.size(16.dp)
-                            )
+                    val statusText = when (job.status) {
+                        ScanJobStatus.UPLOADING -> tr("Uploading report...")
+                        ScanJobStatus.OCR -> tr("Analyzing with AI...")
+                        ScanJobStatus.SAVING -> tr("Saving details...")
+                        ScanJobStatus.COMPLETED -> tr("Report scan complete! Tap to view.")
+                        ScanJobStatus.ERROR -> job.error ?: tr("Scan failed.")
+                    }
+                    Text(
+                        text = "${tr("Analyzing")}: ${job.patientName} (${job.scanType.replaceFirstChar { it.lowercase() }}) — $statusText",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (job.status != ScanJobStatus.COMPLETED && job.status != ScanJobStatus.ERROR) {
+                        LinearProgressIndicator(
+                            progress = { job.progress },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        )
+
+                        val steps = listOf(tr("OCR Extractor"), tr("Gemini Analysis"), tr("Database Sync"))
+                        val currentStep = when (job.status) {
+                            ScanJobStatus.UPLOADING -> 0
+                            ScanJobStatus.OCR -> 1
+                            ScanJobStatus.SAVING -> 2
+                            else -> -1
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            steps.forEachIndexed { index, step ->
+                                Text(
+                                    text = if (index < steps.lastIndex) "$step • " else step,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (index == currentStep) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (index == currentStep) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                            }
                         }
                     }
                 }

@@ -89,6 +89,10 @@ CREATE TABLE IF NOT EXISTS users (
     own_sarvam_key TEXT, -- AES-256-GCM encrypted, see backend/auth.js
     google_email VARCHAR(255),
     google_refresh_token TEXT,
+    -- Bumped on password change so previously-issued JWTs (which embed the version at sign
+    -- time, see backend/auth.js) stop verifying immediately instead of staying valid for the
+    -- rest of their 30-day expiry.
+    token_version INTEGER NOT NULL DEFAULT 0,
     usage_count INTEGER NOT NULL DEFAULT 0,
     usage_period_start DATE NOT NULL DEFAULT CURRENT_DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

@@ -121,7 +121,7 @@ fun MedicineInfoSheet(
         ) {
             // ── Header ──────────────────────────────────────────────────
             Text(
-                "Medicine Reference",
+                tr("Medicine Reference"),
                 fontSize = 24.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -131,7 +131,7 @@ fun MedicineInfoSheet(
             OutlinedTextField(
                 value = editableName,
                 onValueChange = { editableName = it },
-                label = { Text("Medicine Name") },
+                label = { Text(tr("Medicine Name")) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 trailingIcon = {
@@ -148,7 +148,7 @@ fun MedicineInfoSheet(
                         }) {
                             Icon(
                                 Icons.Default.Search,
-                                "Look Up",
+                                tr("Look Up"),
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -235,7 +235,7 @@ fun MedicineInfoSheet(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            catStyle.icon, "Category",
+                            catStyle.icon, tr("Category"),
                             tint = catStyle.color,
                             modifier = Modifier.size(30.dp)
                         )
@@ -276,12 +276,12 @@ fun MedicineInfoSheet(
                         ) {
                             Icon(
                                 Icons.Default.Info,
-                                "Info",
+                                tr("Info"),
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
                             )
                             Text(
-                                "Why It's Prescribed",
+                                tr("Why It's Prescribed"),
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -315,12 +315,12 @@ fun MedicineInfoSheet(
                             ) {
                                 Icon(
                                     Icons.Default.Lightbulb,
-                                    "Tips",
+                                    tr("Tips"),
                                     tint = Color(0xFFF9A825),
                                     modifier = Modifier.size(22.dp)
                                 )
                                 Text(
-                                    "Key Notes",
+                                    tr("Key Notes"),
                                     fontSize = 17.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -369,12 +369,12 @@ fun MedicineInfoSheet(
                             ) {
                                 Icon(
                                     Icons.Default.Edit,
-                                    "Edit",
+                                    tr("Edit"),
                                     tint = Color(0xFFF57F17),
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Text(
-                                    "Name Correction",
+                                    tr("Name Correction"),
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFFF57F17)
@@ -393,7 +393,7 @@ fun MedicineInfoSheet(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2E7D32), modifier = Modifier.size(18.dp))
-                                    Text("Name saved!", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                                    Text(tr("Name saved!"), color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
                                 }
                             } else {
                                 Button(
@@ -423,7 +423,7 @@ fun MedicineInfoSheet(
                                     } else {
                                         Icon(Icons.Default.Save, null, modifier = Modifier.size(18.dp))
                                         Spacer(Modifier.width(8.dp))
-                                        Text("Save Corrected Name", fontWeight = FontWeight.Bold)
+                                        Text(tr("Save Corrected Name"), fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -433,7 +433,7 @@ fun MedicineInfoSheet(
 
                 // Disclaimer
                 Text(
-                    "ℹ️ AI-generated reference. Always consult your doctor for medical advice.",
+                    tr("ℹ️ AI-generated reference. Always consult your doctor for medical advice."),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     textAlign = TextAlign.Center,

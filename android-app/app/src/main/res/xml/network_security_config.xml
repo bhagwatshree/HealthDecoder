@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Blocks plaintext HTTP app-wide. The only backend the app talks to is the deployed HTTPS API
+  Gateway URL (NetworkModule.DEFAULT_SERVER_URL) — there is no in-app UI left that lets a user
+  point the app at a different, possibly-plaintext server (the old server-IP-override setting
+  has no surviving UI entry point), so there's no legitimate reason to allow cleartext.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

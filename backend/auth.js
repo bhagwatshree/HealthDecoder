@@ -7,9 +7,20 @@ import { initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import db from './db.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-insecure-secret-change-me';
-// Derive a 32-byte key regardless of the length of the configured secret.
-const ENCRYPTION_KEY = crypto.createHash('sha256').update(process.env.ENCRYPTION_KEY || JWT_SECRET).digest();
+// Fail loudly at startup rather than silently signing tokens / encrypting stored API keys
+// with a known, publicly-committed placeholder secret. Both are required deploy parameters
+// with no default in template.yaml, so a correctly configured deploy is unaffected.
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required and must not be empty.');
+}
+if (!process.env.ENCRYPTION_KEY) {
+  throw new Error('ENCRYPTION_KEY environment variable is required and must not be empty.');
+}
+const JWT_SECRET = process.env.JWT_SECRET;
+// Derive a 32-byte key regardless of the length of the configured secret. Deliberately its
+// own required env var, not derived from JWT_SECRET — a single leaked secret must not
+// compromise both session tokens and encrypted-at-rest API keys.
+const ENCRYPTION_KEY = crypto.createHash('sha256').update(process.env.ENCRYPTION_KEY).digest();
 
 // Phone (MSISDN) OTP login/signup verifies a Firebase Phone Auth ID token — the phone number
 // itself was already OTP-verified client-side by the Firebase SDK before this ever runs.
@@ -71,7 +82,13 @@ export async function verifyPassword(password, hash) {
 }
 
 export function signToken(user) {
-  return jwt.sign({ sub: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+  // token_version rides in the payload so requireAuth can reject a token issued before the
+  // user's most recent password change, instead of it staying valid for its full 30-day life.
+  return jwt.sign(
+    { sub: user.id, email: user.email, token_version: user.token_version ?? 0 },
+    JWT_SECRET,
+    { expiresIn: '30d' }
+  );
 }
 
 /** Encrypts a plaintext string (e.g. a user's own API key) for storage. */
@@ -112,7 +129,14 @@ export async function requireAuth(req, res, next) {
     const result = await db.query('SELECT * FROM users WHERE id = $1', [payload.sub]);
     if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid session.' });
 
-    req.user = result.rows[0];
+    const user = result.rows[0];
+    // A token signed before the user's most recent password change carries a stale
+    // token_version — reject it instead of trusting it for the rest of its 30-day life.
+    if ((payload.token_version ?? 0) !== (user.token_version ?? 0)) {
+      return res.status(401).json({ error: 'Session has been revoked. Please log in again.' });
+    }
+
+    req.user = user;
     next();
   } catch (error) {
     return res.status(401).json({ error: 'Invalid or expired session.' });

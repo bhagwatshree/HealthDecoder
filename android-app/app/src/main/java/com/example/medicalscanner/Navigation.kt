@@ -250,8 +250,20 @@ fun MainNavigation() {
         val email = deepLink.getQueryParameter("email")
         val googleEmail = deepLink.getQueryParameter("google_email")
         val googleAccessToken = deepLink.getQueryParameter("google_access_token")
+        val nonce = deepLink.getQueryParameter("nonce")
 
-        if (host == "oauth2") {
+        // medicalscanner:// isn't exclusive to this app — any other app on the device can fire
+        // this same intent. Only trust it if it carries the single-use nonce this app itself
+        // generated moments before launching the OAuth flow (AccountScreen.kt "Link Google
+        // Account"). A non-matching/missing nonce leaves the real pending one untouched (so a
+        // legitimate flow still in flight isn't broken by a stray or malicious duplicate intent).
+        val pendingNonce = AppSettings.peekPendingOAuthNonce(context)
+        val nonceValid = !nonce.isNullOrBlank() && pendingNonce != null && nonce == pendingNonce
+        if (!nonceValid) {
+          MainActivity.deepLinkUri.value = null
+        } else {
+          AppSettings.clearPendingOAuthNonce(context)
+          if (host == "oauth2") {
           if (token != null && email != null) {
             AppSettings.setAuthToken(context, token)
             AppSettings.setUserEmail(context, email)
@@ -300,6 +312,7 @@ fun MainNavigation() {
 
           MainActivity.deepLinkUri.value = null
           android.widget.Toast.makeText(context, "Google Account Linked successfully!", android.widget.Toast.LENGTH_SHORT).show()
+        }
         }
       }
     }

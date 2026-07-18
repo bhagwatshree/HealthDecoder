@@ -539,10 +539,18 @@ fun ScanScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Scan Document", fontWeight = FontWeight.Bold) },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TopBarLogo()
+                        Text(tr("Scan Document"), fontWeight = FontWeight.Bold)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = tr("Back"))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -566,18 +574,32 @@ fun ScanScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Image preview or selection placeholder
+                // Image preview or selection placeholder — tapping it when empty opens the device file picker
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(300.dp)
+                        .then(
+                            if (pages.isEmpty() && !importingFiles) Modifier.heightIn(min = 120.dp)
+                            else Modifier.height(300.dp)
+                        )
                         .clip(RoundedCornerShape(16.dp))
                         .border(
                             width = 2.dp,
                             color = MaterialTheme.colorScheme.outlineVariant,
                             shape = RoundedCornerShape(16.dp)
                         )
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        .then(
+                            if (pages.isEmpty() && !importingFiles) Modifier.clickable {
+                                fileLauncher.launch(arrayOf(
+                                    "image/*",
+                                    "application/pdf",
+                                    "application/msword",
+                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                    "text/plain"
+                                ))
+                            } else Modifier
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     if (importingFiles) {
@@ -591,13 +613,13 @@ fun ScanScreen(
                                 modifier = Modifier.size(36.dp)
                             )
                             Text(
-                                text = "Importing files...",
+                                text = tr("Importing files..."),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                text = "Rendering PDF pages and importing documents. This takes a brief moment.",
+                                text = tr("Rendering PDF pages and importing documents. This takes a brief moment."),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
@@ -636,7 +658,7 @@ fun ScanScreen(
                                         modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(28.dp)
                                             .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(50))
                                     ) {
-                                        Icon(Icons.Default.Close, contentDescription = "Remove page", tint = Color.White, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Default.Close, contentDescription = tr("Remove page"), tint = Color.White, modifier = Modifier.size(16.dp))
                                     }
                                 }
                             }
@@ -644,24 +666,24 @@ fun ScanScreen(
                     } else {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.padding(32.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(16.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PhotoCamera,
-                                contentDescription = "Camera Placeholder",
-                                modifier = Modifier.size(72.dp),
+                                contentDescription = tr("Camera Placeholder"),
+                                modifier = Modifier.size(32.dp),
                                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
                             )
                             Text(
-                                text = "Take a photo or upload a document",
+                                text = tr("Capture or Upload"),
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
+                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Supports prescriptions, lab reports, and scan reports. Google ML Kit analyzes computerized text, and Sarvam Vision handles regional scripts.",
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = tr("Tap here to select an image, PDF or doc from your device, or use Camera below to snap a photo."),
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
                             )
@@ -669,8 +691,8 @@ fun ScanScreen(
                     }
                 }
 
-                // Scan Type and Category Selection UI
-                if (pages.isNotEmpty() || docText.isNotBlank()) {
+                // Scan Type and Category Selection UI — always visible so it can be set before capturing
+                run {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
@@ -683,8 +705,8 @@ fun ScanScreen(
                             OutlinedTextField(
                                 value = patientName,
                                 onValueChange = { patientName = it },
-                                label = { Text("Patient name (optional)") },
-                                placeholder = { Text("Leave blank to auto-detect from report") },
+                                label = { Text(tr("Patient name (optional)")) },
+                                placeholder = { Text(tr("Leave blank to auto-detect from report")) },
                                 leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp),
@@ -692,7 +714,7 @@ fun ScanScreen(
                             )
 
                             Text(
-                                text = "Select Scanning Mode",
+                                text = tr("Select Scanning Mode"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -703,8 +725,8 @@ fun ScanScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 val scanTypes = listOf(
-                                    Pair("prescription", "Medicine Scan"),
-                                    Pair("report", "Reports Scan")
+                                    Pair("prescription", tr("Medicine Scan")),
+                                    Pair("report", tr("Reports Scan"))
                                 )
                                 scanTypes.forEach { (typeKey, typeLabel) ->
                                     val active = selectedScanType == typeKey
@@ -739,7 +761,7 @@ fun ScanScreen(
                             if (selectedScanType == "report") {
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "Report Category",
+                                    text = tr("Report Category"),
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -747,13 +769,13 @@ fun ScanScreen(
                                 
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     val row1 = listOf(
-                                        Pair("blood_test", "Blood Test"),
-                                        Pair("sonography", "Sonography"),
-                                        Pair("2d_echo", "2D Echo")
+                                        Pair("blood_test", tr("Blood Test")),
+                                        Pair("sonography", tr("Sonography")),
+                                        Pair("2d_echo", tr("2D Echo"))
                                     )
                                     val row2 = listOf(
-                                        Pair("xray", "X-Ray"),
-                                        Pair("other", "Other")
+                                        Pair("xray", tr("X-Ray")),
+                                        Pair("other", tr("Other"))
                                     )
                                     
                                     Row(
@@ -846,7 +868,7 @@ fun ScanScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Google ML Kit Scan Results",
+                                    text = tr("Google ML Kit Scan Results"),
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
@@ -856,7 +878,7 @@ fun ScanScreen(
                                 } else {
                                     Icon(
                                         imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = "Scan Done",
+                                        contentDescription = tr("Scan Done"),
                                         tint = Color(0xFF2E7D32),
                                         modifier = Modifier.size(18.dp)
                                     )
@@ -864,7 +886,7 @@ fun ScanScreen(
                             }
                             
                             val detectedTextSummary = if (localOcrText.isEmpty()) {
-                                if (localOcrRunning) "Analyzing image text..." else "No clear text detected locally."
+                                if (localOcrRunning) tr("Analyzing image text...") else tr("No clear text detected locally.")
                             } else {
                                 if (localOcrText.length > 100) "${localOcrText.take(100)}..." else localOcrText
                             }
@@ -887,13 +909,13 @@ fun ScanScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = if (useSarvam) "Scan Mode: Regional / Indic Script (Sarvam AI)" else "Scan Mode: English (Google Scan + Gemini)",
+                                        text = if (useSarvam) tr("Scan Mode: Regional / Indic Script (Sarvam AI)") else tr("Scan Mode: English (Google Scan + Gemini)"),
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = if (useSarvam) Color(0xFFE65100) else Color(0xFF2E7D32)
                                     )
                                     Text(
-                                        text = if (useSarvam) "Routing to Sarvam Vision & Translation APIs." else "Routing to local Google scanner & standard Gemini API.",
+                                        text = if (useSarvam) tr("Routing to Sarvam Vision & Translation APIs.") else tr("Routing to local Google scanner & standard Gemini API."),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -916,7 +938,7 @@ fun ScanScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Warning,
-                                contentDescription = "Error",
+                                contentDescription = tr("Error"),
                                 tint = MaterialTheme.colorScheme.error
                             )
                             Text(
@@ -938,9 +960,9 @@ fun ScanScreen(
                         modifier = Modifier.weight(1f).height(54.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.PhotoCamera, contentDescription = "Camera")
+                        Icon(imageVector = Icons.Default.PhotoCamera, contentDescription = tr("Camera"))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(if (pages.isEmpty()) "Camera" else "Add Page", fontWeight = FontWeight.Bold)
+                        Text(if (pages.isEmpty()) tr("Camera") else tr("Add Page"), fontWeight = FontWeight.Bold)
                     }
                     OutlinedButton(
                         onClick = {
@@ -955,9 +977,9 @@ fun ScanScreen(
                         modifier = Modifier.weight(1f).height(54.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.FolderOpen, contentDescription = "From device")
+                        Icon(imageVector = Icons.Default.FolderOpen, contentDescription = tr("From device"), tint = Color(0xFFE8A838))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("From Device", fontWeight = FontWeight.Bold)
+                        Text(tr("From Device"), fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -972,9 +994,9 @@ fun ScanScreen(
                         modifier = Modifier.weight(1f).height(54.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.QrCodeScanner, contentDescription = "Scan QR Code")
+                        Icon(imageVector = Icons.Default.QrCodeScanner, contentDescription = tr("Scan QR Code"), tint = Color(0xFF1565C0))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Scan QR", fontWeight = FontWeight.Bold)
+                        Text(tr("Scan QR"), fontWeight = FontWeight.Bold)
                     }
                     OutlinedButton(
                         onClick = {
@@ -989,9 +1011,9 @@ fun ScanScreen(
                         modifier = Modifier.weight(1f).height(54.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.Email, contentDescription = "Scan from Email")
+                        Icon(imageVector = Icons.Default.Email, contentDescription = tr("Scan from Email"), tint = Color(0xFF6A1B9A))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Scan Email", fontWeight = FontWeight.Bold)
+                        Text(tr("Scan Email"), fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -1035,7 +1057,7 @@ fun ScanScreen(
                                                 )
                                             }
                                             try { localPath?.let { File(it).delete() } } catch (_: Exception) {}
-                                        }) { Text("Skip") }
+                                        }) { Text(tr("Skip")) }
                                         Button(onClick = {
                                             if (localPath == null) return@Button
                                             pendingEmailQueue = pendingEmailQueue.filter { it.messageId != pending.messageId }
@@ -1050,7 +1072,7 @@ fun ScanScreen(
                                                 )
                                             }
                                             android.widget.Toast.makeText(context, "Report added to scan preview.", android.widget.Toast.LENGTH_SHORT).show()
-                                        }) { Text("Analyze") }
+                                        }) { Text(tr("Analyze")) }
                                     }
                                 }
                             }
@@ -1077,7 +1099,7 @@ fun ScanScreen(
                                 modifier = Modifier.weight(1f)
                             )
                             IconButton(onClick = { docText = "" }) {
-                                Icon(Icons.Default.Close, contentDescription = "Remove document text")
+                                Icon(Icons.Default.Close, contentDescription = tr("Remove document text"))
                             }
                         }
                     }
@@ -1086,44 +1108,44 @@ fun ScanScreen(
                 if (pages.isNotEmpty() || docText.isNotBlank()) {
                     Text(
                         text = if (pages.isNotEmpty()) "${pages.size} page(s) selected. Add more pages of the SAME report, then analyze."
-                               else "Document attached. Add pages/images if needed, then analyze.",
+                               else tr("Document attached. Add pages/images if needed, then analyze."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
-                    Button(
-                        onClick = {
-                            if (pages.isEmpty() && docText.isBlank()) return@Button
-                            val referenceText = listOf(localOcrText, docText).filter { it.isNotBlank() }.joinToString("\n\n")
-                            val category = if (selectedScanType == "report") selectedReportCategory else "prescription"
-                            
-                            BackgroundScanScheduler.startScan(
-                                context = context,
-                                pageUris = pages.toList(),
-                                sourceUris = sources.toList(),
-                                referenceText = referenceText,
-                                scanType = selectedScanType,
-                                category = category,
-                                patientName = patientName
-                            )
-                            
-                            android.widget.Toast.makeText(
-                                context,
-                                "Scan started in background.",
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                            
-                            onNavigateBack()
-                        },
-                        enabled = uploadingState == null,
-                        modifier = Modifier.fillMaxWidth().height(54.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Icon(imageVector = Icons.Default.CloudUpload, contentDescription = "Analyze")
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Analyze & Scan Document", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    }
+                }
+                Button(
+                    onClick = {
+                        if (pages.isEmpty() && docText.isBlank()) return@Button
+                        val referenceText = listOf(localOcrText, docText).filter { it.isNotBlank() }.joinToString("\n\n")
+                        val category = if (selectedScanType == "report") selectedReportCategory else "prescription"
+
+                        BackgroundScanScheduler.startScan(
+                            context = context,
+                            pageUris = pages.toList(),
+                            sourceUris = sources.toList(),
+                            referenceText = referenceText,
+                            scanType = selectedScanType,
+                            category = category,
+                            patientName = patientName
+                        )
+
+                        android.widget.Toast.makeText(
+                            context,
+                            "Scan started in background.",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+
+                        onNavigateBack()
+                    },
+                    enabled = uploadingState == null && (pages.isNotEmpty() || docText.isNotBlank()),
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(imageVector = Icons.Default.CloudUpload, contentDescription = tr("Analyze"))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(tr("Analyze & Scan Document"), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             }
 
@@ -1155,12 +1177,12 @@ fun ScanScreen(
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.error
                             )
-                            Text("Large Files Selected", fontWeight = FontWeight.Bold)
+                            Text(tr("Large Files Selected"), fontWeight = FontWeight.Bold)
                         }
                     },
                     text = {
                         Text(
-                            text = "The selected files are very large (%.2f MB). Processing these files will take longer and might cause memory issues. We recommend keeping files under 10 MB. Do you want to proceed anyway?".format(warningSizeMb),
+                            text = tr("The selected files are very large (%.2f MB). Processing these files will take longer and might cause memory issues. We recommend keeping files under 10 MB. Do you want to proceed anyway?").format(warningSizeMb),
                             style = MaterialTheme.typography.bodyMedium
                         )
                     },
@@ -1173,7 +1195,7 @@ fun ScanScreen(
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                         ) {
-                            Text("Proceed Anyway")
+                            Text(tr("Proceed Anyway"))
                         }
                     },
                     dismissButton = {
@@ -1183,7 +1205,7 @@ fun ScanScreen(
                                 pendingUris = emptyList()
                             }
                         ) {
-                            Text("Cancel")
+                            Text(tr("Cancel"))
                         }
                     }
                 )
@@ -1192,10 +1214,10 @@ fun ScanScreen(
             if (showConsentDialog) {
                 AlertDialog(
                     onDismissRequest = { showConsentDialog = false },
-                    title = { Text("Email Access Consent", fontWeight = FontWeight.Bold) },
+                    title = { Text(tr("Email Access Consent"), fontWeight = FontWeight.Bold) },
                     text = {
                         Text(
-                            text = "Medical Assist (MA) requires your permission to connect to your email inbox. We will only search for emails from the last 2 days containing potential medical report attachments (PDFs) and extract them locally on your phone. No email contents are sent to our servers. Do you consent to this?",
+                            text = tr("Medical Assist (MA) requires your permission to connect to your email inbox. We will only search for emails from the last 2 days containing potential medical report attachments (PDFs) and extract them locally on your phone. No email contents are sent to our servers. Do you consent to this?"),
                             style = MaterialTheme.typography.bodyMedium
                         )
                     },
@@ -1211,12 +1233,12 @@ fun ScanScreen(
                                 }
                             }
                         ) {
-                            Text("I Consent")
+                            Text(tr("I Consent"))
                         }
                     },
                     dismissButton = {
                         TextButton(onClick = { showConsentDialog = false }) {
-                            Text("Cancel")
+                            Text(tr("Cancel"))
                         }
                     }
                 )
@@ -1225,16 +1247,16 @@ fun ScanScreen(
             if (showSetupAlert) {
                 AlertDialog(
                     onDismissRequest = { showSetupAlert = false },
-                    title = { Text("Email Integration Required", fontWeight = FontWeight.Bold) },
+                    title = { Text(tr("Email Integration Required"), fontWeight = FontWeight.Bold) },
                     text = {
                         Text(
-                            text = "You haven't linked an email account yet. Please go to Settings (Account tab) to link your Gmail account or IMAP details first.",
+                            text = tr("You haven't linked an email account yet. Please go to Settings (Account tab) to link your Gmail account or IMAP details first."),
                             style = MaterialTheme.typography.bodyMedium
                         )
                     },
                     confirmButton = {
                         Button(onClick = { showSetupAlert = false }) {
-                            Text("OK")
+                            Text(tr("OK"))
                         }
                     }
                 )
@@ -1246,7 +1268,7 @@ fun ScanScreen(
                         showEmailResultDialog = false
                         try { File(emailResultLocalPath).delete() } catch (_: Exception) {}
                     },
-                    title = { Text("New Medical Report Found", fontWeight = FontWeight.Bold) },
+                    title = { Text(tr("New Medical Report Found"), fontWeight = FontWeight.Bold) },
                     text = {
                         Text(
                             text = "We found report '$emailResultReportName' in your inbox. Do you want to download and upload it for scanning?",
@@ -1271,7 +1293,7 @@ fun ScanScreen(
                                 android.widget.Toast.makeText(context, "Report added to scan preview.", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         ) {
-                            Text("Yes, Import")
+                            Text(tr("Yes, Import"))
                         }
                     },
                     dismissButton = {
@@ -1290,7 +1312,7 @@ fun ScanScreen(
                                 try { File(emailResultLocalPath).delete() } catch (_: Exception) {}
                             }
                         ) {
-                            Text("Skip & Mark Read")
+                            Text(tr("Skip & Mark Read"))
                         }
                     }
                 )

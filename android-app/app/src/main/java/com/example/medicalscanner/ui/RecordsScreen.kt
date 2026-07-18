@@ -1,5 +1,8 @@
 package com.example.medicalscanner.ui
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -70,7 +73,15 @@ fun RecordsScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text(tr("Records"), fontWeight = FontWeight.Bold) },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TopBarLogo()
+                        Text(tr("Records"), fontWeight = FontWeight.Bold)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(imageVector = Icons.Default.ArrowBack, contentDescription = tr("Back"))
@@ -92,14 +103,7 @@ fun RecordsScreen(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.AddPhotoAlternate, contentDescription = tr("Scan Report"))
-                    Text(tr("Scan Report"), fontWeight = FontWeight.Bold)
-                }
+                Icon(imageVector = Icons.Default.Add, contentDescription = tr("Scan Report"))
             }
         }
     ) { innerPadding ->
@@ -120,7 +124,7 @@ fun RecordsScreen(
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(imageVector = Icons.Default.Clear, contentDescription = "Clear")
+                            Icon(imageVector = Icons.Default.Clear, contentDescription = tr("Clear"))
                         }
                     }
                 },
@@ -151,7 +155,7 @@ fun RecordsScreen(
                         },
                         label = { Text(label, fontSize = 12.sp) },
                         leadingIcon = if (selectedPeriod == value) {{
-                            Icon(imageVector = Icons.Default.Check, contentDescription = "Selected", modifier = Modifier.size(14.dp))
+                            Icon(imageVector = Icons.Default.Check, contentDescription = tr("Selected"), modifier = Modifier.size(14.dp))
                         }} else null,
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primary,
@@ -174,9 +178,9 @@ fun RecordsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.Warning, contentDescription = "Warning", tint = MaterialTheme.colorScheme.error)
+                        Icon(imageVector = Icons.Default.Warning, contentDescription = tr("Warning"), tint = MaterialTheme.colorScheme.error)
                         Text(
-                            text = errorMessage,
+                            text = tr(errorMessage),
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f)
@@ -204,8 +208,8 @@ fun RecordsScreen(
                     if (filteredReports.isEmpty()) {
                         EmptyStateView(
                             icon = Icons.Default.History,
-                            title = if (searchQuery.isNotEmpty()) "No matching reports" else "No scanned history",
-                            description = if (searchQuery.isNotEmpty()) "Try searching a different name" else "Press 'Scan Report' to upload your first prescription."
+                            title = if (searchQuery.isNotEmpty()) tr("No matching reports") else tr("No scanned history"),
+                            description = if (searchQuery.isNotEmpty()) tr("Try searching a different name") else tr("Press 'Scan Report' to upload your first prescription.")
                         )
                     } else {
                         LazyColumn(

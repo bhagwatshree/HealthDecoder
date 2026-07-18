@@ -3,6 +3,10 @@ package com.example.medicalscanner.ui
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -15,10 +19,12 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +36,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import com.example.medicalscanner.auth.BiometricHelper
 import com.example.medicalscanner.local.AppSettings
@@ -104,7 +111,15 @@ fun AccountScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Account", fontWeight = FontWeight.Bold) },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TopBarLogo()
+                        Text("Account", fontWeight = FontWeight.Bold)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
@@ -133,6 +148,33 @@ fun AccountScreen(
 
             loadError?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+            }
+
+            if (!com.example.medicalscanner.local.SecureKeyManager.isStorageHardwareBacked()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            "This device's secure hardware storage is unavailable, so your local " +
+                                "records key and linked-email credentials are stored without " +
+                                "hardware-backed encryption. Your data still isn't sent anywhere " +
+                                "insecurely, but this device offers weaker protection than usual.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
             }
 
             account?.let { acc ->
@@ -330,6 +372,42 @@ fun AccountScreen(
                     }
                 }
 
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("Local Database Encryption", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFFE8F5E9))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "AES-SQLCipher",
+                                color = Color(0xFF2E7D32),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
                 // Change Password Section
                 var showChangePasswordSection by remember { mutableStateOf(false) }
                 Card(
@@ -451,6 +529,10 @@ fun AccountScreen(
                                         }
                                         isUpdatingPassword = false
                                         result.onSuccess {
+                                            // Changing the password revokes every previously-issued
+                                            // token server-side — store the fresh one so this device
+                                            // doesn't get logged out by its own request.
+                                            it.token?.let { fresh -> AppSettings.setAuthToken(context, fresh) }
                                             passwordUpdateSuccess = "Password updated successfully."
                                             currentPassword = ""
                                             newPassword = ""
@@ -689,7 +771,12 @@ fun AccountScreen(
                                         Button(
                                             onClick = {
                                                 val token = AppSettings.getAuthToken(context) ?: ""
-                                                val url = com.example.medicalscanner.network.NetworkModule.getFullImageUrl(context, "api/auth/google?state=link|$token")
+                                                // Single-use correlator so the medicalscanner://oauth2-link
+                                                // redirect that comes back is only trusted if it's the one
+                                                // this exact tap requested — see Navigation.kt.
+                                                val nonce = java.util.UUID.randomUUID().toString()
+                                                AppSettings.setPendingOAuthNonce(context, nonce)
+                                                val url = com.example.medicalscanner.network.NetworkModule.getFullImageUrl(context, "api/auth/google?state=link|$token|$nonce")
                                                 val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
                                                 context.startActivity(intent)
                                             },

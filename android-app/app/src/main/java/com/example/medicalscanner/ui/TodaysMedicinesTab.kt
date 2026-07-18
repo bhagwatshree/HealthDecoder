@@ -126,9 +126,9 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
                     icon = Icons.Default.NotificationsOff,
                     iconTint = Color(0xFFE65100),
                     bg = Color(0xFFFFF3CD),
-                    title = "Allow Notifications",
-                    body = "Tap to allow so medicine reminders show on your phone and paired watch.",
-                    actionLabel = "Allow"
+                    title = tr("Allow Notifications"),
+                    body = tr("Tap to allow so medicine reminders show on your phone and paired watch."),
+                    actionLabel = tr("Allow")
                 ) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
                         notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -143,9 +143,9 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
                     icon = Icons.Default.Alarm,
                     iconTint = Color(0xFFC62828),
                     bg = Color(0xFFFFEBEE),
-                    title = "Enable Exact Alarms",
-                    body = "Tap Settings → allow exact alarms so reminders arrive at the precise time.",
-                    actionLabel = "Settings"
+                    title = tr("Enable Exact Alarms"),
+                    body = tr("Tap Settings → allow exact alarms so reminders arrive at the precise time."),
+                    actionLabel = tr("Settings")
                 ) {
                     context.startActivity(
                         Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
@@ -172,7 +172,7 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Add Med", fontWeight = FontWeight.Bold)
+                    Text(tr("Add Med"), fontWeight = FontWeight.Bold)
                 }
 
                 Button(
@@ -186,7 +186,7 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
                 ) {
                     Icon(Icons.Default.Event, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Add Appt", fontWeight = FontWeight.Bold)
+                    Text(tr("Add Appt"), fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -227,14 +227,14 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
                     modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp, horizontal = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Icon(Icons.Default.Medication, "No meds",
+                    Icon(Icons.Default.Medication, tr("No meds"),
                         modifier = Modifier.size(80.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
-                    Text("No Medicine Reminders",
+                    Text(tr("No Medicine Reminders"),
                         fontSize = 24.sp, fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                         textAlign = TextAlign.Center)
-                    Text("Once prescriptions are scanned, your daily medicines will appear here with reminders.\n\nTap a toggle below to enable reminders for each medicine.",
+                    Text(tr("Once prescriptions are scanned, your daily medicines will appear here with reminders.\n\nTap a toggle below to enable reminders for each medicine."),
                         fontSize = 16.sp, textAlign = TextAlign.Center,
                         lineHeight = 24.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
@@ -252,14 +252,14 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.CalendarMonth, "Appointments",
+                    Icon(Icons.Default.CalendarMonth, tr("Appointments"),
                         tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(22.dp))
-                    Text("Doctor Appointments",
+                    Text(tr("Doctor Appointments"),
                         fontWeight = FontWeight.ExtraBold, fontSize = 20.sp,
                         color = MaterialTheme.colorScheme.secondary)
                 }
                 Spacer(Modifier.height(4.dp))
-                Text("Manage your scheduled doctor visits and clinical check-ups.",
+                Text(tr("Manage your scheduled doctor visits and clinical check-ups."),
                     fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(12.dp))
             }
@@ -283,14 +283,14 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.Tune, "Manage",
+                    Icon(Icons.Default.Tune, tr("Manage"),
                         tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-                    Text("Manage All Reminders",
+                    Text(tr("Manage All Reminders"),
                         fontWeight = FontWeight.ExtraBold, fontSize = 20.sp,
                         color = MaterialTheme.colorScheme.primary)
                 }
                 Spacer(Modifier.height(4.dp))
-                Text("Enable or disable reminders per slot, tap the time to change it.",
+                Text(tr("Enable or disable reminders per slot, tap the time to change it."),
                     fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(12.dp))
             }
@@ -323,7 +323,7 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
         AlertDialog(
             onDismissRequest = { deletingSchedule = null },
             icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Delete reminder?") },
+            title = { Text(tr("Delete reminder?")) },
             text = { Text("Remove the reminder for \"${sched.medicineName}\" (${sched.patientName})? Its alarms will be cancelled. This won't affect the scanned report.") },
             confirmButton = {
                 Button(
@@ -334,9 +334,9 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
                         deletingSchedule = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Delete") }
+                ) { Text(tr("Delete")) }
             },
-            dismissButton = { TextButton(onClick = { deletingSchedule = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { deletingSchedule = null }) { Text(tr("Cancel")) } }
         )
     }
 
@@ -420,7 +420,7 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
         AlertDialog(
             onDismissRequest = { deletingAppt = null },
             icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Delete Appointment?") },
+            title = { Text(tr("Delete Appointment?")) },
             text = { Text("Are you sure you want to cancel and delete the appointment with Dr. ${appt.doctorName}?") },
             confirmButton = {
                 Button(
@@ -431,10 +431,10 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
                         deletingAppt = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Delete") }
+                ) { Text(tr("Delete")) }
             },
             dismissButton = {
-                TextButton(onClick = { deletingAppt = null }) { Text("Cancel") }
+                TextButton(onClick = { deletingAppt = null }) { Text(tr("Cancel")) }
             }
         )
     }
@@ -499,11 +499,11 @@ private fun SlotHeader(slot: String, isCurrent: Boolean, time: com.example.medic
                     .background(style.fg)
                     .padding(horizontal = 8.dp, vertical = 2.dp)
             ) {
-                Text("NOW", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(tr("NOW"), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
         Spacer(Modifier.weight(1f))
-        Icon(Icons.Default.AccessTime, "Time", tint = style.fg, modifier = Modifier.size(16.dp))
+        Icon(Icons.Default.AccessTime, tr("Time"), tint = style.fg, modifier = Modifier.size(16.dp))
         Text(
             text = "%02d:%02d".format(time.hour, time.minute),
             fontSize = 18.sp, fontWeight = FontWeight.Bold, color = style.fg
@@ -536,7 +536,7 @@ private fun MedicineCard(
                 modifier = Modifier.size(58.dp).clip(CircleShape).background(style.bg),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Medication, "Medicine",
+                Icon(Icons.Default.Medication, tr("Medicine"),
                     tint = style.fg, modifier = Modifier.size(34.dp))
             }
 
@@ -568,7 +568,7 @@ private fun MedicineCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Icon(Icons.Default.Edit, "Change time", tint = style.fg, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Default.Edit, tr("Change time"), tint = style.fg, modifier = Modifier.size(14.dp))
                     Text(
                         text = "%02d:%02d".format(cfg.hour, cfg.minute),
                         fontSize = 17.sp, fontWeight = FontWeight.Bold, color = style.fg
@@ -636,11 +636,11 @@ private fun ManageCard(
                     }
                 }
                 IconButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit reminder",
+                    Icon(Icons.Default.Edit, contentDescription = tr("Edit reminder"),
                         tint = MaterialTheme.colorScheme.primary)
                 }
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete reminder",
+                    Icon(Icons.Default.Delete, contentDescription = tr("Delete reminder"),
                         tint = MaterialTheme.colorScheme.error)
                 }
             }
@@ -717,7 +717,7 @@ private fun SlotTimePickerDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 TimePicker(state = state)
-                Text("Medicine reminder will ring daily at this time on your phone and watch.",
+                Text(tr("Medicine reminder will ring daily at this time on your phone and watch."),
                     fontSize = 14.sp, textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -727,12 +727,12 @@ private fun SlotTimePickerDialog(
                 onClick = { onConfirm(state.hour, state.minute) },
                 modifier = Modifier.height(52.dp)
             ) {
-                Text("Set Reminder", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text(tr("Set Reminder"), fontSize = 17.sp, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", fontSize = 17.sp)
+                Text(tr("Cancel"), fontSize = 17.sp)
             }
         }
     )
@@ -765,7 +765,7 @@ private fun AddMedicineDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                if (initialSchedule == null) "Add Medicine Reminder" else "Edit Medicine Reminder",
+                if (initialSchedule == null) tr("Add Medicine Reminder") else tr("Edit Medicine Reminder"),
                 fontWeight = FontWeight.Bold
             )
         },
@@ -777,7 +777,7 @@ private fun AddMedicineDialog(
                 OutlinedTextField(
                     value = medName,
                     onValueChange = { medName = it },
-                    label = { Text("Medicine Name") },
+                    label = { Text(tr("Medicine Name")) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -785,7 +785,7 @@ private fun AddMedicineDialog(
                 OutlinedTextField(
                     value = patName,
                     onValueChange = { patName = it },
-                    label = { Text("Patient Name") },
+                    label = { Text(tr("Patient Name")) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -794,7 +794,7 @@ private fun AddMedicineDialog(
                     OutlinedTextField(
                         value = dosage,
                         onValueChange = { dosage = it },
-                        label = { Text("Dosage") },
+                        label = { Text(tr("Dosage")) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f)
@@ -802,14 +802,14 @@ private fun AddMedicineDialog(
                     OutlinedTextField(
                         value = frequency,
                         onValueChange = { frequency = it },
-                        label = { Text("Frequency") },
+                        label = { Text(tr("Frequency")) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f)
                     )
                 }
 
-                Text("Select reminder slots", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                Text(tr("Select reminder slots"), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
 
                 MedicineScheduleStore.defaultSlotTimes.keys.forEach { slot ->
                     val cfg = slotConfigMap[slot]!!
@@ -847,10 +847,10 @@ private fun AddMedicineDialog(
                                 Button(onClick = {
                                     slotConfigMap[slot] = cfg.copy(hour = slotState.hour, minute = slotState.minute)
                                     timePickerDialogSlot = null
-                                }) { Text("OK") }
+                                }) { Text(tr("OK")) }
                             },
                             dismissButton = {
-                                TextButton(onClick = { timePickerDialogSlot = null }) { Text("Cancel") }
+                                TextButton(onClick = { timePickerDialogSlot = null }) { Text(tr("Cancel")) }
                             }
                         )
                     }
@@ -883,11 +883,11 @@ private fun AddMedicineDialog(
                     )
                 }
             ) {
-                Text("Save")
+                Text(tr("Save"))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(tr("Cancel")) }
         }
     )
 }
@@ -917,7 +917,7 @@ private fun AddAppointmentDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initialAppointment == null) "Add Appointment" else "Edit Appointment", fontWeight = FontWeight.Bold) },
+        title = { Text(if (initialAppointment == null) tr("Add Appointment") else tr("Edit Appointment"), fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
@@ -926,7 +926,7 @@ private fun AddAppointmentDialog(
                 OutlinedTextField(
                     value = doctorName,
                     onValueChange = { doctorName = it },
-                    label = { Text("Doctor Name") },
+                    label = { Text(tr("Doctor Name")) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -934,7 +934,7 @@ private fun AddAppointmentDialog(
                 OutlinedTextField(
                     value = place,
                     onValueChange = { place = it },
-                    label = { Text("Place / Clinic Name") },
+                    label = { Text(tr("Place / Clinic Name")) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -958,7 +958,7 @@ private fun AddAppointmentDialog(
                         ) {
                             Column {
                                 Text(
-                                    text = "Recurrence",
+                                    text = tr("Recurrence"),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -998,7 +998,7 @@ private fun AddAppointmentDialog(
                         value = date,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text(if (recurrence == "None") "Date (YYYY-MM-DD)" else "Start Date (YYYY-MM-DD)") },
+                        label = { Text(if (recurrence == "None") tr("Date (YYYY-MM-DD)") else tr("Start Date (YYYY-MM-DD)")) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -1022,7 +1022,7 @@ private fun AddAppointmentDialog(
                         value = if (time.isNotEmpty()) time else "%02d:%02d".format(hour, minute),
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Time (HH:MM)") },
+                        label = { Text(tr("Time (HH:MM)")) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -1045,10 +1045,10 @@ private fun AddAppointmentDialog(
                                 minute = timeState.minute
                                 time = "%02d:%02d".format(hour, minute)
                                 showTimePicker = false
-                            }) { Text("OK") }
+                            }) { Text(tr("OK")) }
                         },
                         dismissButton = {
-                            TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
+                            TextButton(onClick = { showTimePicker = false }) { Text(tr("Cancel")) }
                         }
                     )
                 }
@@ -1094,11 +1094,11 @@ private fun AddAppointmentDialog(
                     )
                 }
             ) {
-                Text("Save")
+                Text(tr("Save"))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(tr("Cancel")) }
         }
     )
 }
@@ -1150,10 +1150,10 @@ private fun AppointmentCard(
             }
             Row {
                 IconButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit Appointment", tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.Edit, contentDescription = tr("Edit Appointment"), tint = MaterialTheme.colorScheme.primary)
                 }
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete Appointment", tint = MaterialTheme.colorScheme.error)
+                    Icon(Icons.Default.Delete, contentDescription = tr("Delete Appointment"), tint = MaterialTheme.colorScheme.error)
                 }
             }
         }

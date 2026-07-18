@@ -1,6 +1,9 @@
 package com.example.medicalscanner.ui
 
 import android.content.Context
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.clip
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -84,10 +87,18 @@ fun CompareScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Compare Reports", fontWeight = FontWeight.Bold) },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TopBarLogo()
+                        Text(tr("Compare Reports"), fontWeight = FontWeight.Bold)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = tr("Back"))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -110,7 +121,7 @@ fun CompareScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Upload two reports, prescriptions, or scans to compare what changed between them.",
+                    text = tr("Upload two reports, prescriptions, or scans to compare what changed between them."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -121,7 +132,7 @@ fun CompareScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     ReportPickerCard(
-                        label = "Report 1 (Older)",
+                        label = tr("Report 1 (Older)"),
                         fileName = name1,
                         scanType = scanType1,
                         category = category1,
@@ -132,7 +143,7 @@ fun CompareScreen(
                         modifier = Modifier.weight(1f)
                     )
                     ReportPickerCard(
-                        label = "Report 2 (Newer)",
+                        label = tr("Report 2 (Newer)"),
                         fileName = name2,
                         scanType = scanType2,
                         category = category2,
@@ -200,7 +211,7 @@ fun CompareScreen(
                 ) {
                     Icon(Icons.Default.CompareArrows, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Compare Reports", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(tr("Compare Reports"), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
 
                 result?.let { CompareResultPanel(it) }
@@ -228,9 +239,9 @@ fun CompareScreen(
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             CircularProgressIndicator(modifier = Modifier.size(56.dp))
-                            Text("Analyzing & Comparing...", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(tr("Analyzing & Comparing..."), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text(
-                                "AI is reading both documents and identifying what changed.",
+                                tr("AI is reading both documents and identifying what changed."),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
@@ -301,13 +312,13 @@ private fun ReportPickerCard(
                             contentPadding = PaddingValues(0.dp),
                             modifier = Modifier.height(20.dp)
                         ) {
-                            Text("Change", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
+                            Text(tr("Change"), fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 } else {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(Icons.Default.UploadFile, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.size(24.dp))
-                        Text("Tap to pick\nImage or PDF", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                        Text(tr("Tap to pick\nImage or PDF"), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                     }
                 }
             }
@@ -326,7 +337,7 @@ private fun ReportPickerCard(
                             .padding(vertical = 6.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(lbl, fontSize = 11.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, color = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(tr(lbl), fontSize = 11.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, color = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -349,7 +360,7 @@ private fun ReportPickerCard(
                                         .padding(vertical = 5.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(lbl, fontSize = 9.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, color = if (active) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(tr(lbl), fontSize = 9.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, color = if (active) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                             // Fill remaining slots if row < 3
@@ -377,14 +388,14 @@ private fun CompareResultPanel(result: CompareResponse) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.CompareArrows, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Text("Comparison Result", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Text(tr("Comparison Result"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 }
 
                 // Report names row
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ReportSummaryChip(label = "Report 1", name = result.report1.patientName, date = result.report1.reportDate, type = result.report1.reportType, modifier = Modifier.weight(1f))
+                    ReportSummaryChip(label = tr("Report 1"), name = result.report1.patientName, date = result.report1.reportDate, type = result.report1.reportType, modifier = Modifier.weight(1f))
                     Icon(Icons.Default.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.CenterVertically))
-                    ReportSummaryChip(label = "Report 2", name = result.report2.patientName, date = result.report2.reportDate, type = result.report2.reportType, modifier = Modifier.weight(1f))
+                    ReportSummaryChip(label = tr("Report 2"), name = result.report2.patientName, date = result.report2.reportDate, type = result.report2.reportType, modifier = Modifier.weight(1f))
                 }
             }
         }
@@ -422,7 +433,7 @@ private fun CompareResultPanel(result: CompareResponse) {
             ) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Not enough comparable data found between the two reports.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(tr("Not enough comparable data found between the two reports."), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -430,60 +441,80 @@ private fun CompareResultPanel(result: CompareResponse) {
         // Medication changes
         val medChanges = comparison.medicationChanges
         if (medChanges != null && (medChanges.added.isNotEmpty() || medChanges.removed.isNotEmpty() || medChanges.changed.isNotEmpty())) {
-            SectionCard(title = "Medication Changes", icon = Icons.Default.Medication) {
+            SectionCard(title = tr("Medication Changes"), icon = Icons.Default.Medication) {
                 if (medChanges.added.isNotEmpty()) {
-                    ChangeGroup(label = "Added", items = medChanges.added, color = Color(0xFF2E7D32), bgColor = Color(0xFFE8F5E9))
+                    ChangeGroup(label = tr("Added"), items = medChanges.added, color = Color(0xFF2E7D32), bgColor = Color(0xFFE8F5E9))
                 }
                 if (medChanges.removed.isNotEmpty()) {
-                    ChangeGroup(label = "Discontinued", items = medChanges.removed, color = Color(0xFFC62828), bgColor = Color(0xFFFFEBEE))
+                    ChangeGroup(label = tr("Discontinued"), items = medChanges.removed, color = Color(0xFFC62828), bgColor = Color(0xFFFFEBEE))
                 }
                 if (medChanges.changed.isNotEmpty()) {
-                    ChangeGroup(label = "Modified", items = medChanges.changed, color = Color(0xFFE65100), bgColor = Color(0xFFFFF3E0))
+                    ChangeGroup(label = tr("Modified"), items = medChanges.changed, color = Color(0xFFE65100), bgColor = Color(0xFFFFF3E0))
                 }
             }
         }
 
-        // Test parameter differences
+        // Test parameter differences — rendered as a comparison matrix (Parameter | Previous | Current)
         if (comparison.differences.isNotEmpty()) {
-            SectionCard(title = "Test Parameter Changes", icon = Icons.Default.Science) {
-                comparison.differences.forEach { diff ->
-                    val diffColor = when (diff.status.lowercase()) {
-                        "improved" -> Color(0xFF2E7D32)
-                        "worsened" -> Color(0xFFC62828)
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    }
+            SectionCard(title = tr("Test Parameter Changes"), icon = Icons.Default.Science) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
+                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                            .padding(10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .padding(8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(diff.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(diff.previous, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(diff.current, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = diffColor)
+                        Text(text = tr("Parameter"), modifier = Modifier.weight(2f), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text(text = tr("Previous"), modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center)
+                        Text(text = tr("Current"), modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center)
+                    }
+
+                    comparison.differences.forEach { diff ->
+                        val diffColor = when (diff.status.lowercase()) {
+                            "improved" -> Color(0xFF2E7D32)
+                            "worsened" -> Color(0xFFC62828)
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                        val rowBg = if (diff.status.lowercase() == "worsened") Color(0xFFFFEBEE).copy(alpha = 0.4f) else Color.Transparent
+                        Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(rowBg)
+                                .padding(8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = diff.name, modifier = Modifier.weight(2f), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Text(
+                                text = diff.previous,
+                                modifier = Modifier.weight(1f),
+                                fontSize = 11.sp,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(text = diff.current, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = diffColor, textAlign = TextAlign.Center)
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(if (diff.status == "improved") Color(0xFFE8F5E9) else if (diff.status == "worsened") Color(0xFFFFEBEE) else MaterialTheme.colorScheme.surfaceVariant)
+                                        .padding(horizontal = 6.dp, vertical = 1.dp)
+                                ) {
+                                    Text(
+                                        text = diff.change.replaceFirstChar { it.uppercase() },
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = diffColor
+                                    )
+                                }
                             }
                         }
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (diff.status == "improved") Color(0xFFE8F5E9) else if (diff.status == "worsened") Color(0xFFFFEBEE) else MaterialTheme.colorScheme.surfaceVariant)
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                        ) {
-                            Text(
-                                text = diff.change.replaceFirstChar { it.uppercase() },
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = diffColor
-                            )
-                        }
                     }
-                    Spacer(Modifier.height(4.dp))
                 }
             }
         }
@@ -499,7 +530,7 @@ private fun ReportSummaryChip(label: String, name: String?, date: String?, type:
             .padding(8.dp)
     ) {
         Text(label, fontSize = 9.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-        Text(name ?: "Unknown", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(name ?: tr("Unknown"), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, maxLines = 1)
         Text(date ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
         Text(type ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
     }

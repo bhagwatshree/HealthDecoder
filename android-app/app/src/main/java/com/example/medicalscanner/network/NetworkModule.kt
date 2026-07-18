@@ -258,8 +258,11 @@ object NetworkModule {
                 }
             }
 
+            // Full request/response bodies include the Authorization bearer token, login
+            // passwords, and patient health data — never log them in a release build.
             val logging = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
+                level = if (com.example.medicalscanner.BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                    else HttpLoggingInterceptor.Level.NONE
             }
 
             val client = OkHttpClient.Builder()

@@ -394,5 +394,9 @@ data class ChangePasswordRequest(
 
 data class SimpleResponse(
     @SerializedName("success") val success: Boolean,
-    @SerializedName("message") val message: String
+    @SerializedName("message") val message: String,
+    // Only changePassword sets this: bumping token_version server-side invalidates every
+    // previously-issued token (any other device/session) for security, so this device needs
+    // a freshly-signed one to stay logged in instead of being logged out by its own request.
+    @SerializedName("token") val token: String? = null
 )
