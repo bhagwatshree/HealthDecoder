@@ -103,6 +103,10 @@ interface PendingTestDao {
 
     @Query("DELETE FROM pending_tests WHERE id = :id")
     fun deleteById(id: String)
+
+    /** Re-keys a patient's pending tests when two mis-scanned name variants are merged. */
+    @Query("UPDATE pending_tests SET patientName = :newName WHERE patientName = :oldName COLLATE NOCASE")
+    fun renamePatient(oldName: String, newName: String)
 }
 
 @Dao
@@ -129,6 +133,10 @@ interface MedLogDao {
            WHERE patientName = :patientName AND medicineName = :oldName COLLATE NOCASE"""
     )
     fun renameMedicine(patientName: String, oldName: String, newName: String)
+
+    /** Re-keys a patient's intake logs when two mis-scanned name variants are merged. */
+    @Query("UPDATE med_logs SET patientName = :newName WHERE patientName = :oldName COLLATE NOCASE")
+    fun renamePatient(oldName: String, newName: String)
 }
 
 @Dao

@@ -34,6 +34,23 @@ object AppSettings {
         }.getOrNull() ?: emptyMap()
     }
 
+    /** Moves a patient's locked trend units to a merged name. On a key clash the target's existing
+     *  unit wins (its own history is preserved); otherwise the source's unit carries over. */
+    fun migrateTrendUnitsPatient(context: Context, fromPatient: String, toPatient: String) {
+        if (fromPatient.equals(toPatient, ignoreCase = true)) return
+        val current = getTrendStandardUnits(context)
+        if (current.isEmpty()) return
+        val updated = LinkedHashMap<String, String>(current)
+        val fromPrefix = "$fromPatient|"
+        for ((key, unit) in current) {
+            if (!key.startsWith(fromPrefix)) continue
+            val newKey = "$toPatient|" + key.removePrefix(fromPrefix)
+            if (!updated.containsKey(newKey)) updated[newKey] = unit
+            updated.remove(key)
+        }
+        prefs(context).edit().putString(KEY_TREND_STANDARD_UNITS, gson.toJson(updated)).apply()
+    }
+
     /** Records [unit] as the standard for [key] ("<patient>|<category>") only if none is set yet. */
     fun lockTrendStandardUnitIfAbsent(context: Context, key: String, unit: String) {
         if (unit.isBlank()) return

@@ -321,6 +321,12 @@ object LocalStore {
         db(context).medLogDao().renameMedicine(patientName, oldName, newName)
     }
 
+    /** Re-keys a patient's intake logs and pending tests when two name variants are merged. */
+    fun renamePatientRecords(context: Context, oldName: String, newName: String) {
+        db(context).medLogDao().renamePatient(oldName, newName)
+        db(context).pendingTestDao().renamePatient(oldName, newName)
+    }
+
     // ── Image storage ───────────────────────────────────────────────────────
     /** Copies raw image bytes into the records/images folder and returns the absolute path. */
     fun saveImage(context: Context, id: String, bytes: ByteArray): String {

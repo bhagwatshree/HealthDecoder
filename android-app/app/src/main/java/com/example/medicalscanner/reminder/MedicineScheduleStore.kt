@@ -104,6 +104,25 @@ object MedicineScheduleStore {
         saveAll(context, list)
     }
 
+    /**
+     * Re-keys a patient's reminder schedules when two mis-scanned name variants are merged. If the
+     * same medicine already has a schedule under [newName], the old one is dropped in its favour so
+     * the merge can't leave two reminders for one medicine. Caller runs MedicineReminderManager.scheduleAll.
+     */
+    fun renamePatient(context: Context, oldName: String, newName: String) {
+        if (oldName.equals(newName, ignoreCase = true)) return
+        val list = loadAll(context).toMutableList()
+        val result = mutableListOf<MedicineSchedule>()
+        for (s in list) {
+            if (!s.patientName.equals(oldName, ignoreCase = true)) { result.add(s); continue }
+            val moved = s.copy(patientName = newName)
+            // Drop any existing schedule for the same medicine already under the new patient name.
+            result.removeAll { it.matches(moved.medicineName, newName) }
+            if (result.none { it.matches(moved.medicineName, newName) }) result.add(moved)
+        }
+        saveAll(context, result)
+    }
+
     fun autoSeedIfAbsent(
         context: Context,
         medicineName: String,

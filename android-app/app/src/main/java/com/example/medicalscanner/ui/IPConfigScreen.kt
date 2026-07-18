@@ -154,6 +154,28 @@ fun IPConfigScreen(
         }
     }
 
+    // ── Merge / fix patient names (a mis-scan splits one person into two) ──
+    var mergeFrom by remember { mutableStateOf<String?>(null) }
+    var mergeTo by remember { mutableStateOf("") }
+    var mergeMenuOpen by remember { mutableStateOf(false) }
+    var mergeResult by remember { mutableStateOf<String?>(null) }
+
+    fun runMerge() {
+        val from = mergeFrom
+        val to = mergeTo.trim()
+        if (from == null || to.isEmpty()) { mergeResult = "Pick a patient, then type the correct name."; return }
+        coroutineScope.launch {
+            transferBusy = true
+            mergeResult = runCatching {
+                val n = LocalRepository.mergePatient(context, from, to)
+                patients = LocalRepository.listPatients(context)
+                mergeFrom = null; mergeTo = ""
+                "Merged $n report(s) into \"$to\"."
+            }.getOrElse { "Merge failed: ${it.message}" }
+            transferBusy = false
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -442,6 +464,78 @@ fun IPConfigScreen(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
                         ) { Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Import") }
+                    }
+                }
+            }
+
+            // Merge / fix patient names — collapse a mis-scanned variant into the correct patient
+            // so their reports, trends, reminders and history stop being split in two.
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Fix / Merge Patient",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "If a name was mis-read on a scan and one person shows up twice, merge the wrong name into the correct one. Moves all their reports, trends, reminders and history together.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // Source: the (possibly mis-scanned) patient to move away from.
+                    Box {
+                        OutlinedButton(
+                            onClick = { mergeMenuOpen = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(mergeFrom ?: "Select patient to fix", modifier = Modifier.weight(1f))
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                        }
+                        DropdownMenu(expanded = mergeMenuOpen, onDismissRequest = { mergeMenuOpen = false }) {
+                            if (patients.isEmpty()) {
+                                DropdownMenuItem(text = { Text("No patients yet") }, onClick = { mergeMenuOpen = false })
+                            }
+                            patients.forEach { p ->
+                                DropdownMenuItem(text = { Text(p) }, onClick = { mergeFrom = p; if (mergeTo.isBlank()) mergeTo = p; mergeMenuOpen = false })
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = mergeTo,
+                        onValueChange = { mergeTo = it },
+                        label = { Text("Correct name") },
+                        placeholder = { Text("e.g. Rajesh Kumar") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    mergeResult?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    }
+
+                    Button(
+                        onClick = { runMerge() },
+                        enabled = !transferBusy && mergeFrom != null && mergeTo.isNotBlank() && !mergeTo.trim().equals(mergeFrom, ignoreCase = true),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.MergeType, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Merge")
                     }
                 }
             }

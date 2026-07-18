@@ -365,6 +365,32 @@ object LocalRepository {
         }
     }
 
+    // ── Patient identity ────────────────────────────────────────────────────
+    /**
+     * Merges one patient name into another across everything keyed by patient — reports, medicine
+     * intake logs, pending tests, reminder schedules and locked trend units — so a single
+     * mis-scanned name variant (e.g. "Rajesh Kumr" → "Rajesh Kumar") stops fragmenting that
+     * person's history, filter and trend lines. Case-insensitive match on the old name. Returns the
+     * number of reports moved. No AI is involved.
+     */
+    suspend fun mergePatient(context: Context, fromName: String, toName: String): Int = withContext(Dispatchers.IO) {
+        val from = fromName.trim()
+        val to = toName.trim()
+        if (from.isEmpty() || to.isEmpty() || from.equals(to, ignoreCase = true)) return@withContext 0
+
+        // Reports: go through upsert (not a raw UPDATE) so the FTS index and userEmail scoping stay correct.
+        val moved = LocalStore.getReports(context).filter { it.patientName.equals(from, ignoreCase = true) }
+        for (r in moved) LocalStore.upsertReport(context, r.copy(patientName = to))
+
+        LocalStore.renamePatientRecords(context, from, to)               // med_logs + pending_tests
+        MedicineScheduleStore.renamePatient(context, from, to)           // reminder schedules
+        MedicineReminderManager.scheduleAll(context)
+        AppSettings.migrateTrendUnitsPatient(context, from, to)          // locked trend units
+
+        if (moved.isNotEmpty()) afterWrite(context)
+        moved.size
+    }
+
     // ── Portable export / import ────────────────────────────────────────────
     /** The distinct patient names in the current account, most-reports-first (for export UI). */
     suspend fun listPatients(context: Context): List<String> = withContext(Dispatchers.IO) {
