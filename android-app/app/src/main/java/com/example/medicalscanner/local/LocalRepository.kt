@@ -9,6 +9,7 @@ import com.example.medicalscanner.ai.ScanExtraction
 import com.example.medicalscanner.ai.UnitConverter
 import com.example.medicalscanner.backup.BackupManager
 import com.example.medicalscanner.backup.BackupSync
+import com.example.medicalscanner.backup.ExportManager
 import com.example.medicalscanner.reminder.MedicineReminderManager
 import com.example.medicalscanner.reminder.MedicineScheduleStore
 import com.example.medicalscanner.model.*
@@ -363,6 +364,46 @@ object LocalRepository {
             }
         }
     }
+
+    // ── Portable export / import ────────────────────────────────────────────
+    /** The distinct patient names in the current account, most-reports-first (for export UI). */
+    suspend fun listPatients(context: Context): List<String> = withContext(Dispatchers.IO) {
+        LocalStore.getReports(context).mapNotNull { it.patientName?.takeIf { n -> n.isNotBlank() } }
+            .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }
+    }
+
+    /**
+     * Writes a portable export zip. [patientName] null = all patients. [onlySinceLastExport] true =
+     * only reports created after the last export (delta). Returns the file to share, or null if the
+     * selection is empty. On success advances the delta marker to the newest report exported.
+     */
+    suspend fun exportData(
+        context: Context,
+        patientName: String?,
+        onlySinceLastExport: Boolean
+    ): java.io.File? = withContext(Dispatchers.IO) {
+        val since = if (onlySinceLastExport) AppSettings.getLastExportAt(context) else null
+        val selected = LocalStore.getReports(context).filter { r ->
+            (patientName == null || r.patientName.equals(patientName, ignoreCase = true)) &&
+                (since == null || r.createdAt > since)
+        }
+        if (selected.isEmpty()) return@withContext null
+        val file = ExportManager.export(context, selected, since, patientName)
+        // Advance the delta marker only for a full (all-patients) export — a single-patient export
+        // must not move the global "since last time" cutoff and cause other patients to be skipped.
+        if (patientName == null) {
+            selected.maxByOrNull { it.createdAt }?.createdAt?.let { AppSettings.setLastExportAt(context, it) }
+        }
+        file
+    }
+
+    /** Merges a portable export into this device. No AI is run — analysis rides inside the file. */
+    suspend fun importData(context: Context, uri: android.net.Uri): ExportManager.ImportResult =
+        withContext(Dispatchers.IO) {
+            val result = ExportManager.import(context, uri)
+            if (result.imported > 0) afterWrite(context)
+            result
+        }
 
     // ── Dashboard / summary ─────────────────────────────────────────────────
     suspend fun getDashboard(context: Context, period: String?): DashboardData = withContext(Dispatchers.IO) {

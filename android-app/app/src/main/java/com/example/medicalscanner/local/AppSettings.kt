@@ -72,6 +72,19 @@ object AppSettings {
         else
             com.example.medicalscanner.ai.UnitConverter.System.CONVENTIONAL
 
+    // ── Portable export delta marker ────────────────────────────────────────
+    // createdAt of the newest report included in the last portable export, so "export new since
+    // last time" can ship only what changed. Stored per account so switching users doesn't leak
+    // one user's cutoff onto another's export.
+    private const val KEY_LAST_EXPORT_AT = "last_export_at"
+
+    fun getLastExportAt(context: Context): String? =
+        prefs(context).getString(KEY_LAST_EXPORT_AT + "_" + (getUserEmail(context) ?: ""), null)
+
+    fun setLastExportAt(context: Context, isoTimestamp: String) {
+        prefs(context).edit().putString(KEY_LAST_EXPORT_AT + "_" + (getUserEmail(context) ?: ""), isoTimestamp).apply()
+    }
+
     /** Medicine reminder styles: a standard notification, or a full-screen alarm page
      *  with very large text so elderly users can read the medicine names clearly. */
     const val REMINDER_STYLE_NORMAL = "normal"

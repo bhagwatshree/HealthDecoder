@@ -105,6 +105,55 @@ fun IPConfigScreen(
         }
     }
 
+    // ── Portable transfer (share records to another phone / merge someone else's in) ──
+    var transferResult by remember { mutableStateOf<String?>(null) }
+    var transferBusy by remember { mutableStateOf(false) }
+    var patients by remember { mutableStateOf<List<String>>(emptyList()) }
+    var exportPatient by remember { mutableStateOf<String?>(null) } // null = all patients
+    var exportDelta by remember { mutableStateOf(false) }
+    var patientMenuOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { patients = LocalRepository.listPatients(context) }
+
+    fun runExport() {
+        coroutineScope.launch {
+            transferBusy = true
+            transferResult = runCatching {
+                val file = LocalRepository.exportData(context, exportPatient, exportDelta)
+                if (file == null) "Nothing to export for that selection." else {
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        context, "${context.packageName}.fileprovider", file
+                    )
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "application/zip"
+                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(android.content.Intent.createChooser(send, "Share export"))
+                    "Export ready — choose where to send it."
+                }
+            }.getOrElse { "Export failed: ${it.message}" }
+            transferBusy = false
+        }
+    }
+
+    val portableImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) coroutineScope.launch {
+            transferBusy = true
+            transferResult = withContext(Dispatchers.IO) {
+                runCatching {
+                    val res = LocalRepository.importData(context, uri)
+                    buildString {
+                        append("Imported ${res.imported} report(s)")
+                        if (res.skippedDuplicates > 0) append(", skipped ${res.skippedDuplicates} already present")
+                        if (res.patients.isNotEmpty()) append(" • ${res.patients.joinToString()}")
+                    }
+                }.getOrElse { "Import failed: ${it.message}" }
+            }
+            patients = LocalRepository.listPatients(context)
+            transferBusy = false
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -306,6 +355,93 @@ fun IPConfigScreen(
                                 Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
+                    }
+                }
+            }
+
+            // Portable transfer — share records to another phone, or merge someone else's in.
+            // Unlike Backup (a whole-device snapshot that only restores on the SAME phone), this
+            // is a plain, cross-device file that carries the AI analysis inside it, so importing
+            // never re-runs the AI. Import MERGES (adds to what's already here) instead of wiping.
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Transfer Records",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Export a shareable file of your records (with analysis included) to send to another phone or a doctor. Importing merges it into this phone and never re-runs the AI, so it's free.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // Which patient to export (all, or one).
+                    Box {
+                        OutlinedButton(
+                            onClick = { patientMenuOpen = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(exportPatient ?: "All patients", modifier = Modifier.weight(1f))
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                        }
+                        DropdownMenu(expanded = patientMenuOpen, onDismissRequest = { patientMenuOpen = false }) {
+                            DropdownMenuItem(text = { Text("All patients") }, onClick = { exportPatient = null; patientMenuOpen = false })
+                            patients.forEach { p ->
+                                DropdownMenuItem(text = { Text(p) }, onClick = { exportPatient = p; patientMenuOpen = false })
+                            }
+                        }
+                    }
+
+                    // Delta toggle — only reports added since the last export.
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { exportDelta = !exportDelta },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Only new since last export", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                if (AppSettings.getLastExportAt(context) == null) "No previous export yet — this sends everything"
+                                else "Sends just what changed since last time",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(checked = exportDelta, onCheckedChange = { exportDelta = it })
+                    }
+
+                    transferResult?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { runExport() },
+                            enabled = !transferBusy,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (transferBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                            else { Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Export") }
+                        }
+                        OutlinedButton(
+                            onClick = { portableImportLauncher.launch(arrayOf("application/zip", "*/*")) },
+                            enabled = !transferBusy,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) { Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Import") }
                     }
                 }
             }
