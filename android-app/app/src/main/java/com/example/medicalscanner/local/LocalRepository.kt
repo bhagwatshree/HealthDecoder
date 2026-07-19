@@ -603,10 +603,8 @@ object LocalRepository {
     }
 
     // ── Detailed analysis (cached on device) ──────────────────────────────────
-    private fun detailedCacheFile(context: Context, id: String): File {
-        val dir = File(LocalStore.recordsDir(context), "detailed_analysis").apply { if (!exists()) mkdirs() }
-        return File(dir, "$id.json")
-    }
+    private fun detailedCacheFile(context: Context, id: String): File =
+        File(LocalStore.detailedAnalysisDir(context), "$id.json")
 
     suspend fun getDetailedAnalysis(context: Context, reportId: String, refresh: Boolean): DetailedAnalysis = withContext(Dispatchers.IO) {
         val cache = detailedCacheFile(context, reportId)

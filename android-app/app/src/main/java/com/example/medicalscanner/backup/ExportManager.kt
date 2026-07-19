@@ -91,6 +91,10 @@ object ExportManager {
                     val f = File(sf.path)
                     if (f.exists() && addedSources.add(f.name)) zip.putFile("sources/${f.name}", f)
                 }
+                // The cached AI "detailed analysis" deep-dive (kept in its own file, not the DB row)
+                // rides along so the importing device never has to re-run — and re-pay for — it.
+                val detail = File(LocalStore.detailedAnalysisDir(context), "${r.id}.json")
+                if (detail.exists()) zip.putFile("detailed/${r.id}.json", detail)
             }
             val payload = Payload(FORMAT_VERSION, nowIso(), sinceTimestamp, patientFilter, portable)
             zip.putNextEntry(ZipEntry("export.json"))
@@ -109,6 +113,9 @@ object ExportManager {
         val imagesDir = LocalStore.imagesDir(context)
         val sourcesDir = LocalStore.sourcesDir(context)
         var payloadJson: String? = null
+        // Cached detailed-analysis JSON, buffered by report id so it can be restored only for the
+        // reports we actually import (a skipped report keeps whatever it already has locally).
+        val detailedById = HashMap<String, ByteArray>()
 
         // Pass 1: stream the zip, writing file entries straight into the records folder and
         // buffering export.json (its order within the zip isn't guaranteed).
@@ -122,6 +129,8 @@ object ExportManager {
                         name == "export.json" -> payloadJson = zin.readBytes().toString(Charsets.UTF_8)
                         name.startsWith("images/") -> writeSafely(imagesDir, name.substringAfter("images/"), zin)
                         name.startsWith("sources/") -> writeSafely(sourcesDir, name.substringAfter("sources/"), zin)
+                        name.startsWith("detailed/") ->
+                            detailedById[File(name.substringAfter("detailed/")).nameWithoutExtension] = zin.readBytes()
                     }
                     zin.closeEntry()
                     entry = zin.nextEntry
@@ -137,9 +146,11 @@ object ExportManager {
         var skipped = 0
         val patients = linkedSetOf<String>()
         for (r in payload.reports) {
-            // Skip if this exact content already lives here under a different report id.
-            val existingByHash = if (r.pageHashes.isNotEmpty()) LocalStore.findReportByAnyHash(context, r.pageHashes) else null
-            if (existingByHash != null && existingByHash.id != r.id) { skipped++; continue }
+            // Dedup by report id, NOT page hash: several reports from one multi-page scan share
+            // the same page hashes (they're siblings, not duplicates), so a hash match would wrongly
+            // skip a bundle's other reports on a fresh device. A report we already hold by id is a
+            // genuine re-import — leave the local copy untouched (don't clobber any local edits).
+            if (LocalStore.getReport(context, r.id) != null) { skipped++; continue }
 
             val rehydrated = r.copy(
                 imagePath = r.imagePath.takeIf { it.isNotBlank() }?.let { File(imagesDir, it).absolutePath } ?: "",
@@ -148,6 +159,10 @@ object ExportManager {
                 userEmail = null // upsertReport re-scopes it to the importing account
             )
             LocalStore.upsertReport(context, rehydrated)
+            // Restore this report's cached deep-dive analysis so it isn't re-run (re-paid) on view.
+            detailedById[r.id]?.let { bytes ->
+                runCatching { File(LocalStore.detailedAnalysisDir(context), "${r.id}.json").writeBytes(bytes) }
+            }
             imported++
             r.patientName?.takeIf { it.isNotBlank() }?.let { patients.add(it) }
         }

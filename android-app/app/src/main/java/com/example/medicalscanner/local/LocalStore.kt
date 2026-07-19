@@ -45,6 +45,11 @@ object LocalStore {
     fun sourcesDir(context: Context): File =
         File(recordsDir(context), "sources").apply { if (!exists()) mkdirs() }
 
+    /** Per-report cached AI "detailed analysis" JSON (deep-dive), keyed by report id. Lives under
+     *  records/ so it rides along in backups and portable exports. */
+    fun detailedAnalysisDir(context: Context): File =
+        File(recordsDir(context), "detailed_analysis").apply { if (!exists()) mkdirs() }
+
     // ── Database lifecycle ──────────────────────────────────────────────────
     private fun db(context: Context): MedicalDatabase {
         database?.let { return it }
