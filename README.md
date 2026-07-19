@@ -174,6 +174,45 @@ From the Scan screen, a report can be added three ways:
 Reports can also be pulled in automatically from a linked Gmail inbox — see Google Sign-In &
 Gmail scanning above.
 
+### Trends & lab units
+
+The Trends screen charts each test's values over time, computed entirely on-device
+(`DashboardEngine.kt`) — no server round-trip. Readings from different labs are standardised to a
+single unit per test so one line stays comparable: the unit system is chosen once in **Account →
+Lab Units** (Indian/conventional by default — mg/dL, g/dL … — or International/SI — mmol/L, µmol/L
+…), and any report printed in the other unit is converted onto the chart (`UnitConverter.kt`), while
+the report screen still shows the value exactly as printed. Each chart also shades the test's healthy
+reference range as a band, parsed from the report and converted into the plotted unit.
+
+### Adding data without spending API quota
+
+Each scan can either be **Analyze & Scan** (runs the AI extraction) or **Upload Only (No Scan)**,
+which just stores the file(s) with zero API calls — handy for archiving old records in bulk. An
+upload-only report shows an **Analyze Now** button on its detail screen to run the AI on demand
+later. From a report's detail screen its original file can also be **shared** to a doctor or
+**downloaded**.
+
+### Fixing a mis-scanned patient or medicine name
+
+Handwriting is often misread, so both a patient's name and a medicine's name can be corrected in one
+place and the fix cascades everywhere it's stored:
+- **Account → Server Settings → Fix / Merge Patient** merges one patient name into another across
+  their reports, trends, reminders, intake logs and pending tests.
+- Editing a medicine in the Medication Tracker (including its name) updates every report that carries
+  it for that patient and re-keys its reminder schedule and intake logs, so nothing orphans.
+
+### Backup vs. transferring records between phones
+
+Two distinct mechanisms, both under **Account → Server Settings**:
+- **Backup & Restore** snapshots the whole encrypted database to one file for the *same* device (and
+  can auto-sync it to a chosen Google Drive/OneDrive/Dropbox folder). Restore replaces this device's
+  data, and the file isn't portable to another phone (it's encrypted with a per-device key).
+- **Transfer Records** produces a *portable* file that carries each report's full analysis embedded —
+  test values, comparison, insights, and the cached detailed analysis — so importing it onto another
+  phone **merges** it in (deduped by report id) without re-running, or re-paying for, the AI. It can
+  export a single patient or only what changed since the last export (delta), and shares straight to
+  WhatsApp, email, etc. See `ExportManager.kt`.
+
 ## Cost tracking
 
 Every Gemini/Sarvam/Firebase call the backend makes is logged (provider, operation, tokens,
