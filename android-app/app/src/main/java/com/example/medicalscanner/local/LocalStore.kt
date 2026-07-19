@@ -157,11 +157,28 @@ object LocalStore {
     }
 
     // ── Reports ─────────────────────────────────────────────────────────────
+    // Room and Gson (portable import) both bypass Kotlin null-safety, so a Medication's
+    // declared-non-null String fields can be null at runtime — enough to crash a screen that
+    // calls e.g. dosage.isNotBlank(). Normalize every report the moment it leaves the store so
+    // no downstream screen has to defend against it, whatever the data's origin.
+    private fun MedicalReport.sanitizedMeds(): MedicalReport {
+        if (medications.isEmpty()) return this
+        return copy(medications = medications.map { m ->
+            m.copy(
+                name = m.name.orEmpty(),
+                dosage = m.dosage.orEmpty(),
+                frequency = m.frequency.orEmpty(),
+                weeklySchedule = m.weeklySchedule ?: emptyList()
+            )
+        })
+    }
+
     fun getReports(context: Context): MutableList<MedicalReport> =
-        db(context).reportDao().getAllFiltered(AppSettings.getUserEmail(context) ?: "").toMutableList()
+        db(context).reportDao().getAllFiltered(AppSettings.getUserEmail(context) ?: "")
+            .map { it.sanitizedMeds() }.toMutableList()
 
     fun getReport(context: Context, id: String): MedicalReport? =
-        db(context).reportDao().getById(id)
+        db(context).reportDao().getById(id)?.sanitizedMeds()
 
     /** Light rows (no OCR text / analysis JSON) for list screens. */
     fun getReportSummaries(context: Context): List<ReportSummary> =
