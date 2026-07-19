@@ -120,16 +120,18 @@ object DashboardEngine {
             // Only reports that carry medicines (prescriptions) can change medication
             // status. Lab/scan reports say nothing about medicines — without this guard,
             // scanning a newer blood report marked every medicine "Discontinued".
-            if (r.medications.none { it.name.isNotBlank() }) continue
+            // Gson (portable import) and Room both bypass Kotlin null-safety, so a Medication's
+            // "non-null" String fields can actually be null at runtime — guard every access.
+            if (r.medications.none { !it.name.isNullOrBlank() }) continue
             val patient = r.patientName ?: "Unknown Patient"
             val date = r.reportDate ?: r.createdAt
             if ((latestDate[patient] ?: "") <= date) latestDate[patient] = date
             val medMap = patientMed.getOrPut(patient) { mutableMapOf() }
             for (m in r.medications) {
-                if (m.name.isBlank()) continue
+                if (m.name.isNullOrBlank()) continue
                 medMap.getOrPut(m.name.trim()) { mutableListOf() }.add(
-                    MedPoint(r.id, m.dosage.ifEmpty { "1 tablet" }, m.frequency, m.duration ?: "",
-                        m.isOptional, m.weeklySchedule, m.notes ?: "", date)
+                    MedPoint(r.id, m.dosage.orEmpty().ifEmpty { "1 tablet" }, m.frequency.orEmpty(), m.duration ?: "",
+                        m.isOptional, m.weeklySchedule ?: emptyList(), m.notes ?: "", date)
                 )
             }
         }
