@@ -10,6 +10,12 @@ import { trackFirebaseVerify } from './usageTracker.js';
 import jwt from 'jsonwebtoken';
 import { searchCommercial, startUhiSearch, processUhiWebhook } from './discovery.js';
 
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 dotenv.config();
 
 // Must read the same real secret as auth.js's own JWT_SECRET (used here only to verify the
@@ -26,6 +32,10 @@ const isLambda = !!process.env.AWS_LAMBDA_FUNCTION_NAME;
 // Enable CORS for mobile app connectivity
 app.use(cors());
 app.use(express.json());
+
+// Serve Interactive Clickable Mockup & Figma Canvas Simulator
+app.use(express.static(path.join(__dirname, '../mockup')));
+app.use('/mockup', express.static(path.join(__dirname, '../mockup')));
 
 // Test Endpoint
 app.get('/api/health', (req, res) => {
