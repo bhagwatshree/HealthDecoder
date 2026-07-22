@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit
  */
 object GeminiClient {
 
-    private const val MODEL = "gemini-3.6-pro"
+    private const val MODEL = "gemini-3.6-flash"
     private const val JSON_MEDIA = "application/json"
 
     private val client: OkHttpClient by lazy {
