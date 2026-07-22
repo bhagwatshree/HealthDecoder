@@ -157,28 +157,44 @@ object LocalStore {
     }
 
     // ── Reports ─────────────────────────────────────────────────────────────
-    // Room and Gson (portable import) both bypass Kotlin null-safety, so a Medication's
-    // declared-non-null String fields can be null at runtime — enough to crash a screen that
-    // calls e.g. dosage.isNotBlank(). Normalize every report the moment it leaves the store so
-    // no downstream screen has to defend against it, whatever the data's origin.
-    private fun MedicalReport.sanitizedMeds(): MedicalReport {
-        if (medications.isEmpty()) return this
-        return copy(medications = medications.map { m ->
+    // Room and Gson (portable import) both bypass Kotlin null-safety, so the declared-non-null
+    // String fields on Medication AND TestParameter can be null at runtime — enough to crash a
+    // screen that calls e.g. dosage.isNotBlank() (Records) or unit.trim()/value.toFloatOrNull()
+    // (Trends/dashboard). Normalize every report the moment it leaves the store so no downstream
+    // screen has to defend against it, whatever the data's origin.
+    private fun MedicalReport.sanitized(): MedicalReport {
+        val meds = if (medications.isEmpty()) medications else medications.map { m ->
             m.copy(
                 name = m.name.orEmpty(),
                 dosage = m.dosage.orEmpty(),
                 frequency = m.frequency.orEmpty(),
                 weeklySchedule = m.weeklySchedule ?: emptyList()
             )
-        })
+        }
+        val results = testResults?.let { t ->
+            t.copy(
+                parameters = t.parameters.map { p ->
+                    p.copy(
+                        name = p.name.orEmpty(),
+                        value = p.value.orEmpty(),
+                        unit = p.unit.orEmpty(),
+                        referenceRange = p.referenceRange.orEmpty()
+                        // status/trendCategory/trendCondition are already nullable-typed
+                    )
+                },
+                findings = t.findings.filterNotNull()
+            )
+        }
+        return if (meds === medications && results === testResults) this
+        else copy(medications = meds, testResults = results)
     }
 
     fun getReports(context: Context): MutableList<MedicalReport> =
         db(context).reportDao().getAllFiltered(AppSettings.getUserEmail(context) ?: "")
-            .map { it.sanitizedMeds() }.toMutableList()
+            .map { it.sanitized() }.toMutableList()
 
     fun getReport(context: Context, id: String): MedicalReport? =
-        db(context).reportDao().getById(id)?.sanitizedMeds()
+        db(context).reportDao().getById(id)?.sanitized()
 
     /** Light rows (no OCR text / analysis JSON) for list screens. */
     fun getReportSummaries(context: Context): List<ReportSummary> =
@@ -209,6 +225,7 @@ object LocalStore {
         excludeId: String
     ): MedicalReport? =
         db(context).reportDao().findPrevious(patient ?: "", category, beforeDate, excludeId, AppSettings.getUserEmail(context) ?: "")
+            ?.sanitized() // feeds AI/local comparison, which reads med + parameter fields
 
     fun upsertReport(context: Context, report: MedicalReport) {
         val userEmail = AppSettings.getUserEmail(context) ?: ""
