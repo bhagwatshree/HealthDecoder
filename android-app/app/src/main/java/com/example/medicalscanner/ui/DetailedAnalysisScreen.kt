@@ -84,6 +84,13 @@ fun DetailedAnalysisScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { /* TODO: Implement WhatsApp share intent */ }) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = tr("Share on WhatsApp"),
+                            tint = Color(0xFF25D366) // WhatsApp Green
+                        )
+                    }
                     IconButton(onClick = { if (!isLoading) load(true) }) {
                         Icon(imageVector = Icons.Default.Refresh, contentDescription = tr("Regenerate"))
                     }
@@ -155,8 +162,8 @@ fun DetailedAnalysisScreen(
                             item {
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8EAF6)),
-                                    shape = RoundedCornerShape(14.dp)
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFDCF8C6)), // Light WhatsApp Chat Bubble Green
+                                    shape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp, bottomStart = 2.dp, bottomEnd = 14.dp)
                                 ) {
                                     Column(
                                         modifier = Modifier.padding(16.dp),
@@ -175,7 +182,7 @@ fun DetailedAnalysisScreen(
                                                 tr("Overview"),
                                                 fontWeight = FontWeight.Bold,
                                                 style = MaterialTheme.typography.titleSmall,
-                                                color = Color(0xFF1A237E)
+                                                color = Color(0xFF075E54) // Deep WhatsApp Green
                                             )
                                         }
                                         Text(

@@ -25,7 +25,11 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.graphicsLayer
+import com.example.medicalscanner.model.MockProfiles
+import com.example.medicalscanner.model.FamilyProfile
 
 
 private data class HomeAction(
@@ -93,7 +97,19 @@ fun HomeScreen(
         )
     )
 
+    var selectedProfile by remember { mutableStateOf(MockProfiles.profiles[0]) }
+    var expandedProfileMenu by remember { mutableStateOf(false) }
+
     Scaffold(
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = onNavigateToChat,
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                icon = { Icon(Icons.Default.Mic, contentDescription = "Voice Search") },
+                text = { Text(text = tr("Voice Search"), fontWeight = FontWeight.Bold) }
+            )
+        },
         topBar = {
             TopAppBar(
                 navigationIcon = {
@@ -107,19 +123,40 @@ fun HomeScreen(
                     }
                 },
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        TopBarLogo(size = 24.dp)
-                        Text(
-                            text = "Medical Assist",
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                    Box {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { expandedProfileMenu = true }
+                        ) {
+                            Text(
+                                text = "${selectedProfile.avatarEmoji} ${selectedProfile.name}",
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Switch Profile",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = expandedProfileMenu,
+                            onDismissRequest = { expandedProfileMenu = false }
+                        ) {
+                            MockProfiles.profiles.forEach { profile ->
+                                DropdownMenuItem(
+                                    text = { Text("${profile.avatarEmoji} ${profile.name} (${profile.relation})") },
+                                    onClick = {
+                                        selectedProfile = profile
+                                        expandedProfileMenu = false
+                                        onRefresh()
+                                    }
+                                )
+                            }
+                        }
                     }
                 },
                 actions = {

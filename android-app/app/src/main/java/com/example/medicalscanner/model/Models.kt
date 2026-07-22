@@ -6,6 +6,21 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.google.gson.annotations.SerializedName
 
+data class FamilyProfile(
+    val id: String,
+    val name: String,
+    val relation: String,
+    val avatarEmoji: String
+)
+
+object MockProfiles {
+    val profiles = listOf(
+        FamilyProfile("p1", "Amit (Self)", "Self", "👨"),
+        FamilyProfile("p2", "Papa", "Father", "👴"),
+        FamilyProfile("p3", "Mummy", "Mother", "👵")
+    )
+}
+
 data class Medication(
     @SerializedName("name") val name: String,
     @SerializedName("dosage") val dosage: String = "",
