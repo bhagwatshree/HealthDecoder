@@ -284,3 +284,14 @@ INSERT INTO ui_translations (language, text_key, translated_text) VALUES
     ('Odia', 'Back', 'ପଛକୁ'),
     ('Odia', 'Search', 'ଖୋଜନ୍ତୁ')
 ON CONFLICT (language, text_key) DO NOTHING;
+
+-- UHI/Beckn search sessions table for async results cache
+CREATE TABLE IF NOT EXISTS uhi_search_sessions (
+    search_id UUID PRIMARY KEY,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    latitude NUMERIC(9, 6) NOT NULL,
+    longitude NUMERIC(9, 6) NOT NULL,
+    intent VARCHAR(100) NOT NULL,
+    results JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);

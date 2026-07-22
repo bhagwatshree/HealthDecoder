@@ -204,7 +204,11 @@ Only recommend specialists if findings warrant it. Empty sideEffects if no medic
         val historyText = history.takeLast(6).joinToString("\n") { "${if (it.role == "user") "Patient" else "Assistant"}: ${it.content}" }
         val prompt = """
 You are a friendly medical assistant helping a patient understand their own records. Answer in clear, simple, plain language. Be warm and factual.
-SAFETY: You are NOT a doctor; do not diagnose or prescribe. For anything concerning, advise consulting a doctor. Ground answers in the records below; if not present, say so and give safe general guidance. Keep it concise (2-5 sentences).
+SAFETY & MEDICAL DISCLAIMER: You are NOT a doctor; do not diagnose or prescribe. Ground answers in the records below. If the patient asks which doctor or specialist they should see based on their results, recommend the type of medical specialist (e.g., Endocrinologist for Thyroid, Cardiologist for Cardiac/Lipids). If they ask where to do recommended tests or checkups, inform them they can check with nearby path labs or hospitals using the "Find Care" search feature.
+IMPORTANT: At the end of every response, you MUST append this exact patient disclaimer:
+"Disclaimer: This information is purely educational and informational. It is not a confirmed medical diagnosis or appointment. Please consult a doctor and do not rely solely on this information."
+Keep answers concise (3-5 sentences).
+
 PATIENT'S RECORDS:
 ${ctx.ifBlank { "No reports available yet." }}
 ${if (historyText.isNotBlank()) "CONVERSATION SO FAR:\n$historyText\n" else ""}
@@ -232,8 +236,19 @@ Answer:
     }
 
     private fun localChat(question: String, reports: List<MedicalReport>): String {
-        if (reports.isEmpty()) return "I don't have any of your reports on file yet. Once you scan a report, I can help explain your results, medicines, and doctor's notes. For any medical concern, please consult your doctor."
-        return "Based on your saved reports:\n\n${buildReportsContext(reports)}\n\nAnything marked abnormal is worth discussing with your doctor. (Offline mode — set a Gemini key in Settings for smarter answers.)"
+        val disclaimer = "\n\nDisclaimer: This information is purely educational and informational. It is not a confirmed medical diagnosis or appointment. Please consult a doctor and do not rely solely on this information."
+        if (reports.isEmpty()) return "I don't have any of your reports on file yet. Once you scan a report, I can help explain your results, medicines, and doctor's notes. For any medical concern, please consult your doctor.$disclaimer"
+        
+        val q = question.lowercase()
+        val suffix = "(Offline mode — set a Gemini key in Settings for smarter answers. You can also search for nearby labs and doctors using the 'Find Care' screen.)$disclaimer"
+        
+        if (q.contains("doctor") || q.contains("doct") || q.contains("specialist") || q.contains("physician")) {
+            return "Based on your saved reports, you should discuss abnormal findings with a suitable specialist (e.g. Cardiologist for Lipids/heart, Endocrinologist for Thyroid, Diabetologist for high sugar). You can find nearby doctor clinics using the 'Find Care' screen on the dashboard. $suffix"
+        }
+        if (q.contains("test") || q.contains("lab") || q.contains("path") || q.contains("hospital")) {
+            return "For diagnostic tests or health screenings, you can look up nearby path labs and hospitals offering these services using the 'Find Care' screen on the dashboard. $suffix"
+        }
+        return "Based on your saved reports:\n\n${buildReportsContext(reports)}\n\nAnything marked abnormal is worth discussing with your doctor. $suffix"
     }
 
     private fun buildReportsContext(reports: List<MedicalReport>): String {

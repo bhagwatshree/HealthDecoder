@@ -1354,18 +1354,27 @@ function buildReportsContext(reports = []) {
 function generateLocalChatAnswer(question, reports = []) {
   const q = (question || '').toLowerCase();
   const context = buildReportsContext(reports);
+  const disclaimer = "\n\nDisclaimer: This information is purely educational and informational. It is not a confirmed medical diagnosis or appointment. Please consult a doctor and do not rely solely on this information.";
 
   if (!reports || reports.length === 0) {
-    return "I don't have any of your reports on file yet. Once you scan a report, I can help explain your results, medicines, and doctor's notes. For any medical concern, please consult your doctor.";
+    return "I don't have any of your reports on file yet. Once you scan a report, I can help explain your results, medicines, and doctor's notes. For any medical concern, please consult your doctor." + disclaimer;
   }
 
+  const suffix = "\n\n(Offline mode — set a Gemini key in Settings for smarter answers. You can also search for nearby labs and doctors using the 'Find Care' screen on the dashboard.)" + disclaimer;
+
+  if (/doctor|doct|specialist|physician/.test(q)) {
+    return "Based on your saved reports, you should discuss abnormal findings with a suitable specialist (e.g. Cardiologist for Lipids/heart, Endocrinologist for Thyroid, Diabetologist for high sugar). You can find nearby doctor clinics using the 'Find Care' screen on the dashboard." + suffix;
+  }
+  if (/test|lab|path|hospital/.test(q)) {
+    return "For diagnostic tests or health screenings, you can look up nearby path labs and hospitals offering these services using the 'Find Care' screen on the dashboard." + suffix;
+  }
   if (/medicine|medication|tablet|drug|dose|dosage/.test(q)) {
-    return `Here is a summary based on your records:\n\n${context}\n\nAlways take medicines exactly as your doctor prescribed. If you're unsure about a dose, check with your doctor or pharmacist.`;
+    return `Here is a summary based on your records:\n\n${context}\n\nAlways take medicines exactly as your doctor prescribed. If you're unsure about a dose, check with your doctor or pharmacist.` + suffix;
   }
   if (/report|result|test|value|blood|sugar|thyroid|tsh/.test(q)) {
-    return `Based on your saved reports:\n\n${context}\n\nAnything marked abnormal is worth discussing with your doctor at your next visit.`;
+    return `Based on your saved reports:\n\n${context}\n\nAnything marked abnormal is worth discussing with your doctor at your next visit.` + suffix;
   }
-  return `I'm running in offline mode, so I can only summarise what's in your records:\n\n${context}\n\nFor specific medical advice, please consult your doctor.`;
+  return `I'm running in offline mode, so I can only summarise what's in your records:\n\n${context}\n\nFor specific medical advice, please consult your doctor.` + suffix;
 }
 
 /**
@@ -1399,9 +1408,13 @@ STRICT RULES (important):
 - Interpret and explain the report factually and clearly.
 - Do NOT diagnose, and do NOT speculate about what condition the patient might have or what may have caused a result.
 - Do NOT suggest, recommend, add, or change any medicines or treatments.
+- If asked which doctor or specialist they should see based on their results, recommend the type of medical specialist (e.g., Endocrinologist for Thyroid anomalies, Cardiologist for Cardiac/Lipids findings).
+- If they ask where to do recommended tests or checkups, inform them they can check with nearby path labs or hospitals using the "Find Care" search feature on the dashboard.
 - You MAY give helpful factual background — what a test measures, what a normal range means, or what an ALREADY-prescribed medicine is generally used for — using established medical knowledge.
 - NEVER invent values, findings, causes, or facts that are not in the data or well-established general knowledge. If unsure, say so and suggest asking the doctor.
 - For anything concerning or urgent, advise consulting their doctor.
+- At the end of every response, you MUST append this exact patient disclaimer:
+  "Disclaimer: This information is purely educational and informational. It is not a confirmed medical diagnosis or appointment. Please consult a doctor and do not rely solely on this information."
 - Keep answers concise and factual.
 
 PATIENT'S MEDICAL RECORDS:

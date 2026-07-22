@@ -413,3 +413,77 @@ data class SimpleResponse(
     // a freshly-signed one to stay logged in instead of being logged out by its own request.
     @SerializedName("token") val token: String? = null
 )
+
+// ── Healthcare & Lab Test Discovery ──────────────────────────────────────────
+
+data class DiscoveryTestItem(
+    @SerializedName("name") val name: String,
+    @SerializedName("price") val price: Double,
+    @SerializedName("timeToReport") val timeToReport: String? = null
+)
+
+data class DiscoveryFacility(
+    @SerializedName("id") val id: String,
+    @SerializedName("name") val name: String,
+    @SerializedName("address") val address: String? = null,
+    @SerializedName("phone") val phone: String? = null,
+    @SerializedName("distance") val distance: String? = null,
+    @SerializedName("rating") val rating: String? = null,
+    @SerializedName("type") val type: String? = null, // "hospital", "laboratory", "clinic"
+    @SerializedName("hasEmergency") val hasEmergency: Boolean = false,
+    @SerializedName("homeCollection") val homeCollection: Boolean = false,
+    @SerializedName("matchedTests") val matchedTests: List<DiscoveryTestItem> = emptyList(),
+    // Doctor details:
+    @SerializedName("specialty") val specialty: String? = null,
+    @SerializedName("experience") val experience: String? = null,
+    @SerializedName("clinic") val clinic: String? = null,
+    @SerializedName("fee") val fee: Double? = null,
+    @SerializedName("slots") val slots: List<String> = emptyList()
+)
+
+data class DiscoverySearchRequest(
+    @SerializedName("latitude") val latitude: Double,
+    @SerializedName("longitude") val longitude: Double,
+    @SerializedName("category") val category: String, // hospitals | lab_tests | doctors
+    @SerializedName("query") val query: String? = null,
+    @SerializedName("mode") val mode: String = "commercial" // commercial | uhi
+)
+
+data class DiscoverySearchResponse(
+    @SerializedName("results") val results: List<DiscoveryFacility> = emptyList(),
+    @SerializedName("search_id") val searchId: String? = null,
+    @SerializedName("gateway_status") val gatewayStatus: String? = null,
+    @SerializedName("message") val message: String? = null
+)
+
+data class UhiPrice(
+    @SerializedName("value") val value: Double,
+    @SerializedName("currency") val currency: String
+)
+
+data class UhiItem(
+    @SerializedName("id") val id: String,
+    @SerializedName("name") val name: String,
+    @SerializedName("descriptor") val descriptor: Map<String, String>? = null,
+    @SerializedName("price") val price: UhiPrice? = null,
+    @SerializedName("slots") val slots: List<String> = emptyList()
+)
+
+data class UhiProvider(
+    @SerializedName("provider_id") val providerId: String,
+    @SerializedName("provider_name") val providerName: String,
+    @SerializedName("type") val type: String,
+    @SerializedName("distance") val distance: String? = null,
+    @SerializedName("rating") val rating: String? = null,
+    @SerializedName("address") val address: String? = null,
+    @SerializedName("phone") val phone: String? = null,
+    @SerializedName("homeCollection") val homeCollection: Boolean = false,
+    @SerializedName("items") val items: List<UhiItem> = emptyList()
+)
+
+data class UhiPollResponse(
+    @SerializedName("search_id") val searchId: String,
+    @SerializedName("intent") val intent: String,
+    @SerializedName("results") val results: List<UhiProvider> = emptyList()
+)
+

@@ -26,6 +26,7 @@ fun PendingTestsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToDetail: (String) -> Unit,
     onNavigateToChat: () -> Unit,
+    onNavigateToDiscovery: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -179,6 +180,9 @@ fun PendingTestsScreen(
                                                 errorMessage = "Failed to delete test reminder."
                                             }
                                         }
+                                    },
+                                    onFindCentersClick = {
+                                        onNavigateToDiscovery(test.testName)
                                     }
                                 )
                             }

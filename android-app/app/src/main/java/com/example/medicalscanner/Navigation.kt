@@ -44,6 +44,7 @@ import com.example.medicalscanner.ui.RemindersScreen
 import com.example.medicalscanner.ui.ReportDetailScreen
 import com.example.medicalscanner.ui.ScanScreen
 import com.example.medicalscanner.ui.TrendsScreen
+import com.example.medicalscanner.ui.DiscoveryScreen
 import kotlinx.coroutines.launch
 
 private data class DisclaimerTranslation(
@@ -386,6 +387,7 @@ fun MainNavigation() {
             onNavigateToMedicationTracker = { backStack.add(MedicationTracker) },
             onNavigateToReminders = { backStack.add(Reminders) },
             onNavigateToPendingTests = { backStack.add(PendingTests) },
+            onNavigateToDiscovery = { category -> backStack.add(Discovery(category = category)) },
             onRefresh = {
               coroutineScope.launch {
                 runCatching { NetworkModule.getApi(context).getMe() }
@@ -422,6 +424,17 @@ fun MainNavigation() {
             onNavigateBack = { backStack.removeLastOrNull() },
             onNavigateToDetail = { reportId -> backStack.add(ReportDetail(reportId)) },
             onNavigateToChat = { backStack.add(Chat(contextHint = "Pending Tests")) },
+            onNavigateToDiscovery = { query ->
+              backStack.add(Discovery(category = "lab_tests", query = query))
+            },
+            modifier = Modifier.safeDrawingPadding()
+          )
+        }
+        entry<Discovery> { key ->
+          DiscoveryScreen(
+            initialCategory = key.category,
+            initialQuery = key.query,
+            onNavigateBack = { backStack.removeLastOrNull() },
             modifier = Modifier.safeDrawingPadding()
           )
         }
@@ -471,6 +484,9 @@ fun MainNavigation() {
             },
             onNavigateToAnalysis = { id ->
               backStack.add(DetailedAnalysis(id))
+            },
+            onNavigateToDiscovery = { category, query ->
+              backStack.add(Discovery(category = category, query = query))
             },
             modifier = Modifier.safeDrawingPadding()
           )

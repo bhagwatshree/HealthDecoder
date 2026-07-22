@@ -58,6 +58,7 @@ fun ReportDetailScreen(
     onNavigateBack: () -> Unit,
     onNavigateToDetail: (String) -> Unit = {},
     onNavigateToAnalysis: (String) -> Unit = {},
+    onNavigateToDiscovery: (String, String) -> Unit = { _, _ -> },
     highlightParam: String? = null,
     modifier: Modifier = Modifier
 ) {
@@ -848,19 +849,33 @@ fun ReportDetailScreen(
                                                     color = textColor.copy(alpha = 0.8f),
                                                     lineHeight = 16.sp
                                                 )
-                                                Box(
-                                                    modifier = Modifier
-                                                        .padding(top = 4.dp)
-                                                        .clip(RoundedCornerShape(4.dp))
-                                                        .background(textColor.copy(alpha = 0.12f))
-                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                 ) {
-                                                    Text(
-                                                        text = rec.urgency,
-                                                        fontSize = 10.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = textColor
-                                                    )
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .padding(top = 4.dp)
+                                                            .clip(RoundedCornerShape(4.dp))
+                                                            .background(textColor.copy(alpha = 0.12f))
+                                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = rec.urgency,
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = textColor
+                                                        )
+                                                    }
+                                                    TextButton(
+                                                        onClick = { onNavigateToDiscovery("doctors", rec.specialist) },
+                                                        contentPadding = PaddingValues(horizontal = 8.dp),
+                                                        modifier = Modifier.height(28.dp)
+                                                    ) {
+                                                        Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = textColor, modifier = Modifier.size(14.dp))
+                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                        Text(tr("Find Nearby"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = textColor)
+                                                    }
                                                 }
                                             }
                                         }

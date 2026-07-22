@@ -526,7 +526,8 @@ fun MedicationHistoryCard(
 fun PendingTestCard(
     test: PendingTest,
     onResolveClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onDeleteClick: () -> Unit,
+    onFindCentersClick: () -> Unit
 ) {
     val isPending = test.status == "Pending"
     Card(
@@ -607,7 +608,14 @@ fun PendingTestCard(
                     )
                 }
 
-                if (!isPending && test.resolvedReportId != null) {
+                if (isPending) {
+                    TextButton(onClick = onFindCentersClick) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(imageVector = Icons.Default.Search, contentDescription = tr("Find Labs"), modifier = Modifier.size(16.dp))
+                            Text(tr("Find Lab Centers"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                } else if (test.resolvedReportId != null) {
                     TextButton(onClick = onResolveClick) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Icon(imageVector = Icons.Default.Visibility, contentDescription = tr("View Report"), modifier = Modifier.size(16.dp))

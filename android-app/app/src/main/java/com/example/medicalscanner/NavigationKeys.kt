@@ -47,3 +47,7 @@ data object Reminders : NavKey
 
 @Serializable
 data object PendingTests : NavKey
+
+@Serializable
+data class Discovery(val category: String = "lab_tests", val query: String? = null) : NavKey
+

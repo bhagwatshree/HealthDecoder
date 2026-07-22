@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import { resolveKeysForUser, peekAssignmentForUser } from './keyPool.js';
 import { trackFirebaseVerify } from './usageTracker.js';
 import jwt from 'jsonwebtoken';
+import { searchCommercial, startUhiSearch, processUhiWebhook } from './discovery.js';
 
 dotenv.config();
 
@@ -601,6 +602,85 @@ app.post('/api/user/sarvam-key', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error saving Sarvam key:', error);
     res.status(500).json({ error: 'Failed to save Sarvam API key' });
+  }
+});
+
+// ─── Healthcare & Lab Test Discovery ──────────────────────────────────────────
+
+// 1. Search (Universal endpoint for UHI and Commercial)
+app.post('/api/discovery/search', requireAuth, async (req, res) => {
+  try {
+    const { latitude, longitude, category, query, mode = 'commercial' } = req.body || {};
+
+    if (latitude === undefined || longitude === undefined) {
+      return res.status(400).json({ error: 'Latitude and longitude coordinates are required.' });
+    }
+    if (!category || !['hospitals', 'lab_tests', 'doctors'].includes(category)) {
+      return res.status(400).json({ error: 'Valid category (hospitals, lab_tests, doctors) is required.' });
+    }
+
+    const latFloat = parseFloat(latitude);
+    const lngFloat = parseFloat(longitude);
+
+    if (isNaN(latFloat) || isNaN(lngFloat)) {
+      return res.status(400).json({ error: 'Latitude and longitude must be valid numbers.' });
+    }
+
+    if (mode === 'uhi') {
+      const response = await startUhiSearch(req.user.id, {
+        latitude: latFloat,
+        longitude: lngFloat,
+        category,
+        query
+      });
+      return res.status(202).json(response);
+    } else {
+      const results = await searchCommercial(latFloat, lngFloat, category, query);
+      return res.json({ results });
+    }
+  } catch (error) {
+    console.error('Discovery search failed:', error);
+    res.status(500).json({ error: 'Healthcare discovery search failed.' });
+  }
+});
+
+// 2. Poll/Retrieve UHI Webhook Results
+app.get('/api/discovery/results', requireAuth, async (req, res) => {
+  try {
+    const { search_id } = req.query;
+    if (!search_id) {
+      return res.status(400).json({ error: 'search_id is required.' });
+    }
+
+    const result = await db.query(
+      'SELECT results, intent, created_at FROM uhi_search_sessions WHERE search_id = $1',
+      [search_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Search session not found.' });
+    }
+
+    res.json({
+      search_id,
+      intent: result.rows[0].intent,
+      created_at: result.rows[0].created_at,
+      results: result.rows[0].results
+    });
+  } catch (error) {
+    console.error('Failed to retrieve UHI results:', error);
+    res.status(500).json({ error: 'Failed to retrieve search results.' });
+  }
+});
+
+// 3. Public Webhook callback endpoint for UHI/Beckn Protocol
+app.post('/api/discovery/uhi/on_search', async (req, res) => {
+  try {
+    await processUhiWebhook(req.body);
+    res.json({ status: 'ACK' });
+  } catch (error) {
+    console.error('UHI Webhook handler failed:', error);
+    res.status(500).json({ error: 'Webhook processing failed.' });
   }
 });
 

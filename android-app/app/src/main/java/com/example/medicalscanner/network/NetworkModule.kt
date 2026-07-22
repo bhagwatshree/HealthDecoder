@@ -191,6 +191,13 @@ interface MedicalScannerApi {
 
     @GET("api/translations")
     suspend fun getLanguageTranslations(@Query("language") language: String): Map<String, String>
+
+    // ── Healthcare & Lab Test Discovery ──────────────────────────────────────
+    @POST("api/discovery/search")
+    suspend fun searchDiscovery(@Body request: com.example.medicalscanner.model.DiscoverySearchRequest): com.example.medicalscanner.model.DiscoverySearchResponse
+
+    @GET("api/discovery/results")
+    suspend fun getUhiResults(@Query("search_id") searchId: String): com.example.medicalscanner.model.UhiPollResponse
 }
 
 

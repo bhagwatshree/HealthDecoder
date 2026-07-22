@@ -294,6 +294,20 @@ ON CONFLICT (language, text_key) DO NOTHING;
     `);
     console.log('Table ui_translations created/seeded.');
 
+    // UHI/Beckn search sessions table for async results cache
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS uhi_search_sessions (
+          search_id UUID PRIMARY KEY,
+          user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+          latitude NUMERIC(9, 6) NOT NULL,
+          longitude NUMERIC(9, 6) NOT NULL,
+          intent VARCHAR(100) NOT NULL,
+          results JSONB DEFAULT '[]'::jsonb,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table uhi_search_sessions created or checked.');
+
     console.log('Database migration completed successfully!');
     process.exit(0);
   } catch (error) {

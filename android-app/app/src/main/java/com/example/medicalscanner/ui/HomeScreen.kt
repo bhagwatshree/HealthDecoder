@@ -49,6 +49,7 @@ fun HomeScreen(
     onNavigateToMedicationTracker: () -> Unit,
     onNavigateToReminders: () -> Unit,
     onNavigateToPendingTests: () -> Unit,
+    onNavigateToDiscovery: (String) -> Unit,
     onRefresh: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -73,6 +74,18 @@ fun HomeScreen(
         HomeAction(
             "Pending Tests", "🚨",
             Color(0xFFFFF9C4), Color(0xFFC62828), onNavigateToPendingTests
+        ),
+        HomeAction(
+            "Find Doctors", "🩺",
+            Color(0xFFE0F2F1), Color(0xFF00796B), { onNavigateToDiscovery("doctors") }
+        ),
+        HomeAction(
+            "Find Labs", "🧪",
+            Color(0xFFE0F7FA), Color(0xFF006064), { onNavigateToDiscovery("lab_tests") }
+        ),
+        HomeAction(
+            "Find Hospitals", "🏥",
+            Color(0xFFE1F5FE), Color(0xFF0277BD), { onNavigateToDiscovery("hospitals") }
         ),
         HomeAction(
             "Trends", "📈",

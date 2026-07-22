@@ -237,26 +237,186 @@ fun AccountScreen(
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
                     ) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Today's AI Usage", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("AI Vision Engine & API Key", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (a.billedTo == "own") Color(0xFFE8EAF6) else Color(0xFFE8F5E9)
+                                ) {
+                                    Text(
+                                        text = if (a.billedTo == "own") "Secondary: Custom Key" else "Primary: Shared Key Pool",
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (a.billedTo == "own") Color(0xFF283593) else Color(0xFF2E7D32)
+                                    )
+                                }
+                            }
+
                             when (a.billedTo) {
-                                "own" -> Text("Using your own API key — unlimited, not counted against the free tier.", style = MaterialTheme.typography.bodySmall)
+                                "own" -> {
+                                    Text(
+                                        "Using your individual Gemini API key — unlimited scans, bypassing the free tier limits.",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
                                 "premium" -> Text("Premium plan — unlimited usage.", style = MaterialTheme.typography.bodySmall)
                                 else -> {
                                     val used = a.usageToday.coerceAtMost(a.limit)
-                                    LinearProgressIndicator(
-                                        progress = { if (a.limit > 0) used.toFloat() / a.limit else 0f },
-                                        modifier = Modifier.fillMaxWidth().height(8.dp),
-                                        strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
-                                    )
-                                    Text("$used / ${a.limit} free scans used today", style = MaterialTheme.typography.bodySmall)
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        LinearProgressIndicator(
+                                            progress = { if (a.limit > 0) used.toFloat() / a.limit else 0f },
+                                            modifier = Modifier.fillMaxWidth().height(8.dp),
+                                            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                                        )
+                                        Text("$used / ${a.limit} free daily scans used (Shared Key Pool)", style = MaterialTheme.typography.bodySmall)
+                                    }
                                     if (a.quotaExceeded) {
                                         Text(
-                                            "Today's free quota is used up. It resets tomorrow.",
+                                            "Today's free pool quota is used up. Add a personal API key below for unlimited scans, or wait until tomorrow.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.error
                                         )
                                     }
+                                }
+                            }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                            // Individual API Key Configuration Section
+                            var customKeyInput by remember { mutableStateOf("") }
+                            var isSavingKey by remember { mutableStateOf(false) }
+                            var keyActionMessage by remember { mutableStateOf<String?>(null) }
+                            var keyActionIsError by remember { mutableStateOf(false) }
+
+                            Text(
+                                "Custom API Key (Optional)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "By default, the app uses the Primary Shared Key Pool. You can connect your Google account or paste your own Gemini API key below to switch to Secondary (Individual) mode.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            OutlinedTextField(
+                                value = customKeyInput,
+                                onValueChange = { customKeyInput = it },
+                                label = { Text("Gemini API Key (AIzaSy...)") },
+                                placeholder = { Text("Leave blank to use Primary Shared Key Pool") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            keyActionMessage?.let { msg ->
+                                Text(
+                                    msg,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (keyActionIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        if (customKeyInput.isBlank()) {
+                                            keyActionMessage = "Please enter a valid API key or tap 'Revert to Shared Pool'."
+                                            keyActionIsError = true
+                                            return@Button
+                                        }
+                                        isSavingKey = true
+                                        keyActionMessage = null
+                                        coroutineScope.launch {
+                                            val res = runCatching {
+                                                NetworkModule.getApi(context).setGeminiKeyOnAccount(
+                                                    com.example.medicalscanner.model.ApiKeyRequest(customKeyInput.trim())
+                                                )
+                                            }
+                                            isSavingKey = false
+                                            res.onSuccess {
+                                                AppSettings.setGeminiKey(context, customKeyInput.trim())
+                                                AccountSync.refreshAssignedKeys(context)
+                                                keyActionMessage = "Personal API Key saved! Switched to Individual Key mode."
+                                                keyActionIsError = false
+                                                customKeyInput = ""
+                                                load()
+                                            }.onFailure { e ->
+                                                keyActionMessage = e.apiErrorMessage() ?: "Failed to save key."
+                                                keyActionIsError = true
+                                            }
+                                        }
+                                    },
+                                    enabled = !isSavingKey,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text("Save Key")
+                                }
+
+                                if (a.billedTo == "own" || AppSettings.getGeminiKey(context).isNotBlank()) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            isSavingKey = true
+                                            keyActionMessage = null
+                                            coroutineScope.launch {
+                                                val res = runCatching {
+                                                    NetworkModule.getApi(context).setGeminiKeyOnAccount(
+                                                        com.example.medicalscanner.model.ApiKeyRequest("")
+                                                    )
+                                                }
+                                                isSavingKey = false
+                                                res.onSuccess {
+                                                    AppSettings.setGeminiKey(context, "")
+                                                    AccountSync.refreshAssignedKeys(context)
+                                                    keyActionMessage = "Reverted to Primary Shared Key Pool."
+                                                    keyActionIsError = false
+                                                    load()
+                                                }.onFailure {
+                                                    AppSettings.setGeminiKey(context, "")
+                                                    keyActionMessage = "Reverted to Primary Shared Key Pool locally."
+                                                    keyActionIsError = false
+                                                    load()
+                                                }
+                                            }
+                                        },
+                                        enabled = !isSavingKey,
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text("Revert to Pool")
+                                    }
+                                }
+                            }
+
+                            // Dedicated Google SSO for API Key generation (Decoupled from main app login)
+                            OutlinedButton(
+                                onClick = {
+                                    val token = AppSettings.getAuthToken(context) ?: ""
+                                    val nonce = java.util.UUID.randomUUID().toString()
+                                    AppSettings.setPendingOAuthNonce(context, nonce)
+                                    val url = NetworkModule.getFullImageUrl(context, "api/auth/google?state=apikey|$token|$nonce")
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                    context.startActivity(intent)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text("🌐 Connect Google to Auto-Fetch Gemini Key")
                                 }
                             }
                         }
