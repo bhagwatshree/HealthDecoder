@@ -6,6 +6,10 @@ export const INR_PER_USD = 83;
 
 // https://ai.google.dev/gemini-api/docs/pricing
 export const GEMINI_PRICING = {
+  'gemini-3.6-flash': {
+    inputPerMTokens: 0.30,
+    outputPerMTokens: 2.50,
+  },
   'gemini-2.5-flash': {
     inputPerMTokens: 0.30,
     outputPerMTokens: 2.50,

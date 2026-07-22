@@ -138,7 +138,7 @@ Do not return any markdown code block formatting (like \`\`\`json) or extra text
 
     console.log('Sending image to Gemini for analysis...');
     const response = await trackGemini(ai, {
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.6-flash',
       contents: [imagePart, promptText],
     });
 
@@ -235,7 +235,7 @@ Return ONLY the raw JSON. Do not write markdown wrappers like \`\`\`json.
       
       console.log('Sending reports to Gemini for comparison...');
       const response = await trackGemini(ai, {
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.6-flash',
         contents: [comparisonPrompt],
       });
       
@@ -430,7 +430,7 @@ Rules:
 
       console.log('Generating AI health insights...');
       const response = await trackGemini(ai, {
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.6-flash',
         contents: [insightsPrompt],
       });
 
@@ -1426,7 +1426,7 @@ Answer:`;
 
       console.log('Generating AI chat response...');
       const response = await trackGemini(ai, {
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.6-flash',
         contents: [chatPrompt],
       });
 
@@ -1521,7 +1521,7 @@ STRICT RULES:
 
       console.log('Generating detailed AI analysis...');
       const response = await trackGemini(ai, {
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.6-flash',
         contents: [prompt],
       });
 
@@ -1810,7 +1810,7 @@ export async function generateMedicineInfo(medicineName, language = 'English') {
 Return ONLY raw JSON (no code fences):
 {"purpose":"one short line — what this medicine is commonly given for","plainExplanation":"2-3 very simple sentences on what it does in the body and why it helps","commonUses":["short phrase", "short phrase"],"safetyTips":["short simple tip", "short simple tip"]}
 If the name is unclear or could be several medicines, give the most common one and keep it general.`;
-      const response = await trackGemini(ai, { model: 'gemini-2.5-flash', contents: [prompt] });
+      const response = await trackGemini(ai, { model: 'gemini-3.6-flash', contents: [prompt] });
       let cleaned = (response.text || '').trim();
       if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```json\s*/, '').replace(/```$/, '').trim();
       info = JSON.parse(cleaned);
@@ -1852,7 +1852,7 @@ If the name is unclear or could be several medicines, give the most common one a
       try {
         const ai = new GoogleGenAI({ apiKey: geminiKey });
         const tPrompt = `Rewrite this medicine explanation in ${language} using very simple words a common person understands. Keep the medicine name "${medicineName}" in English. Return ONLY raw JSON with the same keys: ${JSON.stringify(info)}`;
-        const response = await trackGemini(ai, { model: 'gemini-2.5-flash', contents: [tPrompt] });
+        const response = await trackGemini(ai, { model: 'gemini-3.6-flash', contents: [tPrompt] });
         let cleaned = (response.text || '').trim();
         if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```json\s*/, '').replace(/```$/, '').trim();
         info = JSON.parse(cleaned);
