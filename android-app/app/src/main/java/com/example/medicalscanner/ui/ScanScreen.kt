@@ -726,14 +726,18 @@ fun ScanScreen(
                             modifier = Modifier.padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            OutlinedTextField(
+                            // Assign this scan to a specific family member (or auto-detect / add a
+                            // new person) so it lands under the exact right patient — no re-typing,
+                            // no accidental duplicate patient.
+                            Text(
+                                text = tr("Who is this report for?"),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            ScanPatientPicker(
                                 value = patientName,
                                 onValueChange = { patientName = it },
-                                label = { Text(tr("Patient name (optional)")) },
-                                placeholder = { Text(tr("Leave blank to auto-detect from report")) },
-                                leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.fillMaxWidth()
                             )
 

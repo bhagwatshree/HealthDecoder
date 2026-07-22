@@ -67,21 +67,25 @@ fun HomeScreen(
     var profiles by remember { mutableStateOf(listOf<FamilyProfile>()) }
     var selectedProfile by remember { mutableStateOf<FamilyProfile?>(null) }
     var expandedProfileMenu by remember { mutableStateOf(false) }
+    var showFamilyManager by remember { mutableStateOf(false) }
+    var familyReload by remember { mutableStateOf(0) }
 
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        val patients = com.example.medicalscanner.local.LocalRepository.listPatients(context)
-        val loadedProfiles = if (patients.isEmpty()) {
-            val email = com.example.medicalscanner.local.AppSettings.getUserEmail(context)
-            val name = if (!email.isNullOrBlank()) email.substringBefore("@").replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.getDefault()) else it.toString() } else "Self"
-            listOf(FamilyProfile("p1", name, "Self", "👨"))
-        } else {
-            patients.mapIndexed { index, name ->
-                if (index == 0) FamilyProfile("p$index", name, "Self", "👨")
-                else FamilyProfile("p$index", name, "Guest", "👤")
-            }
-        }
-        profiles = loadedProfiles
-        selectedProfile = loadedProfiles.first()
+    androidx.compose.runtime.LaunchedEffect(familyReload) {
+        // Real, persisted family members (includes people added with no reports yet). The stored
+        // "active patient" scopes the app: null = Everyone (show all), else that member.
+        val loaded = com.example.medicalscanner.local.LocalRepository.familyMembers(context)
+        profiles = loaded
+        val active = com.example.medicalscanner.local.AppSettings.getActivePatient(context)
+        selectedProfile = if (active == null) null else loaded.firstOrNull { it.name.equals(active, ignoreCase = true) }
+        // If the active member was renamed/removed out from under us, fall back to Everyone.
+        if (active != null && selectedProfile == null) com.example.medicalscanner.local.AppSettings.setActivePatient(context, null)
+    }
+
+    if (showFamilyManager) {
+        FamilyManagerDialog(
+            onDismiss = { showFamilyManager = false; familyReload++ },
+            onChanged = { familyReload++; onRefresh() }
+        )
     }
 
     val actions = buildList {
@@ -129,7 +133,7 @@ fun HomeScreen(
                             modifier = Modifier.clickable { expandedProfileMenu = true }
                         ) {
                             Text(
-                                text = selectedProfile?.let { "${it.avatarEmoji} ${it.name}" } ?: "Loading...",
+                                text = selectedProfile?.let { "${it.avatarEmoji} ${it.name}" } ?: "👨‍👩‍👧 Everyone",
                                 maxLines = 1,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                 fontWeight = FontWeight.Bold,
@@ -146,16 +150,31 @@ fun HomeScreen(
                             expanded = expandedProfileMenu,
                             onDismissRequest = { expandedProfileMenu = false }
                         ) {
+                            DropdownMenuItem(
+                                text = { Text("👨‍👩‍👧 Everyone") },
+                                onClick = {
+                                    selectedProfile = null
+                                    com.example.medicalscanner.local.AppSettings.setActivePatient(context, null)
+                                    expandedProfileMenu = false
+                                    onRefresh()
+                                }
+                            )
                             profiles.forEach { profile ->
                                 DropdownMenuItem(
                                     text = { Text("${profile.avatarEmoji} ${profile.name} (${profile.relation})") },
                                     onClick = {
                                         selectedProfile = profile
+                                        com.example.medicalscanner.local.AppSettings.setActivePatient(context, profile.name)
                                         expandedProfileMenu = false
                                         onRefresh()
                                     }
                                 )
                             }
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("⚙️  Manage / edit family") },
+                                onClick = { expandedProfileMenu = false; showFamilyManager = true }
+                            )
                         }
                     }
                 },

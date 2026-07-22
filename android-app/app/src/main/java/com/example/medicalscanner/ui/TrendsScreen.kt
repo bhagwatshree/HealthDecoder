@@ -108,7 +108,9 @@ fun TrendsScreen(
         val reports = LocalRepository.getReports(context)
         val byCount = reports.mapNotNull { it.patientName }.groupingBy { it }.eachCount()
         patients = byCount.entries.sortedByDescending { it.value }.map { it.key }
-        selectedPatient = patients.firstOrNull()
+        // Default to the family member selected on Home, if that person has trend data.
+        val active = com.example.medicalscanner.local.AppSettings.getActivePatient(context)
+        selectedPatient = patients.firstOrNull { it.equals(active, ignoreCase = true) } ?: patients.firstOrNull()
         if (selectedPatient == null) isLoading = false
     }
 

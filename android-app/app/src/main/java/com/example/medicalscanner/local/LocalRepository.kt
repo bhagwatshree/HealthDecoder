@@ -526,9 +526,18 @@ object LocalRepository {
         }
 
     // ── Dashboard / summary ─────────────────────────────────────────────────
+    // Scoped to the "active patient" chosen on Home (null = everyone), so Records, Medication
+    // Tracker, Reminders and Pending Tests — all of which read this one method — follow the
+    // family-member selector together.
     suspend fun getDashboard(context: Context, period: String?): DashboardData = withContext(Dispatchers.IO) {
-        val reports = filterByPeriod(LocalStore.getReports(context), period)
-        DashboardEngine.buildDashboard(reports, LocalStore.getPendingTests(context))
+        val active = AppSettings.getActivePatient(context)
+        var reports: List<MedicalReport> = filterByPeriod(LocalStore.getReports(context), period)
+        var pending: List<PendingTest> = LocalStore.getPendingTests(context)
+        if (active != null) {
+            reports = reports.filter { it.patientName.equals(active, ignoreCase = true) }
+            pending = pending.filter { it.patientName.equals(active, ignoreCase = true) }
+        }
+        DashboardEngine.buildDashboard(reports, pending)
     }
 
     suspend fun getHealthSummary(context: Context, patientName: String, period: String?): HealthSummary = withContext(Dispatchers.IO) {
