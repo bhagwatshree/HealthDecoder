@@ -300,7 +300,7 @@ fun AccountScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                "By default, the app uses the Primary Shared Key Pool. You can connect your Google account or paste your own Gemini API key below to switch to Secondary (Individual) mode.",
+                                "By default the app uses the shared key pool — you don't need to do anything. Advanced: if you already have your own Gemini API key you can paste it below to use it instead.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -399,26 +399,12 @@ fun AccountScreen(
                                 }
                             }
 
-                            // Dedicated Google SSO for API Key generation (Decoupled from main app login)
-                            OutlinedButton(
-                                onClick = {
-                                    val token = AppSettings.getAuthToken(context) ?: ""
-                                    val nonce = java.util.UUID.randomUUID().toString()
-                                    AppSettings.setPendingOAuthNonce(context, nonce)
-                                    val url = NetworkModule.getFullImageUrl(context, "api/auth/google?state=apikey|$token|$nonce")
-                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
-                                    context.startActivity(intent)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text("🌐 Connect Google to Auto-Fetch Gemini Key")
-                                }
-                            }
+                            // "Connect Google to Auto-Fetch Gemini Key" removed: Google login can't
+                            // mint a Gemini key without the scary cloud-platform scope + a per-user
+                            // GCP project + Google security review — unusable for non-technical users.
+                            // The backend never handled state=apikey, so the redirect's nonce never
+                            // matched and the flow silently dropped ("disconnect after login").
+                            // Non-technical users are served by the invisible shared key pool above.
                         }
                     }
                 }

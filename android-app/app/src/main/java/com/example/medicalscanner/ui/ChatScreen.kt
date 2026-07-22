@@ -61,6 +61,7 @@ private val SUGGESTED_QUESTIONS = listOf(
 @Composable
 fun ChatScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToScan: (String?) -> Unit,
     modifier: Modifier = Modifier,
     initialPatientName: String = "",
     // Which screen the user opened Chat from (e.g. "Records", "Medication Tracker"). Shown
@@ -81,7 +82,7 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     
     var attachedImagePath by remember { mutableStateOf<String?>(null) }
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             Thread {
                 val result = com.example.medicalscanner.util.FileImportUtil.importFile(context, it)
@@ -170,13 +171,43 @@ fun ChatScreen(
                     if (toolCommand.startsWith("navigate")) {
                         android.widget.Toast.makeText(context, "Action: Navigating to Find Care...", android.widget.Toast.LENGTH_LONG).show()
                     } else if (toolCommand.startsWith("scanDocument")) {
-                        android.widget.Toast.makeText(context, "Action: Triggering document scanner...", android.widget.Toast.LENGTH_LONG).show()
+                        if (imageToSend != null) {
+                            onNavigateToScan(imageToSend)
+                        } else {
+                            onNavigateToScan(null)
+                        }
                     } else if (toolCommand.startsWith("setReminder")) {
                         val regex = "setReminder\\((.*?),(.*?)\\)".toRegex()
                         val reminderMatch = regex.find(toolCommand)
                         if (reminderMatch != null) {
                             val med = reminderMatch.groupValues[1].trim()
                             val time = reminderMatch.groupValues[2].trim()
+                            
+                            val existing = com.example.medicalscanner.reminder.MedicineScheduleStore.loadAll(context).find { it.medicineName == med }
+                            val schedule = existing ?: com.example.medicalscanner.reminder.MedicineSchedule(
+                                medicineName = med,
+                                patientName = "Self",
+                                dosage = "1 pill",
+                                frequency = "Daily",
+                                slots = mutableMapOf()
+                            )
+                            
+                            var hour = 8
+                            var min = 0
+                            try {
+                                val parts = time.split(":")
+                                if (parts.size == 2) {
+                                    hour = parts[0].trim().toInt()
+                                    min = parts[1].trim().toInt()
+                                }
+                            } catch (e: Exception) {}
+                            
+                            val slots = schedule.slots.toMutableMap()
+                            slots[time] = com.example.medicalscanner.reminder.SlotConfig(enabled = true, hour = hour, minute = min)
+                            
+                            val updatedSchedule = schedule.copy(slots = slots)
+                            com.example.medicalscanner.reminder.MedicineScheduleStore.upsert(context, updatedSchedule)
+                            
                             android.widget.Toast.makeText(context, "Action: Reminder set for \$med at \$time", android.widget.Toast.LENGTH_LONG).show()
                         }
                     } else if (toolCommand.startsWith("addAppointment")) {
@@ -186,6 +217,26 @@ fun ChatScreen(
                             val doctor = apptMatch.groupValues[1].trim()
                             val date = apptMatch.groupValues[2].trim()
                             val time = apptMatch.groupValues[3].trim()
+                            
+                            var hour = 9
+                            var min = 0
+                            try {
+                                val parts = time.split(":")
+                                if (parts.size == 2) {
+                                    hour = parts[0].trim().toInt()
+                                    min = parts[1].trim().toInt()
+                                }
+                            } catch (e: Exception) {}
+                            
+                            com.example.medicalscanner.reminder.AppointmentStore.upsert(context, com.example.medicalscanner.reminder.AppointmentSchedule(
+                                doctorName = doctor,
+                                date = date,
+                                time = time,
+                                place = "Unknown",
+                                hour = hour,
+                                minute = min
+                            ))
+                            
                             android.widget.Toast.makeText(context, "Action: Appointment booked with \$doctor on \$date at \$time", android.widget.Toast.LENGTH_LONG).show()
                         }
                     }
@@ -274,7 +325,7 @@ fun ChatScreen(
                 onInputChange = { input = it },
                 onSend = { sendQuestion(input) },
                 onVoice = { startVoiceInput() },
-                onAttach = { imagePicker.launch("*/*") },
+                onAttach = { imagePicker.launch(arrayOf("*/*")) },
                 onRemoveAttachment = { attachedImagePath = null },
                 enabled = !isLoading
             )

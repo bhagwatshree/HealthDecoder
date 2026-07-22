@@ -379,7 +379,7 @@ fun MainNavigation() {
         }
         entry<Main> {
           HomeScreen(
-            onNavigateToScan = { backStack.add(Scan) },
+            onNavigateToScan = { backStack.add(Scan()) },
             onNavigateToDetail = { reportId -> backStack.add(ReportDetail(reportId)) },
             onNavigateToCompare = { backStack.add(Compare) },
             onNavigateToChat = { backStack.add(Chat()) },
@@ -404,7 +404,7 @@ fun MainNavigation() {
           RecordsScreen(
             onNavigateBack = { backStack.removeLastOrNull() },
             onNavigateToDetail = { reportId -> backStack.add(ReportDetail(reportId)) },
-            onNavigateToScan = { backStack.add(Scan) },
+            onNavigateToScan = { backStack.add(Scan()) },
             onNavigateToChat = { backStack.add(Chat(contextHint = "Records")) },
             modifier = Modifier.safeDrawingPadding()
           )
@@ -464,12 +464,17 @@ fun MainNavigation() {
         entry<Chat> { key ->
           ChatScreen(
             onNavigateBack = { backStack.removeLastOrNull() },
+            onNavigateToScan = { path ->
+                if (path != null) backStack.add(Scan(initialImagePath = path))
+                else backStack.add(Scan())
+            },
             modifier = Modifier.safeDrawingPadding(),
             contextHint = key.contextHint
           )
         }
-        entry<Scan> {
+        entry<Scan> { key ->
           ScanScreen(
+            initialImagePath = key.initialImagePath,
             onNavigateToDetail = { reportId -> 
                 backStack.removeLastOrNull() // Pop the scan screen
                 backStack.add(ReportDetail(reportId)) // Navigate to detail screen

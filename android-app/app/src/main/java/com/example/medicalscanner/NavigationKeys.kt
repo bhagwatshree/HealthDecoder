@@ -10,7 +10,7 @@ data object Main : NavKey
 data object IPConfig : NavKey
 
 @Serializable
-data object Scan : NavKey
+data class Scan(val initialImagePath: String? = null) : NavKey
 
 @Serializable
 data class ReportDetail(val reportId: String, val highlightParam: String? = null) : NavKey

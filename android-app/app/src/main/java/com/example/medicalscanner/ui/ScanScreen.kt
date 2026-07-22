@@ -81,6 +81,7 @@ import java.util.concurrent.TimeUnit
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScanScreen(
+    initialImagePath: String? = null,
     onNavigateToDetail: (String) -> Unit,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
@@ -128,6 +129,8 @@ fun ScanScreen(
 
 
     // ML Kit Local OCR results
+    
+
     var localOcrText by remember { mutableStateOf("") }
     var localOcrRunning by remember { mutableStateOf(false) }
     var autoUseSarvam by remember { mutableStateOf(false) }
@@ -541,6 +544,12 @@ fun ScanScreen(
             launchCamera()
         } else {
             cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    LaunchedEffect(initialImagePath) {
+        if (initialImagePath != null) {
+            importSelectedFiles(listOf(Uri.fromFile(File(initialImagePath))))
         }
     }
 
