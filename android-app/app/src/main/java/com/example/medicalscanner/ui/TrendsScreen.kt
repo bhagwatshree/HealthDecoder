@@ -421,17 +421,24 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
     val bandLow = points.lastOrNull { it.refLow != null }?.refLow
     val bandHigh = points.lastOrNull { it.refHigh != null }?.refHigh
 
-    // Data extent, widened to include the band, then given ~8% headroom top and bottom so the
-    // line and its labels never sit flush against the plot edges.
+    // Scale the y-axis to the DATA (not the reference band) so the actual readings fill the chart
+    // and their variation is visible; the normal band is drawn as an overlay clipped to the plot,
+    // so a wide/far-off range (e.g. a very-low TSH sitting below normal) can't squash the line.
+    // Nudge the range just enough toward the nearer band edge that the "Normal" boundary is on
+    // screen when it's close, but never let the band dictate the whole scale.
     val dataMin = validIdx.minOf { nums[it]!! }
     val dataMax = validIdx.maxOf { nums[it]!! }
-    val loCandidates = listOfNotNull(dataMin, bandLow)
-    val hiCandidates = listOfNotNull(dataMax, bandHigh)
-    val rawMin = loCandidates.min()
-    val rawMax = hiCandidates.max()
-    val pad = (rawMax - rawMin).let { if (it == 0f) (if (rawMax == 0f) 1f else kotlin.math.abs(rawMax) * 0.1f) else it * 0.08f }
-    val minV = rawMin - pad
-    val maxV = rawMax + pad
+    val span0 = (dataMax - dataMin)
+    val pad = if (span0 == 0f) (if (dataMax == 0f) 1f else kotlin.math.abs(dataMax) * 0.15f) else span0 * 0.15f
+    var minV = dataMin - pad
+    var maxV = dataMax + pad
+    // Pull in a band edge only if it's within ~half the data span of the data (so it's "just off
+    // screen"), never further — keeps the reference visible without flattening the data.
+    val nearPull = (if (span0 == 0f) pad else span0) * 0.6f
+    bandLow?.let { if (it < minV && it >= dataMin - nearPull) minV = it - pad * 0.4f }
+    bandHigh?.let { if (it > maxV && it <= dataMax + nearPull) maxV = it + pad * 0.4f }
+    // Never show a negative axis for a naturally non-negative measurement.
+    if (dataMin >= 0f) minV = minV.coerceAtLeast(0f)
     val range = (maxV - minV).let { if (it == 0f) 1f else it }
 
     // Position points by their real date (full year+month+day), not evenly by index.
