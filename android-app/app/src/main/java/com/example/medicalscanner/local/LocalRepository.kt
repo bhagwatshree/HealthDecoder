@@ -391,6 +391,85 @@ object LocalRepository {
         moved.size
     }
 
+    // ── Family members (persisted, user-managed) ────────────────────────────
+    private val familyEmojis = listOf("👤", "🧑", "👩", "👨", "👵", "👴", "🧒", "👧", "👦")
+
+    /**
+     * The persisted family list, reconciled with the patient names actually present in reports so a
+     * scanned-in person always appears (auto-seeded once, "Self" for the first). A member's `name`
+     * is the join key to their records. Persists the reconciled list so ordering/details stick.
+     */
+    suspend fun familyMembers(context: Context): List<FamilyProfile> = withContext(Dispatchers.IO) {
+        val stored = AppSettings.getFamilyProfilesRaw(context).toMutableList()
+        val known = stored.map { it.name.trim().lowercase() }.toHashSet()
+        val patientNames = LocalStore.getReports(context)
+            .mapNotNull { it.patientName?.takeIf { n -> n.isNotBlank() } }.distinct()
+        var changed = false
+        for (n in patientNames) {
+            if (known.add(n.trim().lowercase())) {
+                stored.add(FamilyProfile(
+                    id = LocalStore.newId(), name = n,
+                    relation = if (stored.isEmpty()) "Self" else "Family",
+                    avatarEmoji = familyEmojis[stored.size % familyEmojis.size]
+                ))
+                changed = true
+            }
+        }
+        if (changed) AppSettings.setFamilyProfiles(context, stored)
+        stored
+    }
+
+    /** Adds a new family member (a person you can scan into before any report exists). No-op on a
+     *  blank or duplicate name. */
+    suspend fun addFamilyMember(
+        context: Context, name: String, relation: String, sex: String, dob: String, emoji: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        val n = name.trim()
+        if (n.isEmpty()) return@withContext false
+        val list = AppSettings.getFamilyProfilesRaw(context).toMutableList()
+        if (list.any { it.name.trim().equals(n, ignoreCase = true) }) return@withContext false
+        list.add(FamilyProfile(LocalStore.newId(), n, relation.ifBlank { "Family" }, emoji.ifBlank { "👤" }, sex, dob))
+        AppSettings.setFamilyProfiles(context, list)
+        true
+    }
+
+    /** Edits a member's details. Renaming cascades to all their records (via [mergePatient]) and
+     *  follows the active-patient selection. */
+    suspend fun updateFamilyMember(
+        context: Context, id: String, newName: String, relation: String, sex: String, dob: String, emoji: String
+    ) = withContext(Dispatchers.IO) {
+        val list = AppSettings.getFamilyProfilesRaw(context).toMutableList()
+        val idx = list.indexOfFirst { it.id == id }
+        if (idx < 0) return@withContext
+        val old = list[idx]
+        val to = newName.trim().ifBlank { old.name }
+        list[idx] = old.copy(name = to, relation = relation.ifBlank { old.relation },
+            avatarEmoji = emoji.ifBlank { old.avatarEmoji }, sex = sex, dateOfBirth = dob)
+        AppSettings.setFamilyProfiles(context, list)
+        if (!to.equals(old.name, ignoreCase = true)) {
+            mergePatient(context, old.name, to) // move their reports/reminders/logs/trend-units
+            if (AppSettings.getActivePatient(context).equals(old.name, ignoreCase = true))
+                AppSettings.setActivePatient(context, to)
+        }
+    }
+
+    /** Removes a member from the family list. Their medical records are NOT deleted; if any remain,
+     *  the member re-appears on next sync — so the UI should only offer removal for people with no
+     *  records (rename/merge is the tool for a mis-scanned duplicate). */
+    suspend fun removeFamilyMember(context: Context, id: String) = withContext(Dispatchers.IO) {
+        val list = AppSettings.getFamilyProfilesRaw(context).toMutableList()
+        val removed = list.firstOrNull { it.id == id }
+        list.removeAll { it.id == id }
+        AppSettings.setFamilyProfiles(context, list)
+        if (removed != null && AppSettings.getActivePatient(context).equals(removed.name, ignoreCase = true))
+            AppSettings.setActivePatient(context, null)
+    }
+
+    /** How many reports a given patient name has (for guarding family-member removal). */
+    suspend fun reportCountFor(context: Context, patientName: String): Int = withContext(Dispatchers.IO) {
+        LocalStore.getReports(context).count { it.patientName.equals(patientName, ignoreCase = true) }
+    }
+
     // ── Portable export / import ────────────────────────────────────────────
     /** The distinct patient names in the current account, most-reports-first (for export UI). */
     suspend fun listPatients(context: Context): List<String> = withContext(Dispatchers.IO) {
@@ -423,7 +502,13 @@ object LocalRepository {
                 (to == null || d <= to)
         }
         if (selected.isEmpty()) return@withContext null
-        val file = ExportManager.export(context, selected, since, patientName)
+        // Include the profile(s) (name/relation/sex/DOB) for the exported people so their details
+        // travel with the records — just the one member for a per-patient export, else everyone.
+        val exportedNames = selected.mapNotNull { it.patientName?.trim()?.lowercase() }.toHashSet()
+        val family = familyMembers(context).filter {
+            patientName == null || it.name.trim().lowercase() in exportedNames
+        }
+        val file = ExportManager.export(context, selected, since, patientName, family)
         val isFullExport = patientName == null && from == null && to == null
         if (isFullExport) {
             selected.maxByOrNull { it.createdAt }?.createdAt?.let { AppSettings.setLastExportAt(context, it) }

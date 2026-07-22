@@ -7,10 +7,12 @@ import androidx.room.PrimaryKey
 import com.google.gson.annotations.SerializedName
 
 data class FamilyProfile(
-    val id: String,
-    val name: String,
-    val relation: String,
-    val avatarEmoji: String
+    @SerializedName("id") val id: String,
+    @SerializedName("name") val name: String,
+    @SerializedName("relation") val relation: String,
+    @SerializedName("avatarEmoji") val avatarEmoji: String,
+    @SerializedName("sex") val sex: String = "",           // "Male" | "Female" | "Other" | ""
+    @SerializedName("dateOfBirth") val dateOfBirth: String = "" // YYYY-MM-DD; age is derived from this
 )
 
 object MockProfiles {

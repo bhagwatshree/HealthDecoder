@@ -2,7 +2,9 @@ package com.example.medicalscanner.backup
 
 import android.content.Context
 import android.net.Uri
+import com.example.medicalscanner.local.AppSettings
 import com.example.medicalscanner.local.LocalStore
+import com.example.medicalscanner.model.FamilyProfile
 import com.example.medicalscanner.model.MedicalReport
 import com.example.medicalscanner.model.SourceFile
 import com.google.gson.Gson
@@ -45,7 +47,8 @@ object ExportManager {
         val exportedAt: String,
         val sinceTimestamp: String?,   // the delta cutoff used, or null for a full export
         val patientFilter: String?,    // the single patient exported, or null for all
-        val reports: List<MedicalReport>  // paths already reduced to bare file names
+        val reports: List<MedicalReport>,  // paths already reduced to bare file names
+        val family: List<FamilyProfile> = emptyList()  // patient profiles (name/relation/sex/DOB) for the reports
     )
 
     /** Outcome of an import, for a user-facing summary. Import is add-or-update (merge), never a
@@ -65,7 +68,8 @@ object ExportManager {
         context: Context,
         reports: List<MedicalReport>,
         sinceTimestamp: String?,
-        patientFilter: String?
+        patientFilter: String?,
+        family: List<FamilyProfile> = emptyList()
     ): File {
         val tag = (patientFilter?.replace(Regex("[^A-Za-z0-9]"), "_")?.take(20) ?: "all")
         val outFile = File(exportsDir(context), "MedicalAssist_${tag}_${stamp.format(Date())}.zip")
@@ -98,7 +102,7 @@ object ExportManager {
                 val detail = File(LocalStore.detailedAnalysisDir(context), "${r.id}.json")
                 if (detail.exists()) zip.putFile("detailed/${r.id}.json", detail)
             }
-            val payload = Payload(FORMAT_VERSION, nowIso(), sinceTimestamp, patientFilter, portable)
+            val payload = Payload(FORMAT_VERSION, nowIso(), sinceTimestamp, patientFilter, portable, family)
             zip.putNextEntry(ZipEntry("export.json"))
             zip.write(gson.toJson(payload).toByteArray(Charsets.UTF_8))
             zip.closeEntry()
@@ -166,6 +170,22 @@ object ExportManager {
             }
             if (alreadyHere) updated++ else added++
             r.patientName?.takeIf { it.isNotBlank() }?.let { patients.add(it) }
+        }
+
+        // Merge the patient profiles (name/relation/sex/DOB) into this device's family list,
+        // add-or-update by name so the imported people's details come across too.
+        if (payload.family.isNotEmpty()) {
+            val fam = AppSettings.getFamilyProfilesRaw(context).toMutableList()
+            for (incoming in payload.family) {
+                val i = fam.indexOfFirst { it.name.trim().equals(incoming.name.trim(), ignoreCase = true) }
+                if (i >= 0) fam[i] = fam[i].copy(
+                    relation = incoming.relation.ifBlank { fam[i].relation },
+                    avatarEmoji = incoming.avatarEmoji.ifBlank { fam[i].avatarEmoji },
+                    sex = incoming.sex.ifBlank { fam[i].sex },
+                    dateOfBirth = incoming.dateOfBirth.ifBlank { fam[i].dateOfBirth }
+                ) else fam.add(incoming)
+            }
+            AppSettings.setFamilyProfiles(context, fam)
         }
         return ImportResult(added, updated, patients)
     }

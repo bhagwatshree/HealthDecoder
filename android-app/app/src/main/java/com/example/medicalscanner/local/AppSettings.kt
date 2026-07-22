@@ -2,6 +2,7 @@ package com.example.medicalscanner.local
 
 import android.content.Context
 import com.example.medicalscanner.BuildKeys
+import com.example.medicalscanner.model.FamilyProfile
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
@@ -20,6 +21,32 @@ object AppSettings {
     private const val KEY_TREND_STANDARD_UNITS = "trend_standard_units"
 
     private val gson = Gson()
+
+    // ── Family members / patients ────────────────────────────────────────────
+    // A persisted, user-managed list of the people this account tracks. A member's `name` is the
+    // join key to reports (report.patientName), so renaming a member cascades to their records via
+    // LocalRepository.mergePatient. The "active" member scopes the home dashboard and list screens.
+    private const val KEY_FAMILY = "family_profiles"
+    private const val KEY_ACTIVE_PATIENT = "active_patient"
+
+    fun getFamilyProfilesRaw(context: Context): List<FamilyProfile> {
+        val json = prefs(context).getString(KEY_FAMILY, null) ?: return emptyList()
+        return runCatching {
+            gson.fromJson<List<FamilyProfile>>(json, object : TypeToken<List<FamilyProfile>>() {}.type)
+        }.getOrNull() ?: emptyList()
+    }
+
+    fun setFamilyProfiles(context: Context, list: List<FamilyProfile>) {
+        prefs(context).edit().putString(KEY_FAMILY, gson.toJson(list)).apply()
+    }
+
+    /** The family member the app is currently scoped to (null = show everyone). */
+    fun getActivePatient(context: Context): String? =
+        prefs(context).getString(KEY_ACTIVE_PATIENT, null)?.takeIf { it.isNotBlank() }
+
+    fun setActivePatient(context: Context, name: String?) {
+        prefs(context).edit().putString(KEY_ACTIVE_PATIENT, name?.trim().orEmpty()).apply()
+    }
 
     /**
      * The unit each test is standardized to on the trend chart — the first non-blank unit ever
