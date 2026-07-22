@@ -200,11 +200,13 @@ Only recommend specialists if findings warrant it. Empty sideEffects if no medic
 
     // ══════════════════════════ CHAT ══════════════════════════
     fun chat(context: Context, question: String, reports: List<MedicalReport>, history: List<ChatMessage>): Pair<String, String> {
+        val language = AppSettings.getPreferredLanguage(context)
         val ctx = buildReportsContext(reports)
         val historyText = history.takeLast(6).joinToString("\n") { "${if (it.role == "user") "Patient" else "Assistant"}: ${it.content}" }
         val prompt = """
 You are a friendly, conversational medical assistant helping a patient understand their own records. Answer in clear, simple, plain language. Be warm, supportive, and factual.
-If the patient's question is vague (e.g., "why is my report bad?"), kindly ask them a clarifying question. Ask which specific report (by date or type) or which specific criteria they are referring to so you can give a better answer.
+CRITICAL LANGUAGE INSTRUCTION: You MUST reply entirely in the patient's preferred language: $language. Do not reply in English unless the preferred language is English.
+If the patient's question is vague (e.g., "why is my report bad?", "what does this mean?"), you MUST ask them a clarifying question about their history, specific symptoms, or which report they are referring to before giving an assessment.
 When asked about specific details or "why" something is happening, correlate findings and trends across the patient's historical reports provided below. When analyzing their overall history, you can reassure them with friendly phrasing like, "From your overall history, this may be normal, but please check with your doctor to be sure."
 SAFETY & MEDICAL DISCLAIMER: You are NOT a doctor; do not diagnose, prescribe, or give medical advice. Ground all correlations purely in the records provided. If the patient asks which doctor or specialist they should see based on their results, recommend the type of medical specialist (e.g., Endocrinologist for Thyroid, Cardiologist for Cardiac/Lipids). If they ask where to do recommended tests or checkups, inform them they can check with nearby path labs or hospitals using the "Find Care" search feature.
 
@@ -215,7 +217,7 @@ Available tools:
 2. [TOOL: setReminder(MedicineName, Time)] - Use this if the user asks you to remind them to take a medication (e.g., [TOOL: setReminder(Metformin, 08:00)]). Time must be HH:MM format.
 IMPORTANT: Only output the [TOOL: ...] block if the user asks for the action. Include it at the very end of your message.
 
-IMPORTANT: At the end of every response, you MUST append this exact patient disclaimer:
+IMPORTANT: At the end of every response, you MUST append this exact patient disclaimer (translated into $language):
 "Disclaimer: This information is purely educational and informational. It is not a confirmed medical diagnosis or appointment. Please consult a doctor and do not rely solely on this information."
 Keep answers concise (3-5 sentences).
 
@@ -223,16 +225,13 @@ PATIENT'S HISTORICAL RECORDS:
 ${ctx.ifBlank { "No reports available yet." }}
 ${if (historyText.isNotBlank()) "CONVERSATION SO FAR:\n$historyText\n" else ""}
 PATIENT'S QUESTION: $question
-Answer:
+Answer (in $language):
 """.trim()
-
-        val language = AppSettings.getPreferredLanguage(context)
 
         return try {
             val answer = GeminiClient.generateText(context, prompt).trim()
             if (answer.isNotBlank()) {
-                val translated = if (language.equals("English", true)) answer else com.example.medicalscanner.util.LanguageUtil.translate(context, answer, language)
-                translated to "ai"
+                answer to "ai"
             } else {
                 val localAns = localChat(question, reports)
                 val translatedLocal = if (language.equals("English", true)) localAns else com.example.medicalscanner.util.LanguageUtil.translate(context, localAns, language)
