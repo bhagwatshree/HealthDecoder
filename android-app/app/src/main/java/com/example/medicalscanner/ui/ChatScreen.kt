@@ -16,8 +16,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.Color
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -180,14 +182,18 @@ fun ChatScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        TopBarLogo()
+                        Icon(
+                            imageVector = Icons.Default.AccountCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(40.dp),
+                            tint = Color.LightGray
+                        )
                         Column {
-                            Text(tr("AI Health Assistant"), fontWeight = FontWeight.Bold)
+                            Text(tr("DocBot"), fontWeight = FontWeight.Bold, color = Color.White, fontSize = 18.sp)
                             Text(
-                                text = contextHint?.let { "Asking about: $it" }
-                                    ?: tr("Ask by text or voice — in your language"),
+                                text = contextHint?.let { "Asking about: $it" } ?: tr("online"),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = Color.White.copy(alpha = 0.8f)
                             )
                         }
                     }
@@ -205,7 +211,10 @@ fun ChatScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
+                    containerColor = Color(0xFF075E54),
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White,
+                    actionIconContentColor = Color.White
                 )
             )
         },
@@ -223,8 +232,7 @@ fun ChatScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .background(MaterialTheme.colorScheme.background)
-                .appWatermark()
+                .background(Color(0xFFECE5DD))
         ) {
             contextHint?.let { hint ->
                 Row(
@@ -482,36 +490,35 @@ private fun ChatEmptyState(onQuestionClick: (String) -> Unit, onVoice: () -> Uni
 @Composable
 private fun ChatBubble(message: ChatMessage, onSpeak: (() -> Unit)?) {
     val isUser = message.role == "user"
-    val bubbleColor = if (isUser) MaterialTheme.colorScheme.primary
-    else MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
-    val textColor = if (isUser) MaterialTheme.colorScheme.onPrimary
-    else MaterialTheme.colorScheme.onSurface
+    val bubbleColor = if (isUser) Color(0xFFDCF8C6) else Color(0xFFFFFFFF)
+    val textColor = Color.Black
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
     ) {
-        Column(horizontalAlignment = Alignment.Start) {
-            Box(
+        Column(horizontalAlignment = if (isUser) Alignment.End else Alignment.Start) {
+            Surface(
+                color = bubbleColor,
+                shape = RoundedCornerShape(
+                    topStart = 16.dp, topEnd = 16.dp,
+                    bottomStart = if (isUser) 16.dp else 4.dp,
+                    bottomEnd = if (isUser) 4.dp else 16.dp
+                ),
+                shadowElevation = 1.dp,
                 modifier = Modifier
                     .widthIn(max = 320.dp)
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = 16.dp, topEnd = 16.dp,
-                            bottomStart = if (isUser) 16.dp else 4.dp,
-                            bottomEnd = if (isUser) 4.dp else 16.dp
-                        )
-                    )
-                    .background(bubbleColor)
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
             ) {
-                Text(text = message.content, style = MaterialTheme.typography.bodyMedium, color = textColor)
+                Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    Text(text = message.content, style = MaterialTheme.typography.bodyMedium, color = textColor)
+                }
             }
             if (onSpeak != null) {
                 TextButton(onClick = onSpeak, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
-                    Icon(Icons.Default.VolumeUp, contentDescription = tr("Read aloud"), modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.VolumeUp, contentDescription = tr("Read aloud"), modifier = Modifier.size(16.dp), tint = Color(0xFF075E54))
                     Spacer(Modifier.width(4.dp))
-                    Text(tr("Listen"), fontSize = 12.sp)
+                    Text(tr("Listen"), fontSize = 12.sp, color = Color(0xFF075E54))
                 }
             }
         }
@@ -527,35 +534,53 @@ private fun ChatInputBar(
     onVoice: () -> Unit,
     enabled: Boolean
 ) {
-    Surface(
-        tonalElevation = 3.dp,
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .imePadding()
+            .background(Color.Transparent)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .imePadding()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        Surface(
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(24.dp),
+            color = Color.White,
+            shadowElevation = 1.dp
         ) {
-            IconButton(onClick = onVoice) {
-                Icon(imageVector = Icons.Default.Mic, contentDescription = tr("Speak"), tint = MaterialTheme.colorScheme.primary)
-            }
-            OutlinedTextField(
+            TextField(
                 value = input,
                 onValueChange = onInputChange,
-                placeholder = { Text(tr("Type or tap mic…")) },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(24.dp),
+                placeholder = { Text(tr("Message"), color = Color.Gray) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent
+                ),
                 maxLines = 4,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { onSend() })
             )
-            FilledIconButton(onClick = onSend, enabled = enabled && input.isNotBlank()) {
-                Icon(imageVector = Icons.Default.Send, contentDescription = tr("Send"))
-            }
+        }
+        
+        val isTyping = input.isNotBlank()
+        FloatingActionButton(
+            onClick = { if (isTyping && enabled) onSend() else onVoice() },
+            containerColor = Color(0xFF128C7E),
+            contentColor = Color.White,
+            shape = CircleShape,
+            modifier = Modifier.size(48.dp),
+            elevation = FloatingActionButtonDefaults.elevation(2.dp)
+        ) {
+            Icon(
+                imageVector = if (isTyping) Icons.Default.Send else Icons.Default.Mic,
+                contentDescription = if (isTyping) tr("Send") else tr("Speak")
+            )
         }
     }
 }
