@@ -100,8 +100,8 @@ fun HomeScreen(
             add(HomeAction("Find Hospitals", "🏥", Color(0xFFE1F5FE), Color(0xFF0277BD), { onNavigateToDiscovery("hospitals") }))
         }
         add(HomeAction("Trends", "📈", Color(0xFFE3F2FD), Color(0xFF1565C0), onNavigateToTrends))
-        add(HomeAction("Smart Health Lens", "👁️‍🗨️", Color(0xFF0F172A), Color.White, onNavigateToLiveVision))
-        add(HomeAction("Doctor Brief", "👨‍⚕️", Color(0xFF0D7377), Color.White, { onNavigateToDoctorBrief(selectedProfile?.name ?: "") }))
+        add(HomeAction("Smart Health Lens", "👁️‍🗨️", Color(0xFFEDE7F6), Color(0xFF4527A0), onNavigateToLiveVision))
+        add(HomeAction("Doctor Brief", "👨‍⚕️", Color(0xFFE0F2F1), Color(0xFF00695C), { onNavigateToDoctorBrief(selectedProfile?.name ?: "") }))
     }
 
     Scaffold(
