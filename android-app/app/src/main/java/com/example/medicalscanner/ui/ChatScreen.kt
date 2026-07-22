@@ -79,6 +79,14 @@ fun ChatScreen(
     var errorMessage by remember { mutableStateOf("") }
 
     val listState = rememberLazyListState()
+    
+    var attachedImagePath by remember { mutableStateOf<String?>(null) }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let {
+            val cachedUri = com.example.medicalscanner.util.FileImportUtil.cacheImage(context, it)
+            if (cachedUri != null) attachedImagePath = cachedUri.path
+        }
+    }
 
     // Text-to-speech so answers can be read aloud (voice assistance for non-readers).
     val ttsRef = remember { mutableStateOf<TextToSpeech?>(null) }
@@ -122,15 +130,20 @@ fun ChatScreen(
 
     val sendQuestion: (String) -> Unit = sendLambda@{ question ->
         val trimmed = question.trim()
-        if (trimmed.isEmpty() || isLoading) return@sendLambda
+        if (trimmed.isEmpty() && attachedImagePath == null || isLoading) return@sendLambda
         errorMessage = ""
-        messages.add(ChatMessage(role = "user", content = trimmed))
+        val userMsg = if (trimmed.isEmpty()) "[Attached Image]" else trimmed
+        messages.add(ChatMessage(role = "user", content = userMsg))
         input = ""
         val history = messages.dropLast(1).toList()
         isLoading = true
+        val imageToSend = attachedImagePath
+        attachedImagePath = null // clear for next message
+        
         val questionForApi = if (contextHint != null) {
             "The user is currently viewing the \"$contextHint\" screen of the app. $trimmed"
         } else trimmed
+        
         coroutineScope.launch {
             try {
                 val response = LocalRepository.chat(
@@ -139,7 +152,8 @@ fun ChatScreen(
                         question = questionForApi,
                         patientName = patientName.trim().ifEmpty { null },
                         history = history,
-                        language = language
+                        language = language,
+                        imagePath = imageToSend
                     )
                 )
                 var finalAnswer = response.answer
@@ -151,6 +165,8 @@ fun ChatScreen(
                     
                     if (toolCommand.startsWith("navigate")) {
                         android.widget.Toast.makeText(context, "Action: Navigating to Find Care...", android.widget.Toast.LENGTH_LONG).show()
+                    } else if (toolCommand.startsWith("scanDocument")) {
+                        android.widget.Toast.makeText(context, "Action: Triggering document scanner...", android.widget.Toast.LENGTH_LONG).show()
                     } else if (toolCommand.startsWith("setReminder")) {
                         val regex = "setReminder\\((.*?),(.*?)\\)".toRegex()
                         val reminderMatch = regex.find(toolCommand)
@@ -158,6 +174,15 @@ fun ChatScreen(
                             val med = reminderMatch.groupValues[1].trim()
                             val time = reminderMatch.groupValues[2].trim()
                             android.widget.Toast.makeText(context, "Action: Reminder set for \$med at \$time", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    } else if (toolCommand.startsWith("addAppointment")) {
+                        val regex = "addAppointment\\((.*?),(.*?),(.*?)\\)".toRegex()
+                        val apptMatch = regex.find(toolCommand)
+                        if (apptMatch != null) {
+                            val doctor = apptMatch.groupValues[1].trim()
+                            val date = apptMatch.groupValues[2].trim()
+                            val time = apptMatch.groupValues[3].trim()
+                            android.widget.Toast.makeText(context, "Action: Appointment booked with \$doctor on \$date at \$time", android.widget.Toast.LENGTH_LONG).show()
                         }
                     }
                 }
@@ -241,9 +266,12 @@ fun ChatScreen(
         bottomBar = {
             ChatInputBar(
                 input = input,
+                attachedImagePath = attachedImagePath,
                 onInputChange = { input = it },
                 onSend = { sendQuestion(input) },
                 onVoice = { startVoiceInput() },
+                onAttach = { imagePicker.launch("image/*") },
+                onRemoveAttachment = { attachedImagePath = null },
                 enabled = !isLoading
             )
         }
@@ -549,58 +577,92 @@ private fun ChatBubble(message: ChatMessage, onSpeak: (() -> Unit)?) {
 @Composable
 private fun ChatInputBar(
     input: String,
+    attachedImagePath: String?,
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
     onVoice: () -> Unit,
+    onAttach: () -> Unit,
+    onRemoveAttachment: () -> Unit,
     enabled: Boolean
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
             .imePadding()
             .background(Color.Transparent)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 8.dp, vertical = 8.dp)
     ) {
-        Surface(
-            modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(24.dp),
-            color = Color.White,
-            shadowElevation = 1.dp
-        ) {
-            TextField(
-                value = input,
-                onValueChange = onInputChange,
-                placeholder = { Text(tr("Message"), color = Color.Gray) },
-                modifier = Modifier.fillMaxWidth(),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent
-                ),
-                maxLines = 4,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { onSend() })
-            )
+        if (attachedImagePath != null) {
+            Box(modifier = Modifier.padding(bottom = 8.dp).padding(start = 8.dp)) {
+                Surface(shape = RoundedCornerShape(12.dp), shadowElevation = 2.dp) {
+                    Box {
+                        // In a real app we'd load the image Bitmap here using Coil or similar,
+                        // For now we show an icon indicating an attachment is ready.
+                        Icon(
+                            imageVector = Icons.Default.Image,
+                            contentDescription = "Attachment",
+                            modifier = Modifier.size(64.dp).padding(8.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        IconButton(
+                            onClick = onRemoveAttachment,
+                            modifier = Modifier.align(Alignment.TopEnd).size(24.dp).padding(2.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color.Red)
+                        }
+                    }
+                }
+            }
         }
-        
-        val isTyping = input.isNotBlank()
-        FloatingActionButton(
-            onClick = { if (isTyping && enabled) onSend() else onVoice() },
-            containerColor = Color(0xFF128C7E),
-            contentColor = Color.White,
-            shape = CircleShape,
-            modifier = Modifier.size(48.dp),
-            elevation = FloatingActionButtonDefaults.elevation(2.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(
-                imageVector = if (isTyping) Icons.Default.Send else Icons.Default.Mic,
-                contentDescription = if (isTyping) tr("Send") else tr("Speak")
-            )
+            Surface(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(24.dp),
+                color = Color.White,
+                shadowElevation = 1.dp
+            ) {
+                TextField(
+                    value = input,
+                    onValueChange = onInputChange,
+                    placeholder = { Text(tr("Message"), color = Color.Gray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent
+                    ),
+                    maxLines = 4,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { onSend() }),
+                    trailingIcon = {
+                        IconButton(onClick = onAttach, enabled = enabled) {
+                            Icon(Icons.Default.AttachFile, contentDescription = "Attach image", tint = Color.Gray)
+                        }
+                    }
+                )
+            }
+            
+            val isTyping = input.isNotBlank() || attachedImagePath != null
+            FloatingActionButton(
+                onClick = { if (isTyping && enabled) onSend() else onVoice() },
+                containerColor = Color(0xFF128C7E),
+                contentColor = Color.White,
+                shape = CircleShape,
+                modifier = Modifier.size(48.dp),
+                elevation = FloatingActionButtonDefaults.elevation(2.dp)
+            ) {
+                Icon(
+                    imageVector = if (isTyping) Icons.Default.Send else Icons.Default.Mic,
+                    contentDescription = if (isTyping) tr("Send") else tr("Speak")
+                )
+            }
         }
     }
 }

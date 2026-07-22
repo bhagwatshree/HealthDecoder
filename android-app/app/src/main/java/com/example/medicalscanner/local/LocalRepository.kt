@@ -607,7 +607,7 @@ object LocalRepository {
             !request.patientName.isNullOrBlank() -> all.filter { it.patientName.equals(request.patientName, true) }.take(15)
             else -> all.take(15)
         }
-        val (answer, source) = MedicalEngine.chat(context, request.question, reports, request.history)
+        val (answer, source) = MedicalEngine.chat(context, request.question, reports, request.history, request.imagePath)
         ChatResponse(answer, source)
     }
 

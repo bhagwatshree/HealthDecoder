@@ -309,7 +309,8 @@ data class ChatRequest(
     @SerializedName("patient_name") val patientName: String? = null,
     @SerializedName("report_id") val reportId: String? = null,
     @SerializedName("history") val history: List<ChatMessage> = emptyList(),
-    @SerializedName("language") val language: String = "English"
+    @SerializedName("language") val language: String = "English",
+    @SerializedName("image_path") val imagePath: String? = null
 )
 
 data class ChatResponse(

@@ -199,7 +199,7 @@ Only recommend specialists if findings warrant it. Empty sideEffects if no medic
     }
 
     // ══════════════════════════ CHAT ══════════════════════════
-    fun chat(context: Context, question: String, reports: List<MedicalReport>, history: List<ChatMessage>): Pair<String, String> {
+    fun chat(context: Context, question: String, reports: List<MedicalReport>, history: List<ChatMessage>, imagePath: String? = null): Pair<String, String> {
         val language = AppSettings.getPreferredLanguage(context)
         val ctx = buildReportsContext(reports)
         val historyText = history.takeLast(6).joinToString("\n") { "${if (it.role == "user") "Patient" else "Assistant"}: ${it.content}" }
@@ -215,7 +215,11 @@ If the user explicitly asks you to take an action, you can output a special tool
 Available tools:
 1. [TOOL: navigate(FindCare)] - Use this if the user asks where to find a doctor, hospital, or lab.
 2. [TOOL: setReminder(MedicineName, Time)] - Use this if the user asks you to remind them to take a medication (e.g., [TOOL: setReminder(Metformin, 08:00)]). Time must be HH:MM format.
-IMPORTANT: Only output the [TOOL: ...] block if the user asks for the action. Include it at the very end of your message.
+3. [TOOL: addAppointment(DoctorName, Date, Time)] - Use this if the user asks to book or add a doctor's appointment. IMPORTANT: If the user asks to add an appointment but DOES NOT provide the doctor's name, the date, OR the time, you MUST ask them for the missing details BEFORE emitting the tool. Do not guess the details. Once you have all 3 details, emit the tool command.
+4. [TOOL: scanDocument] - Use this if the user has uploaded an image or prescription and you have asked them if they want it scanned, and they replied YES.
+PROACTIVE ATTACHMENT HANDLING: If the user attaches an image/document but doesn't say what to do with it, or asks what it is, you can describe it briefly and proactively ask: "Would you like me to scan and analyze this to your records?".
+
+IMPORTANT: Only output the [TOOL: ...] block if the user asks for the action (or agrees to it). Include it at the very end of your message.
 
 IMPORTANT: At the end of every response, you MUST append this exact patient disclaimer (translated into $language):
 "Disclaimer: This information is purely educational and informational. It is not a confirmed medical diagnosis or appointment. Please consult a doctor and do not rely solely on this information."
@@ -224,12 +228,24 @@ Keep answers concise (3-5 sentences).
 PATIENT'S HISTORICAL RECORDS:
 ${ctx.ifBlank { "No reports available yet." }}
 ${if (historyText.isNotBlank()) "CONVERSATION SO FAR:\n$historyText\n" else ""}
+${if (imagePath != null) "[An image is attached to this request]" else ""}
 PATIENT'S QUESTION: $question
 Answer (in $language):
 """.trim()
 
         return try {
-            val answer = GeminiClient.generateText(context, prompt).trim()
+            val answer = if (imagePath != null) {
+                val file = java.io.File(imagePath)
+                if (file.exists()) {
+                    val bytes = file.readBytes()
+                    val mime = if (imagePath.endsWith(".png", true)) "image/png" else "image/jpeg"
+                    GeminiClient.generateFromImage(context, prompt, bytes, mime).trim()
+                } else {
+                    GeminiClient.generateText(context, prompt).trim()
+                }
+            } else {
+                GeminiClient.generateText(context, prompt).trim()
+            }
             if (answer.isNotBlank()) {
                 answer to "ai"
             } else {
