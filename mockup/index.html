@@ -299,7 +299,7 @@
               </div>
 
               <!-- Main Home Grid -->
-              <div class="grid-content">
+              <div class="grid-content" style="padding-bottom: 100px;">
                 <!-- Action Tiles -->
                 <div class="action-grid">
                   <div class="grid-tile tile-scan" id="tileScan" data-inspect-component="ScanReportTile" data-color-token="StatusNormal">
@@ -327,8 +327,8 @@
                     <span class="tile-label">Trends</span>
                   </div>
                   <div class="grid-tile tile-scan" id="tileGeminiLive" style="background-color: #0F172A; color: white;" data-inspect-component="GeminiLiveVisionTile">
-                    <div class="tile-icon">👓</div>
-                    <span class="tile-label" style="color: white;">3.6 AR Lens</span>
+                    <div class="tile-icon">👁️‍🗨️</div>
+                    <span class="tile-label" style="color: white;">Smart Health Lens</span>
                   </div>
                   <div class="grid-tile tile-records" id="tileDoctorBrief" style="background-color: #0D7377; color: white;" data-inspect-component="DoctorBriefingTile">
                     <div class="tile-icon">👨‍⚕️</div>
@@ -350,11 +350,12 @@
                     <span>OCR Extractor</span> • <span class="active">Gemini Analysis</span> • <span>Database Sync</span>
                   </div>
                 </div>
-                <!-- Voice Search FAB (Bharat UI) -->
-                <div class="voice-fab" id="btnVoiceSearch" title="Voice Search" style="position: absolute; bottom: 20px; right: 20px; background: #0D7377; color: white; border-radius: 28px; padding: 0 20px; height: 56px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(13, 115, 119, 0.4); cursor: pointer; z-index: 10; gap: 8px;">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
-                  <span style="font-family: 'Inter', sans-serif; font-weight: 600; font-size: 15px;">Voice Search</span>
-                </div>
+              </div>
+              
+              <!-- Voice Search FAB (Bharat UI) -->
+              <div class="voice-fab" id="btnVoiceSearch" title="Voice Search" style="position: absolute; bottom: 20px; right: 20px; background: #0D7377; color: white; border-radius: 28px; padding: 0 20px; height: 56px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(13, 115, 119, 0.4); cursor: pointer; z-index: 10; gap: 8px;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                <span style="font-family: 'Inter', sans-serif; font-weight: 600; font-size: 15px;">Voice Search</span>
               </div>
             </div>
           </div>
@@ -1125,19 +1126,19 @@
           </div>
         </div>
 
-        <!-- Screen 14: Gemini 3.6 AR Live Vision Scanner -->
+        <!-- Screen 14: Smart Health Lens -->
         <div class="screen-wrapper" data-screen-id="gemini-live">
-          <div class="screen-title-badge">GeminiLiveVisionScreen</div>
+          <div class="screen-title-badge">LiveVisionScreen</div>
           <div class="mobile-frame-mock">
             <div class="phone-status-bar">
               <span class="time">9:41 AM</span>
               <div class="status-icons">📶 🔋</div>
             </div>
-            <div class="screen-content dark-theme" data-inspect-component="GeminiLiveVisionScreen" data-description="Gemini 3.6 Multimodal Live AR Lens for real-time prescription and pill bounding-box recognition with instant voice synthesis.">
+            <div class="screen-content dark-theme" data-inspect-component="LiveVisionScreen" data-description="Smart Health Lens for real-time prescription and pill bounding-box recognition with instant voice synthesis.">
               <div class="app-bar transparent-bar">
                 <div class="bar-left">
                   <span class="back-arrow" id="btnLiveBack">←</span>
-                  <span class="bar-title text-white">Gemini 3.6 AR Lens</span>
+                  <span class="bar-title text-white">Smart Health Lens</span>
                 </div>
                 <div class="bar-right">
                   <span class="live-pulse-badge">● LIVE 60 FPS</span>

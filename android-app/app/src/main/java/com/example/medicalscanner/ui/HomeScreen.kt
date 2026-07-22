@@ -23,6 +23,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -54,51 +56,49 @@ fun HomeScreen(
     onNavigateToReminders: () -> Unit,
     onNavigateToPendingTests: () -> Unit,
     onNavigateToDiscovery: (String) -> Unit,
+    onNavigateToLiveVision: () -> Unit,
+    onNavigateToDoctorBrief: (String) -> Unit,
     onRefresh: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    // Order matches the priority the user asked for: Scan first, Trends last.
-    val actions = listOf(
-        HomeAction(
-            "Scan Report", "📸",
-            Color(0xFFE8F5E9), Color(0xFF2E7D32), onNavigateToScan
-        ),
-        HomeAction(
-            "Records", "📜",
-            Color(0xFFECEFF1), Color(0xFF455A64), onNavigateToRecords
-        ),
-        HomeAction(
-            "Reminders", "⏰",
-            Color(0xFFFFF3E0), Color(0xFFE65100), onNavigateToReminders
-        ),
-        HomeAction(
-            "Medications", "💊",
-            Color(0xFFF3E5F5), Color(0xFF6A1B9A), onNavigateToMedicationTracker
-        ),
-        HomeAction(
-            "Pending Tests", "🚨",
-            Color(0xFFFFF9C4), Color(0xFFC62828), onNavigateToPendingTests
-        ),
-        HomeAction(
-            "Find Doctors", "🩺",
-            Color(0xFFE0F2F1), Color(0xFF00796B), { onNavigateToDiscovery("doctors") }
-        ),
-        HomeAction(
-            "Find Labs", "🧪",
-            Color(0xFFE0F7FA), Color(0xFF006064), { onNavigateToDiscovery("lab_tests") }
-        ),
-        HomeAction(
-            "Find Hospitals", "🏥",
-            Color(0xFFE1F5FE), Color(0xFF0277BD), { onNavigateToDiscovery("hospitals") }
-        ),
-        HomeAction(
-            "Trends", "📈",
-            Color(0xFFE3F2FD), Color(0xFF1565C0), onNavigateToTrends
-        )
-    )
+    val isBackendReady = false
 
-    var selectedProfile by remember { mutableStateOf(MockProfiles.profiles[0]) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var profiles by remember { mutableStateOf(listOf<FamilyProfile>()) }
+    var selectedProfile by remember { mutableStateOf<FamilyProfile?>(null) }
     var expandedProfileMenu by remember { mutableStateOf(false) }
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        val patients = com.example.medicalscanner.local.LocalRepository.listPatients(context)
+        val loadedProfiles = if (patients.isEmpty()) {
+            val email = com.example.medicalscanner.local.AppSettings.getUserEmail(context)
+            val name = if (!email.isNullOrBlank()) email.substringBefore("@").replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.getDefault()) else it.toString() } else "Self"
+            listOf(FamilyProfile("p1", name, "Self", "👨"))
+        } else {
+            patients.mapIndexed { index, name ->
+                if (index == 0) FamilyProfile("p$index", name, "Self", "👨")
+                else FamilyProfile("p$index", name, "Guest", "👤")
+            }
+        }
+        profiles = loadedProfiles
+        selectedProfile = loadedProfiles.first()
+    }
+
+    val actions = buildList {
+        add(HomeAction("Scan Report", "📸", Color(0xFFE8F5E9), Color(0xFF2E7D32), onNavigateToScan))
+        add(HomeAction("Records", "📜", Color(0xFFECEFF1), Color(0xFF455A64), onNavigateToRecords))
+        add(HomeAction("Reminders", "⏰", Color(0xFFFFF3E0), Color(0xFFE65100), onNavigateToReminders))
+        add(HomeAction("Medications", "💊", Color(0xFFF3E5F5), Color(0xFF6A1B9A), onNavigateToMedicationTracker))
+        add(HomeAction("Pending Tests", "🚨", Color(0xFFFFF9C4), Color(0xFFC62828), onNavigateToPendingTests))
+        if (isBackendReady) {
+            add(HomeAction("Find Doctors", "🩺", Color(0xFFE0F2F1), Color(0xFF00796B), { onNavigateToDiscovery("doctors") }))
+            add(HomeAction("Find Labs", "🧪", Color(0xFFE0F7FA), Color(0xFF006064), { onNavigateToDiscovery("lab_tests") }))
+            add(HomeAction("Find Hospitals", "🏥", Color(0xFFE1F5FE), Color(0xFF0277BD), { onNavigateToDiscovery("hospitals") }))
+        }
+        add(HomeAction("Trends", "📈", Color(0xFFE3F2FD), Color(0xFF1565C0), onNavigateToTrends))
+        add(HomeAction("Smart Health Lens", "👁️‍🗨️", Color(0xFF0F172A), Color.White, onNavigateToLiveVision))
+        add(HomeAction("Doctor Brief", "👨‍⚕️", Color(0xFF0D7377), Color.White, { onNavigateToDoctorBrief(selectedProfile?.name ?: "") }))
+    }
 
     Scaffold(
         floatingActionButton = {
@@ -129,7 +129,7 @@ fun HomeScreen(
                             modifier = Modifier.clickable { expandedProfileMenu = true }
                         ) {
                             Text(
-                                text = "${selectedProfile.avatarEmoji} ${selectedProfile.name}",
+                                text = selectedProfile?.let { "${it.avatarEmoji} ${it.name}" } ?: "Loading...",
                                 maxLines = 1,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                 fontWeight = FontWeight.Bold,
@@ -146,7 +146,7 @@ fun HomeScreen(
                             expanded = expandedProfileMenu,
                             onDismissRequest = { expandedProfileMenu = false }
                         ) {
-                            MockProfiles.profiles.forEach { profile ->
+                            profiles.forEach { profile ->
                                 DropdownMenuItem(
                                     text = { Text("${profile.avatarEmoji} ${profile.name} (${profile.relation})") },
                                     onClick = {
@@ -183,6 +183,7 @@ fun HomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -201,6 +202,8 @@ fun HomeScreen(
                 }
 
                 BackgroundScanProgressBar(onNavigateToDetail = onNavigateToDetail)
+                
+                Spacer(modifier = Modifier.height(80.dp))
             }
         }
     }

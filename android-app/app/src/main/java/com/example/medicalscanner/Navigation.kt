@@ -43,6 +43,8 @@ import com.example.medicalscanner.ui.RegisterScreen
 import com.example.medicalscanner.ui.RemindersScreen
 import com.example.medicalscanner.ui.ReportDetailScreen
 import com.example.medicalscanner.ui.ScanScreen
+import com.example.medicalscanner.ui.LiveVisionScreen
+import com.example.medicalscanner.ui.DoctorBriefScreen
 import com.example.medicalscanner.ui.TrendsScreen
 import com.example.medicalscanner.ui.DiscoveryScreen
 import kotlinx.coroutines.launch
@@ -388,6 +390,8 @@ fun MainNavigation() {
             onNavigateToReminders = { backStack.add(Reminders) },
             onNavigateToPendingTests = { backStack.add(PendingTests) },
             onNavigateToDiscovery = { category -> backStack.add(Discovery(category = category)) },
+            onNavigateToLiveVision = { backStack.add(LiveVision) },
+            onNavigateToDoctorBrief = { patientName -> backStack.add(DoctorBrief(patientName)) },
             onRefresh = {
               coroutineScope.launch {
                 runCatching { NetworkModule.getApi(context).getMe() }
@@ -494,6 +498,19 @@ fun MainNavigation() {
         entry<DetailedAnalysis> { key ->
           DetailedAnalysisScreen(
             reportId = key.reportId,
+            onNavigateBack = { backStack.removeLastOrNull() },
+            modifier = Modifier.safeDrawingPadding()
+          )
+        }
+        entry<LiveVision> {
+          LiveVisionScreen(
+            onNavigateBack = { backStack.removeLastOrNull() },
+            modifier = Modifier.safeDrawingPadding()
+          )
+        }
+        entry<DoctorBrief> { key ->
+          DoctorBriefScreen(
+            patientName = key.patientName,
             onNavigateBack = { backStack.removeLastOrNull() },
             modifier = Modifier.safeDrawingPadding()
           )
