@@ -327,6 +327,14 @@
                     <div class="tile-icon">📈</div>
                     <span class="tile-label">Trends</span>
                   </div>
+                  <div class="grid-tile tile-scan" id="tileGeminiLive" style="background-color: #0F172A; color: white;" data-inspect-component="GeminiLiveVisionTile">
+                    <div class="tile-icon">👓</div>
+                    <span class="tile-label" style="color: white;">3.6 AR Lens</span>
+                  </div>
+                  <div class="grid-tile tile-records" id="tileDoctorBrief" style="background-color: #0D7377; color: white;" data-inspect-component="DoctorBriefingTile">
+                    <div class="tile-icon">👨‍⚕️</div>
+                    <span class="tile-label" style="color: white;">Doctor Brief</span>
+                  </div>
                 </div>
 
                 <!-- Recent Activity / Scan Progress -->
@@ -1108,6 +1116,135 @@
                   <h5>Comparative Summary</h5>
                   <p>A notable increase is detected in White Blood Cells (WBC), representing a shift of +3,900/mcL. Hemoglobin and platelet counts remain stable.</p>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen 14: Gemini 3.6 AR Live Vision Scanner -->
+        <div class="screen-wrapper" data-screen-id="gemini-live">
+          <div class="screen-title-badge">GeminiLiveVisionScreen</div>
+          <div class="mobile-frame-mock">
+            <div class="phone-status-bar">
+              <span class="time">9:41 AM</span>
+              <div class="status-icons">📶 🔋</div>
+            </div>
+            <div class="screen-content dark-theme" data-inspect-component="GeminiLiveVisionScreen" data-description="Gemini 3.6 Multimodal Live AR Lens for real-time prescription and pill bounding-box recognition with instant voice synthesis.">
+              <div class="app-bar transparent-bar">
+                <div class="bar-left">
+                  <span class="back-arrow" id="btnLiveBack">←</span>
+                  <span class="bar-title text-white">Gemini 3.6 AR Lens</span>
+                </div>
+                <div class="bar-right">
+                  <span class="live-pulse-badge">● LIVE 60 FPS</span>
+                </div>
+              </div>
+
+              <div class="ar-viewfinder" data-inspect-component="ARCameraViewfinder">
+                <!-- AR Viewfinder Overlay Reticles -->
+                <div class="ar-bounding-box box-success" style="top: 25%; left: 12%; width: 76%; height: 22%;">
+                  <div class="ar-tag tag-success">Metformin 500mg • 99.4% Match</div>
+                  <div class="ar-corner tl"></div><div class="ar-corner tr"></div>
+                  <div class="ar-corner bl"></div><div class="ar-corner br"></div>
+                </div>
+
+                <div class="ar-bounding-box box-warning" style="top: 52%; left: 18%; width: 64%; height: 18%;">
+                  <div class="ar-tag tag-warning">Caution: Take after meal</div>
+                  <div class="ar-corner tl"></div><div class="ar-corner tr"></div>
+                  <div class="ar-corner bl"></div><div class="ar-corner br"></div>
+                </div>
+
+                <!-- Voice Audio Overlay Card -->
+                <div class="ar-bottom-card" data-inspect-component="ARVoiceOverlayCard">
+                  <div class="voice-wave-bar">
+                    <span class="wave-bar h-1"></span>
+                    <span class="wave-bar h-3"></span>
+                    <span class="wave-bar h-2"></span>
+                    <span class="wave-bar h-4"></span>
+                    <span class="wave-bar h-2"></span>
+                  </div>
+                  <p class="voice-transcript">"Detected Metformin 500mg. Take 1 tablet twice daily after meals. No drug interaction risk detected."</p>
+                  <div class="ar-actions">
+                    <button class="ar-btn primary-ar" id="btnCaptureLive">📸 Freeze & Save</button>
+                    <button class="ar-btn secondary-ar" id="btnAskLive">🎙️ Ask AI</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Screen 15: AI Doctor Visit Briefing -->
+        <div class="screen-wrapper" data-screen-id="doctor-brief">
+          <div class="screen-title-badge">DoctorBriefingScreen</div>
+          <div class="mobile-frame-mock">
+            <div class="phone-status-bar">
+              <span class="time">9:41 AM</span>
+              <div class="status-icons">📶 🔋</div>
+            </div>
+            <div class="screen-content light-theme" data-inspect-component="DoctorBriefingScreen" data-description="Gemini 3.6 Long-Context Multi-Doc Medical Briefing preparing 60-second doctor appointment summaries.">
+              <div class="app-bar">
+                <div class="bar-left">
+                  <span class="back-arrow" id="btnBriefBack">←</span>
+                  <span class="bar-title">Doctor Visit Brief</span>
+                </div>
+                <div class="bar-right">
+                  <div class="icon-btn">📄</div>
+                </div>
+              </div>
+
+              <div class="scroll-content padding-16">
+                <!-- Appointment Info Banner -->
+                <div class="brief-header-card" data-inspect-component="AppointmentHeaderCard">
+                  <div class="brief-doctor-avatar">👨‍⚕️</div>
+                  <div class="brief-doctor-meta">
+                    <h4>Dr. R. K. Sharma</h4>
+                    <p>Cardiology Consultation • Tomorrow, 10:00 AM</p>
+                  </div>
+                </div>
+
+                <!-- 60-Second Audio Summary Player -->
+                <div class="audio-player-card" data-inspect-component="AudioSummaryPlayer">
+                  <div class="audio-controls">
+                    <button class="play-btn">▶</button>
+                    <div class="audio-info">
+                      <span class="audio-title">60-Second Patient Briefing Audio</span>
+                      <div class="audio-progress"><div class="audio-fill" style="width: 45%;"></div></div>
+                    </div>
+                    <span class="audio-time">0:27 / 1:00</span>
+                  </div>
+                </div>
+
+                <!-- Gemini 3.6 Multi-Doc Key Talking Points -->
+                <div class="brief-section" data-inspect-component="TalkingPointsSection">
+                  <h5 class="section-heading">Key Talking Points for Your Doctor</h5>
+                  
+                  <div class="talking-point-item alert-high">
+                    <div class="point-badge">1</div>
+                    <div class="point-body">
+                      <strong>HbA1c Level Shift</strong>
+                      <p>Increased from 6.5% (Feb) to 7.1% (July). Mention recent diet or medication dosage adjustments.</p>
+                    </div>
+                  </div>
+
+                  <div class="talking-point-item alert-med">
+                    <div class="point-badge">2</div>
+                    <div class="point-body">
+                      <strong>14-Day Blood Pressure Average</strong>
+                      <p>Home BP readings average 134/86 mmHg. Slightly elevated in evening logs.</p>
+                    </div>
+                  </div>
+
+                  <div class="talking-point-item alert-good">
+                    <div class="point-badge">3</div>
+                    <div class="point-body">
+                      <strong>Lipid Profile Improvement</strong>
+                      <p>LDL cholesterol decreased by 18 mg/dL following statin adherence.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <button class="primary-btn full-width margin-top-12" id="btnExportBrief">Export 1-Page PDF Brief</button>
               </div>
             </div>
           </div>

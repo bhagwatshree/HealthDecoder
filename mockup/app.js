@@ -585,6 +585,83 @@ document.addEventListener('DOMContentLoaded', () => {
       primary: "MedicalNavy (#1B3A4B)",
       desc: "Table comparing parameter values side-by-side. Highlights differences with custom red alert rows.",
       code: `Column(modifier = Modifier.fillMaxWidth().border(1.dp, Outline)) {\n    HeaderRow("Parameter", "Report A", "Report B")\n    reports.parameters.forEach { param ->\n        ComparisonRow(param.name, param.valA, param.valB, isCritical = param.hasShift)\n    }\n}`
+    },
+    "GeminiLiveVisionScreen": {
+      class: "GeminiLiveVisionScreen",
+      width: "360 dp (fillMaxSize)",
+      height: "740 dp (fillMaxSize)",
+      padding: "0.dp",
+      alignment: "Box / AR Camera Viewport",
+      bg: "Dark Slate (#0F172A)",
+      primary: "LiveCyan (#0284C7)",
+      desc: "Gemini 3.6 Multimodal Live AR Lens for real-time prescription and pill bounding-box recognition with instant voice synthesis.",
+      code: `@Composable\nfun GeminiLiveVisionScreen(onNavigateBack: () -> Unit) {\n    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A))) {\n        ARCameraViewfinder(stream = liveCameraStream)\n        ARVoiceOverlayCard(transcript = aiRealtimeTranscript)\n    }\n}`
+    },
+    "ARCameraViewfinder": {
+      class: "Box / Canvas Overlay",
+      width: "360 dp (fillMaxWidth)",
+      height: "500 dp",
+      padding: "16.dp",
+      alignment: "Relative Bounding Reticles",
+      bg: "Dark Radial Gradient",
+      primary: "Emerald Green (#10B981)",
+      desc: "Renders real-time bounding box reticles over recognised medicine packages and prescriptions with confidence scores.",
+      code: `Canvas(modifier = Modifier.fillMaxSize()) {\n    recognizedItems.forEach { item ->\n        drawBoundingBox(item.bounds, color = if (item.isWarning) Color.Yellow else Color.Green)\n        drawTagLabel(item.name, item.confidence)\n    }\n}`
+    },
+    "ARVoiceOverlayCard": {
+      class: "Card / Glassmorphism",
+      width: "328 dp (fillMaxWidth)",
+      height: "120 dp",
+      padding: "16.dp",
+      alignment: "Bottom Floating Card",
+      bg: "Slate Glass (0.85 opacity)",
+      primary: "Sky Blue (#38BDF8)",
+      desc: "Floating bottom glassmorphism card rendering real-time AI voice transcriptions and waveform animations.",
+      code: `Card(modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)) {\n    Column {\n        VoiceWaveformIndicator(active = isSpeaking)\n        Text(aiRealtimeTranscript, color = Color.White)\n        ActionRow(onSave = { saveSnapshot() }, onAsk = { startVoiceQuery() })\n    }\n}`
+    },
+    "DoctorBriefingScreen": {
+      class: "DoctorBriefingScreen",
+      width: "360 dp (fillMaxSize)",
+      height: "740 dp (fillMaxSize)",
+      padding: "0.dp",
+      alignment: "Column / Scroll",
+      bg: "MedicalBackground (#F8F9FA)",
+      primary: "MedicalTeal (#0D7377)",
+      desc: "Gemini 3.6 Long-Context Multi-Doc Medical Briefing preparing 60-second doctor appointment summaries.",
+      code: `@Composable\nfun DoctorBriefingScreen(onNavigateBack: () -> Unit) {\n    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {\n        AppointmentHeaderCard(appointment)\n        AudioSummaryPlayer(audioUri)\n        TalkingPointsSection(talkingPoints)\n    }\n}`
+    },
+    "AppointmentHeaderCard": {
+      class: "Card / Gradient",
+      width: "328 dp (fillMaxWidth)",
+      height: "80 dp",
+      padding: "16.dp",
+      alignment: "Row Flow",
+      bg: "Teal-Navy Gradient",
+      primary: "White (#FFFFFF)",
+      desc: "Displays upcoming clinician consultation details and appointment times.",
+      code: `Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MedicalTeal)) {\n    Row(verticalAlignment = Alignment.CenterVertically) {\n        AvatarIcon()\n        Column { Text(doctor.name, fontWeight = FontWeight.Bold); Text(doctor.specAndDate) }\n    }\n}`
+    },
+    "AudioSummaryPlayer": {
+      class: "Card / Audio Player",
+      width: "328 dp (fillMaxWidth)",
+      height: "64 dp",
+      padding: "12.dp",
+      alignment: "Row Controls",
+      bg: "Slate Surface (#F1F5F9)",
+      primary: "MedicalTeal (#0D7377)",
+      desc: "Interactive audio bar allowing patients to listen to a 60-second summary before entering the doctor consultation.",
+      code: `Card(modifier = Modifier.fillMaxWidth()) {\n    Row(verticalAlignment = Alignment.CenterVertically) {\n        IconButton(onClick = { togglePlay() }) { Icon(if (isPlaying) Pause else Play, null) }\n        ProgressBar(progress = audioProgress)\n        Text(durationText)\n    }\n}`
+    },
+    "TalkingPointsSection": {
+      class: "Column",
+      width: "328 dp (fillMaxWidth)",
+      height: "220 dp",
+      padding: "0.dp",
+      alignment: "Vertical flow",
+      bg: "Transparent",
+      primary: "MedicalNavy (#1B3A4B)",
+      desc: "Lists 3 critical talking points synthesized from multi-month lab reports and BP logs by Gemini 3.6.",
+      code: `Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {\n    talkingPoints.forEach { point ->\n        TalkingPointCard(point.priority, point.title, point.description)\n    }\n}`
     }
   };
 
@@ -790,6 +867,8 @@ document.addEventListener('DOMContentLoaded', () => {
   bindNavClick('tileMeds', 'meds');
   bindNavClick('tileTests', 'tests');
   bindNavClick('tileTrends', 'trends');
+  bindNavClick('tileGeminiLive', 'gemini-live');
+  bindNavClick('tileDoctorBrief', 'doctor-brief');
   bindNavClick('btnHomeAccount', 'account');
   bindNavClick('btnHomeChat', 'chat');
   bindNavClick('btnHomeCompare', 'compare');
@@ -1229,6 +1308,35 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   });
+
+  // Back handlers for new Gemini 3.6 screens
+  const btnLiveBack = document.getElementById('btnLiveBack');
+  if (btnLiveBack) {
+    btnLiveBack.addEventListener('click', () => navigateToScreen('home'));
+  }
+  const btnBriefBack = document.getElementById('btnBriefBack');
+  if (btnBriefBack) {
+    btnBriefBack.addEventListener('click', () => navigateToScreen('home'));
+  }
+  const btnCaptureLive = document.getElementById('btnCaptureLive');
+  if (btnCaptureLive) {
+    btnCaptureLive.addEventListener('click', () => {
+      showToast("Live AR Snapshot captured! Added to Records.");
+      navigateToScreen('records');
+    });
+  }
+  const btnAskLive = document.getElementById('btnAskLive');
+  if (btnAskLive) {
+    btnAskLive.addEventListener('click', () => {
+      navigateToScreen('chat');
+    });
+  }
+  const btnExportBrief = document.getElementById('btnExportBrief');
+  if (btnExportBrief) {
+    btnExportBrief.addEventListener('click', () => {
+      showToast("Generated 1-Page Doctor Brief PDF!");
+    });
+  }
 
   // --- Modes Navigation Controls ---
   const modeTabs = document.querySelectorAll('.mode-tab');

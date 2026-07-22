@@ -2746,3 +2746,223 @@ body.figma-dark-theme {
 @keyframes pop-point {
   to { transform: scale(1); }
 }
+
+/* --- Screen 14: Gemini 3.6 AR Vision Styles --- */
+.transparent-bar {
+  background: transparent !important;
+  box-shadow: none !important;
+  color: white;
+}
+.text-white { color: #ffffff !important; }
+
+.live-pulse-badge {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.ar-viewfinder {
+  position: relative;
+  width: 100%;
+  height: calc(100% - 56px);
+  background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.ar-bounding-box {
+  position: absolute;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.box-success {
+  border: 2px dashed #10b981;
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.box-warning {
+  border: 2px dashed #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.ar-tag {
+  position: absolute;
+  top: -24px;
+  left: 0;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.tag-success { background: #10b981; color: white; }
+.tag-warning { background: #f59e0b; color: white; }
+
+.ar-corner {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-color: currentColor;
+  border-style: solid;
+}
+.ar-corner.tl { top: -2px; left: -2px; border-width: 3px 0 0 3px; }
+.ar-corner.tr { top: -2px; right: -2px; border-width: 3px 3px 0 0; }
+.ar-corner.bl { bottom: -2px; left: -2px; border-width: 0 0 3px 3px; }
+.ar-corner.br { bottom: -2px; right: -2px; border-width: 0 3px 3px 0; }
+
+.ar-bottom-card {
+  margin: 16px;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.voice-wave-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+}
+
+.wave-bar {
+  width: 4px;
+  background: #38bdf8;
+  border-radius: 2px;
+  animation: wave-pulse 1.2s infinite ease-in-out alternate;
+}
+.wave-bar.h-1 { height: 8px; }
+.wave-bar.h-2 { height: 14px; animation-delay: 0.2s; }
+.wave-bar.h-3 { height: 20px; animation-delay: 0.4s; }
+.wave-bar.h-4 { height: 16px; animation-delay: 0.6s; }
+
+@keyframes wave-pulse {
+  0% { transform: scaleY(0.4); }
+  100% { transform: scaleY(1); }
+}
+
+.voice-transcript {
+  font-size: 12px;
+  line-height: 16px;
+  color: #e2e8f0;
+}
+
+.ar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ar-btn {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+}
+
+.primary-ar { background: #0284c7; color: white; }
+.secondary-ar { background: rgba(255, 255, 255, 0.15); color: white; }
+
+/* --- Screen 15: Doctor Briefing Styles --- */
+.brief-header-card {
+  background: linear-gradient(135deg, #0d7377 0%, #1b3a4b 100%);
+  color: white;
+  padding: 16px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brief-doctor-avatar {
+  font-size: 32px;
+  background: rgba(255, 255, 255, 0.15);
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.brief-doctor-meta h4 { font-size: 15px; font-weight: 700; margin: 0; }
+.brief-doctor-meta p { font-size: 11px; opacity: 0.85; margin-top: 2px; }
+
+.audio-player-card {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.audio-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.play-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #0d7377;
+  color: white;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.audio-info { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.audio-title { font-size: 11px; font-weight: 700; color: #1e293b; }
+.audio-progress { height: 4px; background: #cbd5e1; border-radius: 2px; overflow: hidden; }
+.audio-fill { height: 100%; background: #0d7377; }
+.audio-time { font-size: 10px; color: #64748b; font-weight: 600; }
+
+.brief-section { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.section-heading { font-size: 14px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+
+.talking-point-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border-left: 4px solid #cbd5e1;
+  background: #f8fafc;
+}
+
+.alert-high { border-left-color: #ef4444; background: #fef2f2; }
+.alert-med { border-left-color: #f59e0b; background: #fffbeb; }
+.alert-good { border-left-color: #10b981; background: #ecfdf5; }
+
+.point-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.point-body strong { font-size: 12px; color: #0f172a; display: block; }
+.point-body p { font-size: 11px; color: #475569; margin-top: 2px; line-height: 15px; }
+
+.full-width { width: 100%; }
+.margin-top-12 { margin-top: 12px; }
