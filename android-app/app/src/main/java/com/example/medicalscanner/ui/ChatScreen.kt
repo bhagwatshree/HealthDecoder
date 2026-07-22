@@ -142,8 +142,28 @@ fun ChatScreen(
                         language = language
                     )
                 )
-                messages.add(ChatMessage(role = "assistant", content = response.answer))
-                speak(response.answer) // read the answer aloud
+                var finalAnswer = response.answer
+                val toolRegex = "\\[TOOL:\\s*(.*?)\\s*\\]".toRegex()
+                val match = toolRegex.find(finalAnswer)
+                if (match != null) {
+                    val toolCommand = match.groupValues[1]
+                    finalAnswer = finalAnswer.replace(match.value, "").trim()
+                    
+                    if (toolCommand.startsWith("navigate")) {
+                        android.widget.Toast.makeText(context, "Action: Navigating to Find Care...", android.widget.Toast.LENGTH_LONG).show()
+                    } else if (toolCommand.startsWith("setReminder")) {
+                        val regex = "setReminder\\((.*?),(.*?)\\)".toRegex()
+                        val reminderMatch = regex.find(toolCommand)
+                        if (reminderMatch != null) {
+                            val med = reminderMatch.groupValues[1].trim()
+                            val time = reminderMatch.groupValues[2].trim()
+                            android.widget.Toast.makeText(context, "Action: Reminder set for \$med at \$time", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+
+                messages.add(ChatMessage(role = "assistant", content = finalAnswer))
+                if (finalAnswer.isNotBlank()) speak(finalAnswer) // read the answer aloud
             } catch (e: Exception) {
                 e.printStackTrace()
                 errorMessage = "Couldn't reach the assistant. Check that the server is running and configured in settings."
