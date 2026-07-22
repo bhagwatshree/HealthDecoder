@@ -582,6 +582,10 @@ fun ScanScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Live status of any scan/upload started from here (stays visible until the user
+                // dismisses it), so they can watch it finish without being navigated away.
+                BackgroundScanProgressBar(onNavigateToDetail = onNavigateToDetail)
+
                 // Image preview or selection placeholder — tapping it when empty opens the device file picker
                 Box(
                     modifier = Modifier
@@ -1141,13 +1145,15 @@ fun ScanScreen(
                             patientName = patientName
                         )
 
+                        // Stay on this screen (don't kick the user out) and reset the picker so the
+                        // scan can't be double-submitted; the progress card at the top now tracks it
+                        // to completion, and the same card shows on every screen it's placed on.
+                        pages.clear(); sources.clear(); docText = ""; localOcrText = ""; autoUseSarvam = false
                         android.widget.Toast.makeText(
                             context,
-                            "Scan started in background.",
+                            "Scan started — watch the progress above.",
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
-
-                        onNavigateBack()
                     },
                     enabled = uploadingState == null && (pages.isNotEmpty() || docText.isNotBlank()),
                     modifier = Modifier.fillMaxWidth().height(54.dp),
@@ -1173,12 +1179,12 @@ fun ScanScreen(
                                 category = category,
                                 patientName = patientName
                             )
+                            pages.clear(); sources.clear(); docText = ""; localOcrText = ""; autoUseSarvam = false
                             android.widget.Toast.makeText(
                                 context,
                                 "Uploaded. Open it later to analyze when you're ready.",
                                 android.widget.Toast.LENGTH_LONG
                             ).show()
-                            onNavigateBack()
                         },
                         enabled = uploadingState == null,
                         modifier = Modifier.fillMaxWidth().height(50.dp),
