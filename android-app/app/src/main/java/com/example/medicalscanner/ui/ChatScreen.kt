@@ -83,8 +83,12 @@ fun ChatScreen(
     var attachedImagePath by remember { mutableStateOf<String?>(null) }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
-            val cachedUri = com.example.medicalscanner.util.FileImportUtil.cacheImage(context, it)
-            if (cachedUri != null) attachedImagePath = cachedUri.path
+            Thread {
+                val result = com.example.medicalscanner.util.FileImportUtil.importFile(context, it)
+                if (result.images.isNotEmpty()) {
+                    attachedImagePath = result.images.first().path
+                }
+            }.start()
         }
     }
 
@@ -270,7 +274,7 @@ fun ChatScreen(
                 onInputChange = { input = it },
                 onSend = { sendQuestion(input) },
                 onVoice = { startVoiceInput() },
-                onAttach = { imagePicker.launch("image/*") },
+                onAttach = { imagePicker.launch("*/*") },
                 onRemoveAttachment = { attachedImagePath = null },
                 enabled = !isLoading
             )
