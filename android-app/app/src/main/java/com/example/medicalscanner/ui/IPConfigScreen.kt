@@ -111,6 +111,8 @@ fun IPConfigScreen(
     var patients by remember { mutableStateOf<List<String>>(emptyList()) }
     var exportPatient by remember { mutableStateOf<String?>(null) } // null = all patients
     var exportDelta by remember { mutableStateOf(false) }
+    var exportFrom by remember { mutableStateOf("") } // YYYY-MM-DD, inclusive; blank = no lower bound
+    var exportTo by remember { mutableStateOf("") }   // YYYY-MM-DD, inclusive; blank = no upper bound
     var patientMenuOpen by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { patients = LocalRepository.listPatients(context) }
 
@@ -118,7 +120,7 @@ fun IPConfigScreen(
         coroutineScope.launch {
             transferBusy = true
             transferResult = runCatching {
-                val file = LocalRepository.exportData(context, exportPatient, exportDelta)
+                val file = LocalRepository.exportData(context, exportPatient, exportDelta, exportFrom.trim(), exportTo.trim())
                 if (file == null) "Nothing to export for that selection." else {
                     val uri = androidx.core.content.FileProvider.getUriForFile(
                         context, "${context.packageName}.fileprovider", file
@@ -143,8 +145,9 @@ fun IPConfigScreen(
                 runCatching {
                     val res = LocalRepository.importData(context, uri)
                     buildString {
-                        append("Imported ${res.imported} report(s)")
-                        if (res.skippedDuplicates > 0) append(", skipped ${res.skippedDuplicates} already present")
+                        append("Added ${res.added}")
+                        if (res.updated > 0) append(", updated ${res.updated}")
+                        append(" report(s)")
                         if (res.patients.isNotEmpty()) append(" • ${res.patients.joinToString()}")
                     }
                 }.getOrElse { "Import failed: ${it.message}" }
@@ -442,6 +445,35 @@ fun IPConfigScreen(
                             )
                         }
                         Switch(checked = exportDelta, onCheckedChange = { exportDelta = it })
+                    }
+
+                    // Date-range window — keep/transfer just a slice (e.g. this year) for lighter
+                    // analysis & trends. Leave blank for no bound. Format YYYY-MM-DD.
+                    Text(
+                        "Date range (optional)",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = exportFrom,
+                            onValueChange = { exportFrom = it },
+                            label = { Text("From") },
+                            placeholder = { Text("2026-01-01") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        OutlinedTextField(
+                            value = exportTo,
+                            onValueChange = { exportTo = it },
+                            label = { Text("To") },
+                            placeholder = { Text("2026-12-31") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
                     }
 
                     transferResult?.let {
