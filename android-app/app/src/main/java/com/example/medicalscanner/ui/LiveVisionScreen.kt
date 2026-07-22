@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.medicalscanner.ui.tr
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -24,13 +25,20 @@ fun LiveVisionScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Smart Health Lens", color = Color.White) },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TopBarLogo()
+                        Text(tr("Smart Health Lens"), fontWeight = FontWeight.Bold)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.White
+                            contentDescription = tr("Back")
                         )
                     }
                 },
@@ -42,7 +50,7 @@ fun LiveVisionScreen(
                         modifier = Modifier.padding(end = 16.dp)
                     ) {
                         Text(
-                            text = "● LIVE 60 FPS",
+                            text = "● LIVE",
                             color = Color.White,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
@@ -51,11 +59,10 @@ fun LiveVisionScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF0F172A)
+                    containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
                 )
             )
-        },
-        containerColor = Color(0xFF0F172A)
+        }
     ) { paddingValues ->
         Box(
             modifier = modifier
@@ -81,12 +88,12 @@ fun LiveVisionScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .background(Color(0xFF0F172A).copy(alpha = 0.9f))
+                    .background(Color.Black.copy(alpha = 0.6f))
                     .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Point camera at a medicine strip to instantly identify it, see usage instructions, and check for interactions.",
+                    text = tr("Point camera at a medicine strip to instantly identify it, see usage instructions, and check for interactions."),
                     color = Color.White,
                     fontSize = 16.sp,
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
@@ -99,16 +106,16 @@ fun LiveVisionScreen(
                     Button(
                         onClick = { },
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Text("📸 Freeze & Save")
+                        Text(tr("📸 Freeze & Save"))
                     }
                     Button(
                         onClick = { },
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF475569))
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                     ) {
-                        Text("🎙️ Ask AI")
+                        Text(tr("🎙️ Ask AI"))
                     }
                 }
             }

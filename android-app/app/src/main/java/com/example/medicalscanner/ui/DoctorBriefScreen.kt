@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.medicalscanner.ui.tr
 
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
@@ -101,21 +102,32 @@ fun DoctorBriefScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Doctor Visit Brief") },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TopBarLogo()
+                        Text(tr("Doctor Visit Brief"), fontWeight = FontWeight.Bold)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Back"))
                     }
                 },
                 actions = {
                     IconButton(onClick = { /* TODO: Share on WhatsApp */ }) {
                         Icon(
-                            imageVector = Icons.Default.Share, // Using built-in Share icon
-                            contentDescription = "Share on WhatsApp",
+                            imageVector = Icons.Default.Share,
+                            contentDescription = tr("Share on WhatsApp"),
                             tint = Color(0xFF25D366)
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
+                )
             )
         }
     ) { paddingValues ->
@@ -123,6 +135,8 @@ fun DoctorBriefScreen(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .background(MaterialTheme.colorScheme.background)
+                .appWatermark()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {

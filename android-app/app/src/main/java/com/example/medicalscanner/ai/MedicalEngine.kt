@@ -389,6 +389,27 @@ Use short paragraphs and dashed lists ("- item"). If a section has nothing, keep
     }
 
     /**
+     * Identifies the medicine visible in a photo (a strip, box, bottle or label) via Gemini vision
+     * and returns just its name, or "" when nothing legible is found. The caller then feeds the
+     * name into [lookupMedicineInfo] for the usage/interaction details.
+     */
+    fun identifyMedicineFromImage(context: Context, imageBytes: ByteArray, mimeType: String): String {
+        val prompt = """
+            This photo shows a medicine (a strip, box, bottle, or printed label). Identify it.
+            Return ONLY the medicine's name exactly as printed — brand name if visible, otherwise the
+            generic/salt name — with no other words, no punctuation and no explanation.
+            If no medicine name is legible, return exactly: NONE
+        """.trimIndent()
+        return try {
+            val raw = GeminiClient.generateFromImage(context, prompt, imageBytes, mimeType)
+            val cleaned = GeminiClient.stripJsonFences(raw).trim().removeSurrounding("\"").trim()
+            if (cleaned.equals("NONE", ignoreCase = true) || cleaned.isBlank()) "" else cleaned.lines().first().trim()
+        } catch (e: Exception) {
+            e.printStackTrace(); ""
+        }
+    }
+
+    /**
      * Looks up basic information about a medicine using Gemini AI.
      * Results are cached on-device so repeated lookups are instant.
      */
