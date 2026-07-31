@@ -129,7 +129,10 @@ private val languages = listOf(
 
 fun MainNavigation() {
   val context = LocalContext.current
-  val startKey = remember { if (AppSettings.isLoggedIn(context)) Main else Login }
+  // With phone OTP off the app is account-free: open straight to Home and never gate on login.
+  val startKey = remember {
+    if (!FeatureFlags.PHONE_AUTH_ENABLED || AppSettings.isLoggedIn(context)) Main else Login
+  }
   val backStack = rememberNavBackStack(startKey)
   val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
@@ -322,7 +325,7 @@ fun MainNavigation() {
   }
 
   LaunchedEffect(Unit) {
-    if (AppSettings.isLoggedIn(context)) {
+    if (FeatureFlags.PHONE_AUTH_ENABLED && AppSettings.isLoggedIn(context)) {
       runCatching { NetworkModule.getApi(context).getMe() }
         .onFailure { e ->
           if (e.httpCode() == 401) {
@@ -371,7 +374,8 @@ fun MainNavigation() {
             onNavigateBack = { backStack.removeLastOrNull() },
             onLoggedOut = {
               backStack.clear()
-              backStack.add(Login)
+              // No sign-in screen exists when phone OTP is off — go back to Home instead.
+              backStack.add(if (FeatureFlags.PHONE_AUTH_ENABLED) Login else Main)
             },
             onNavigateToSettings = { backStack.add(IPConfig) },
             modifier = Modifier.safeDrawingPadding()

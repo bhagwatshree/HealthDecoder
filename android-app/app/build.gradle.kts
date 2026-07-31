@@ -41,6 +41,14 @@ android {
         // Sign-In (Credential Manager requires a *server* client ID, even on Android) — the
         // same client ID as the backend's GOOGLE_CLIENT_ID. See local.properties.example.
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${localProp("GOOGLE_WEB_CLIENT_ID")}\"")
+
+        // Phone (MSISDN) OTP sign-in. OFF by default: every OTP is a billed SMS, and the app
+        // works fully on-device without an account. Flip to true (or set PHONE_AUTH_ENABLED=true
+        // in local.properties) to bring the phone login/register screens back.
+        buildConfigField(
+            "boolean", "PHONE_AUTH_ENABLED",
+            (localProp("PHONE_AUTH_ENABLED").takeIf { it.isNotBlank() } ?: "false")
+        )
     }
 
     buildTypes {
