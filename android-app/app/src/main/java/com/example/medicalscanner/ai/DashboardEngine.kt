@@ -118,7 +118,11 @@ object DashboardEngine {
         // report dates are frequently mis-read on discharge summaries, which used to reorder
         // prescriptions and wrongly discontinue medicines — scan order is what the user controls.
         val chrono = reports.sortedBy { it.createdAt }
+        // Keyed by MedName.canonicalKey so the SAME drug written differently across scans
+        // ("Tab. Concor" vs "Concor 5mg") is ONE medicine, not two duplicated reminders.
         val patientMed = mutableMapOf<String, MutableMap<String, MutableList<MedPoint>>>()
+        // Best display label seen for each "patient|canonicalKey" (form prefix dropped, strength kept).
+        val displayName = mutableMapOf<String, String>()
         val latestScan = mutableMapOf<String, String>()
 
         for (r in chrono) {
@@ -135,7 +139,16 @@ object DashboardEngine {
             val medMap = patientMed.getOrPut(patient) { mutableMapOf() }
             for (m in r.medications) {
                 if (m.name.isNullOrBlank()) continue
-                medMap.getOrPut(m.name.trim()) { mutableListOf() }.add(
+                val key = MedName.canonicalKey(m.name)
+                val clean = MedName.cleanDisplay(m.name.trim())
+                // Prefer the richest label for display: one that carries a strength (a digit), else the longest.
+                val dnKey = "$patient|$key"
+                val prevName = displayName[dnKey]
+                if (prevName == null ||
+                    (clean.any { it.isDigit() } && !prevName.any { it.isDigit() }) ||
+                    (clean.any { it.isDigit() } == prevName.any { it.isDigit() } && clean.length > prevName.length)
+                ) displayName[dnKey] = clean
+                medMap.getOrPut(key) { mutableListOf() }.add(
                     MedPoint(r.id, m.dosage.orEmpty().ifEmpty { "1 tablet" }, m.frequency.orEmpty(), m.duration ?: "",
                         m.isOptional, m.weeklySchedule ?: emptyList(), m.notes ?: "", date, scanTime)
                 )
@@ -145,7 +158,8 @@ object DashboardEngine {
         val out = mutableListOf<MedicationHistory>()
         for ((patient, medMap) in patientMed) {
             val latest = latestScan[patient] ?: ""
-            for ((medName, list) in medMap) {
+            for ((medKey, list) in medMap) {
+                val medName = displayName["$patient|$medKey"] ?: medKey
                 if (list.isEmpty()) continue
                 val current = list.last()
                 var previous: MedPoint? = null

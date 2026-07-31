@@ -94,6 +94,8 @@ fun TodaysMedicinesTab(
     var appointments by remember { mutableStateOf(AppointmentStore.loadAll(context)) }
 
     LaunchedEffect(medicationHistory) {
+        // Collapse any duplicate reminders left by the same drug scanned under different name formats.
+        MedicineScheduleStore.dedupeCanonical(context)
         medicationHistory.filter { it.status.lowercase() == "active" }.forEach { med ->
             val activeSlots = parseRoutine(med.currentFrequency, med.currentDosage)
                 .filter { it.second }.map { it.first }

@@ -1,6 +1,7 @@
 package com.example.medicalscanner.reminder
 
 import android.content.Context
+import com.example.medicalscanner.model.MedName
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
 
@@ -176,7 +177,12 @@ object MedicineScheduleStore {
         activeSlots: List<String>,
         daysOfWeek: List<Int> = emptyList()
     ) {
-        if (loadAll(context).any { it.matches(medicineName, patientName) }) return
+        // Canonical match so "Tab. Concor" and "Concor 5mg" (same drug, different scans) don't both seed.
+        val canon = MedName.canonicalKey(medicineName)
+        if (loadAll(context).any {
+                it.patientName.equals(patientName, ignoreCase = true) &&
+                    MedName.canonicalKey(it.medicineName) == canon
+            }) return
         if (isDismissed(context, medicineName, patientName)) return // user deleted it — don't bring it back
         val slots = defaultSlotTimes.mapValues { (slot, hm) ->
             SlotConfig(enabled = activeSlots.contains(slot), hour = hm.first, minute = hm.second)
@@ -191,4 +197,40 @@ object MedicineScheduleStore {
     private fun MedicineSchedule.matches(name: String, patient: String) =
         medicineName.equals(name, ignoreCase = true) &&
         patientName.equals(patient, ignoreCase = true)
+
+    /**
+     * Merges reminder schedules that are the SAME drug written differently ("Tab. Concor" +
+     * "Concor 5mg") into one, keeping the richer name and the union of enabled slots. Idempotent —
+     * writes nothing when there are no duplicates. Call before seeding/rendering the reminders list.
+     */
+    fun dedupeCanonical(context: Context) {
+        val list = loadAll(context)
+        if (list.size < 2) return
+        val merged = LinkedHashMap<String, MedicineSchedule>()
+        for (s in list) {
+            val key = "${s.patientName.trim().lowercase()}|${MedName.canonicalKey(s.medicineName)}"
+            val existing = merged[key]
+            merged[key] = if (existing == null) s else mergeSchedules(existing, s)
+        }
+        if (merged.size != list.size) saveAll(context, merged.values.toList())
+    }
+
+    private fun mergeSchedules(a: MedicineSchedule, b: MedicineSchedule): MedicineSchedule {
+        // Richer label wins (one carrying a strength/digit, else the longer).
+        fun score(n: String) = (if (n.any(Char::isDigit)) 1000 else 0) + n.length
+        val name = if (score(b.medicineName) > score(a.medicineName)) b.medicineName else a.medicineName
+        val slots = defaultSlotTimes.keys.associateWith { slot ->
+            val ca = a.slots[slot]; val cb = b.slots[slot]
+            val enabled = (ca?.enabled == true) || (cb?.enabled == true)
+            val src = when { ca?.enabled == true -> ca; cb?.enabled == true -> cb; else -> ca ?: cb }
+            SlotConfig(enabled = enabled, hour = src?.hour ?: 8, minute = src?.minute ?: 0)
+        }
+        return a.copy(
+            medicineName = name,
+            dosage = a.dosage.ifBlank { b.dosage },
+            frequency = a.frequency.ifBlank { b.frequency },
+            slots = slots,
+            daysOfWeek = a.daysOfWeek ?: b.daysOfWeek
+        )
+    }
 }
