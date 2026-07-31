@@ -204,6 +204,12 @@ fun RecordsScreen(
                         val textMatch = report.id in ftsMatchIds
                         patientMatch || commentsMatch || typeMatch || medMatch || textMatch
                     }
+                        // Order by when it was scanned (newest first), not by the printed report date —
+                        // a mis-read date on a document shouldn't bury a report you just added.
+                        .sortedWith(
+                            compareByDescending<com.example.medicalscanner.model.MedicalReport> { it.createdAt }
+                                .thenByDescending { it.reportDate ?: "" }
+                        )
 
                     if (filteredReports.isEmpty()) {
                         EmptyStateView(

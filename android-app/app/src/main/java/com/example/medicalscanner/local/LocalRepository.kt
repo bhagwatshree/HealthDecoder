@@ -251,10 +251,24 @@ object LocalRepository {
         scanType: String
     ): String {
         val t = (aiReportType ?: displayType).trim().lowercase()
-        val isPrescription = t == "prescription" || t == "rx" || t == "medicine" ||
-            t.contains("prescription") || t.contains("medication order")
-        // A clearly named clinical/diagnostic document — trust it over the scan entry-point.
-        val knownReport = t.isNotBlank() && t != "other" && t != "unknown" && !isPrescription
+        // A clinical/diagnostic document belongs under Records even though it also lists medicines —
+        // e.g. a "Discharge Summary & Prescription" is a discharge summary, not a prescription slip.
+        val reportSignals = listOf(
+            "discharge", "summary", "consult", "report", "lab", "profile", "scan", "echo",
+            "sonograph", "ultrasound", "x-ray", "xray", "ecg", "ekg", "mri", "ct ", "doppler",
+            "pathology", "haemogram", "hemogram", "cbc", "panel", "urine", "biochem", "endocrin",
+            "electrocardiogram", "lipid", "renal", "liver", "kidney", "thyroid", "glycated",
+            "hba1c", "fibrinogen", "prothrombin", "electrolyte", "haematolog", "hematolog",
+            "blood count", "biopsy", "card"
+        )
+        val looksLikeReport = reportSignals.any { t.contains(it) }
+        // Only a document that IS a plain prescription/medicine slip (not one that merely mentions
+        // the word) is filed as a prescription.
+        val isPrescription = !looksLikeReport &&
+            (t == "prescription" || t == "rx" || t == "medicine" || t == "medication order" ||
+             t == "prescription slip" || t == "medicine prescription")
+        val knownReport = looksLikeReport ||
+            (t.isNotBlank() && t != "other" && t != "unknown" && !isPrescription)
         return when {
             isPrescription -> "prescription"
             knownReport    -> "other"
@@ -262,6 +276,25 @@ object LocalRepository {
             scanType == "prescription" -> "prescription"
             else -> "other"
         }
+    }
+
+    /**
+     * Self-healing migration: older reports were filed by which scan tab was open, not by what the
+     * document actually is, so lab reports and discharge summaries could be stored as "prescription".
+     * Re-derives each report's category from its detected type and rewrites the ones that disagree.
+     * Idempotent — once everything matches it writes nothing. Returns how many were corrected.
+     */
+    private fun reclassifyMiscategorized(context: Context, reports: List<MedicalReport>): Int {
+        var fixed = 0
+        for (r in reports) {
+            val current = r.reportCategory ?: ""
+            val correct = classifyCategory(r.reportType ?: "", r.reportType, current, "")
+            if (!correct.equals(current, ignoreCase = true)) {
+                LocalStore.upsertReport(context, r.copy(reportCategory = correct))
+                fixed++
+            }
+        }
+        return fixed
     }
 
     /** Resolves a scanned patient name to an existing patient/family member when the names clearly
@@ -600,9 +633,10 @@ object LocalRepository {
     // family-member selector together.
     suspend fun getDashboard(context: Context, period: String?): DashboardData = withContext(Dispatchers.IO) {
         val active = AppSettings.getActivePatient(context)
-        val allNow = LocalStore.getReports(context)
-        Log.i("ScanDiag", "DASHBOARD active=${active ?: "Everyone"} period=$period totalStored=${allNow.size} :: " +
-            allNow.joinToString(" | ") { "[${it.patientName} | ${it.reportType} | ${it.reportCategory} | ${it.reportDate} | meds=${it.medications.size}]" })
+        // Auto-fix any report that was filed under the wrong category (by scan tab rather than by its
+        // real document type) before building the dashboard.
+        val fixed = reclassifyMiscategorized(context, LocalStore.getReports(context))
+        if (fixed > 0) Log.i("ScanDiag", "reclassified $fixed report(s) to their real document type")
         var reports: List<MedicalReport> = filterByPeriod(LocalStore.getReports(context), period)
         var pending: List<PendingTest> = LocalStore.getPendingTests(context)
         if (active != null) {
