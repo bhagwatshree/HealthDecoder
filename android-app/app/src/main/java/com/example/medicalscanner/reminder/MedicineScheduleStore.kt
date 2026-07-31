@@ -21,7 +21,31 @@ data class MedicineSchedule(
 object MedicineScheduleStore {
     private const val PREFS_NAME = "medicine_schedules"
     private const val KEY_SCHEDULES = "schedules_v1"
+    // Medicines the user explicitly deleted a reminder for. TodaysMedicinesTab re-seeds a reminder
+    // for every active medicine on each load; without this, a deleted reminder would keep coming
+    // back because the medicine still exists in a report. Deleting marks it here; explicitly
+    // (re)adding via upsert clears it.
+    private const val KEY_DISMISSED = "dismissed_meds_v1"
     private val gson = GsonBuilder().create()
+
+    private fun dismissKey(medicineName: String, patientName: String) =
+        "${medicineName.trim().lowercase()}|${patientName.trim().lowercase()}"
+
+    private fun loadDismissed(context: Context): MutableSet<String> {
+        val json = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(KEY_DISMISSED, null)
+            ?: return mutableSetOf()
+        return try {
+            gson.fromJson<Set<String>>(json, object : TypeToken<Set<String>>() {}.type)?.toMutableSet() ?: mutableSetOf()
+        } catch (e: Exception) { mutableSetOf() }
+    }
+
+    private fun saveDismissed(context: Context, set: Set<String>) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(KEY_DISMISSED, gson.toJson(set)).apply()
+    }
+
+    /** True if the user deleted this medicine's reminder and hasn't re-added it — don't auto-seed it. */
+    fun isDismissed(context: Context, medicineName: String, patientName: String): Boolean =
+        loadDismissed(context).contains(dismissKey(medicineName, patientName))
 
     val defaultSlotTimes = mapOf(
         "Morning"   to Pair(8,  0),
@@ -44,14 +68,16 @@ object MedicineScheduleStore {
             .edit().putString(KEY_SCHEDULES, gson.toJson(schedules)).apply()
     }
 
-    /** Removes a medicine's reminder schedule entirely. */
+    /** Removes a medicine's reminder schedule and remembers it as dismissed so it isn't auto-re-seeded. */
     fun delete(context: Context, medicineName: String, patientName: String) {
         saveAll(context, loadAll(context).filterNot { it.matches(medicineName, patientName) })
+        saveDismissed(context, loadDismissed(context).apply { add(dismissKey(medicineName, patientName)) })
     }
 
-    /** Deletes ALL saved reminder schedules. */
+    /** Deletes ALL saved reminder schedules (and the dismissed list). */
     fun clearAll(context: Context) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().remove(KEY_SCHEDULES).apply()
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .remove(KEY_SCHEDULES).remove(KEY_DISMISSED).apply()
     }
 
     fun upsert(context: Context, schedule: MedicineSchedule) {
@@ -59,6 +85,8 @@ object MedicineScheduleStore {
         val idx = list.indexOfFirst { it.matches(schedule.medicineName, schedule.patientName) }
         if (idx >= 0) list[idx] = schedule else list.add(schedule)
         saveAll(context, list)
+        // Explicitly adding/editing a reminder un-dismisses it.
+        saveDismissed(context, loadDismissed(context).apply { remove(dismissKey(schedule.medicineName, schedule.patientName)) })
     }
 
     /**
@@ -132,10 +160,15 @@ object MedicineScheduleStore {
         activeSlots: List<String>
     ) {
         if (loadAll(context).any { it.matches(medicineName, patientName) }) return
+        if (isDismissed(context, medicineName, patientName)) return // user deleted it — don't bring it back
         val slots = defaultSlotTimes.mapValues { (slot, hm) ->
             SlotConfig(enabled = activeSlots.contains(slot), hour = hm.first, minute = hm.second)
         }
-        upsert(context, MedicineSchedule(medicineName, patientName, dosage, frequency, slots))
+        // Seed directly (not via upsert, which would clear the dismissed flag — irrelevant here since
+        // we've already confirmed it isn't dismissed, but keeps the auto-seed path self-contained).
+        val list = loadAll(context).toMutableList()
+        list.add(MedicineSchedule(medicineName, patientName, dosage, frequency, slots))
+        saveAll(context, list)
     }
 
     private fun MedicineSchedule.matches(name: String, patient: String) =
