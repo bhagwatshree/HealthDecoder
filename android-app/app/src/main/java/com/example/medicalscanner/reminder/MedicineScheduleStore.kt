@@ -15,8 +15,17 @@ data class MedicineSchedule(
     val patientName: String,
     val dosage: String,
     val frequency: String,
-    val slots: Map<String, SlotConfig>
+    val slots: Map<String, SlotConfig>,
+    // Days of the week the medicine is taken (Calendar.DAY_OF_WEEK: 1=Sun .. 7=Sat).
+    // null or empty means EVERY day — used for weekly scripts like "Wed & Sat only"
+    // (e.g. Tolvaptan). Nullable so schedules saved before this field existed still load.
+    val daysOfWeek: List<Int>? = null
 )
+
+/** True if this schedule's medicine is due on [dayOfWeek] (Calendar.DAY_OF_WEEK). Every day when no
+ *  specific days are set. */
+fun MedicineSchedule.runsOn(dayOfWeek: Int): Boolean =
+    daysOfWeek.isNullOrEmpty() || daysOfWeek!!.contains(dayOfWeek)
 
 object MedicineScheduleStore {
     private const val PREFS_NAME = "medicine_schedules"
@@ -164,7 +173,8 @@ object MedicineScheduleStore {
         patientName: String,
         dosage: String,
         frequency: String,
-        activeSlots: List<String>
+        activeSlots: List<String>,
+        daysOfWeek: List<Int> = emptyList()
     ) {
         if (loadAll(context).any { it.matches(medicineName, patientName) }) return
         if (isDismissed(context, medicineName, patientName)) return // user deleted it — don't bring it back
@@ -174,7 +184,7 @@ object MedicineScheduleStore {
         // Seed directly (not via upsert, which would clear the dismissed flag — irrelevant here since
         // we've already confirmed it isn't dismissed, but keeps the auto-seed path self-contained).
         val list = loadAll(context).toMutableList()
-        list.add(MedicineSchedule(medicineName, patientName, dosage, frequency, slots))
+        list.add(MedicineSchedule(medicineName, patientName, dosage, frequency, slots, daysOfWeek.ifEmpty { null }))
         saveAll(context, list)
     }
 

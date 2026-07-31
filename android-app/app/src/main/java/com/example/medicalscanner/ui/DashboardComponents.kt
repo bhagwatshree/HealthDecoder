@@ -161,6 +161,23 @@ fun parseRoutine(frequencyStr: String, dosageStr: String): List<Pair<String, Boo
     )
 }
 
+/**
+ * Maps a medicine's [weeklySchedule] strings (e.g. ["Wednesday","Saturday"]) plus any free-text
+ * frequency into Calendar.DAY_OF_WEEK codes (1=Sun .. 7=Sat). An EMPTY result means "every day"
+ * (the normal daily case) — only weekly scripts that name specific days produce codes, so a
+ * twice-weekly medicine like Tolvaptan (Wed & Sat) reminds only on those days.
+ */
+fun parseWeekdays(weeklySchedule: List<String>, frequencyStr: String): List<Int> {
+    val abbrToCode = linkedMapOf(
+        "sun" to 1, "mon" to 2, "tue" to 3, "wed" to 4, "thu" to 5, "fri" to 6, "sat" to 7
+    )
+    val hay = (weeklySchedule.joinToString(" ") + " " + frequencyStr).lowercase()
+    val days = sortedSetOf<Int>()
+    for ((abbr, code) in abbrToCode) if (hay.contains(abbr)) days.add(code)
+    // Only honour named days; "twice a week" with no day, or a plain daily schedule, stays daily.
+    return days.toList()
+}
+
 fun parseFoodInstruction(frequencyStr: String, dosageStr: String): String? {
     val text = (frequencyStr + " " + dosageStr).lowercase()
     return when {

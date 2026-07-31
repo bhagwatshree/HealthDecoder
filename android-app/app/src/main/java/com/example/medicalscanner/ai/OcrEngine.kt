@@ -193,9 +193,9 @@ object OcrEngine {
             )
         }
         val categoryText = if (scanType == "prescription")
-            "This document is a Medicine Prescription. Focus heavily on identifying the doctor's prescribed medications, dosages, frequency, durations, and instruction comments."
+            "The user is scanning this mainly to capture prescribed medicines, so identify EVERY medication, dosage, frequency, duration and instruction with great care. BUT do not assume the document is a plain prescription slip — classify \"reportType\" by what the document ACTUALLY is (a Discharge Summary, Consultation Note, Prescription, Lab Report or Diagnostic Scan), because discharge summaries and consultation notes also list medicines. Set \"reportName\" to the document's real printed title (e.g. \"Discharge Summary\")."
         else
-            "This document is a Medical/Diagnostic Report of category \"$reportCategory\". Focus on patient name, dates, and extracting findings, observations, conclusions, and test parameters (values, units, reference ranges, abnormal flags)."
+            "This document is a Medical/Diagnostic Report of category \"$reportCategory\". Focus on patient name, dates, and extracting findings, observations, conclusions, and test parameters (values, units, reference ranges, abnormal flags). Still classify \"reportType\" by what the document actually is."
 
         val refBlock = if (referenceText.isNotBlank())
             "Here is auxiliary on-device OCR text to assist accuracy. It may be incomplete or miss handwriting, so ALWAYS prefer what you can read directly from the image:\n\"\"\"\n$referenceText\n\"\"\"\n"
@@ -268,7 +268,7 @@ The response MUST be a JSON object with this schema:
   "reports": [
     {
       "reportName": "Specific report name or null",
-      "reportType": "Prescription | Lab Report | Diagnostic Scan | Other",
+      "reportType": "Prescription | Discharge Summary | Consultation Note | Lab Report | Diagnostic Scan | Other",
       "reportDate": "YYYY-MM-DD or null",
       "dateSource": "Reported | Collected | Procedure | Visit | Unlabeled | null",
       "datesFound": [ { "label": "Reported", "date": "YYYY-MM-DD" } ],

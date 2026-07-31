@@ -1,6 +1,7 @@
 package com.example.medicalscanner.local
 
 import android.content.Context
+import android.util.Log
 import com.example.medicalscanner.ai.DashboardEngine
 import com.example.medicalscanner.ai.DateResolver
 import com.example.medicalscanner.ai.MedicalEngine
@@ -124,6 +125,8 @@ object LocalRepository {
 
         val extraction = OcrEngine.scan(context, pages, localOcrText, scanType, reportCategory)
         val sections = extraction.reports.ifEmpty { listOf(extraction.merged()) }
+        Log.i("ScanDiag", "extracted patient=${extraction.patientName} sections=${sections.size} " +
+            sections.joinToString(" | ") { "[type=${it.reportType} name=${it.reportName} meds=${it.medications.size}]" })
         val detectedName = patientNameOverride.trim()
             .ifBlank { extraction.patientName ?: sections.firstOrNull()?.patientName ?: "Unknown Patient" }
         // Match the detected name to an existing patient/family member by name tokens so a longer
@@ -159,13 +162,19 @@ object LocalRepository {
             val sectionType = section.reportName?.takeIf { it.isNotBlank() }
                 ?: section.reportType
                 ?: if (scanType == "prescription") "Prescription" else "Other"
-            val category = if (reportCategory.isBlank())
-                (if (sectionType == "Prescription") "prescription" else "other") else reportCategory
+            // Let the DOCUMENT decide its category, not the scan entry-point. A discharge summary or
+            // lab report scanned via "Medicine Scan" must still file as a report (so it appears under
+            // Records and its insights aren't mislabelled as a prescription); only a document the AI
+            // actually recognises as a prescription is filed as one. Falls back to the caller's
+            // category when the type is unknown.
+            val category = classifyCategory(sectionType, section.reportType, reportCategory, scanType)
             val sectionText = section.rawText?.takeIf { it.isNotBlank() } ?: extraction.rawText ?: ""
 
             // Stage 2: this individual report was already saved from an earlier scan.
             val dup = LocalStore.findContentDuplicate(context, patientName, reportDate, category, sectionText)
             if (dup != null) {
+                Log.i("ScanDiag", "section '$sectionType' skipped as duplicate of ${dup.id} " +
+                    "(patient=$patientName date=$reportDate category=$category)")
                 if (firstDuplicate == null) firstDuplicate = dup
                 continue
             }
@@ -208,6 +217,8 @@ object LocalRepository {
             }
             autoResolvePending(context, report)
             saved.add(report)
+            Log.i("ScanDiag", "SAVED report id=${report.id} type=$sectionType category=$category " +
+                "patient=$patientName date=$reportDate meds=${report.medications.size}")
         }
 
         if (saved.isEmpty()) {
@@ -224,6 +235,33 @@ object LocalRepository {
 
         afterWrite(context)
         saved
+    }
+
+    /**
+     * Decides whether a scanned document is a "prescription" or a general report ("other"), based on
+     * what the document actually IS (the AI-detected type) rather than which scan tab the user opened.
+     * A discharge summary, consultation note or lab report contains medicines too, but it belongs under
+     * Records — only a document the AI recognises as an actual prescription/medicine slip is filed as
+     * one. Falls back to the caller's category, then the scan type, when the type is unknown.
+     */
+    private fun classifyCategory(
+        displayType: String,
+        aiReportType: String?,
+        callerCategory: String,
+        scanType: String
+    ): String {
+        val t = (aiReportType ?: displayType).trim().lowercase()
+        val isPrescription = t == "prescription" || t == "rx" || t == "medicine" ||
+            t.contains("prescription") || t.contains("medication order")
+        // A clearly named clinical/diagnostic document — trust it over the scan entry-point.
+        val knownReport = t.isNotBlank() && t != "other" && t != "unknown" && !isPrescription
+        return when {
+            isPrescription -> "prescription"
+            knownReport    -> "other"
+            callerCategory.isNotBlank() -> callerCategory
+            scanType == "prescription" -> "prescription"
+            else -> "other"
+        }
     }
 
     /** Resolves a scanned patient name to an existing patient/family member when the names clearly

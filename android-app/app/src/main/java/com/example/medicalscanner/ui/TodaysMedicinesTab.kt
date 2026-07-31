@@ -58,6 +58,16 @@ private val SLOT_STYLES = mapOf(
 
 private val TIME_SLOTS = listOf("Morning", "Afternoon", "Evening", "Night")
 
+// Calendar.DAY_OF_WEEK order (1=Sun..7=Sat) for the weekly-days picker.
+private val DOW_CODES  = listOf(1, 2, 3, 4, 5, 6, 7)
+private val DOW_SHORT  = mapOf(1 to "Sun", 2 to "Mon", 3 to "Tue", 4 to "Wed", 5 to "Thu", 6 to "Fri", 7 to "Sat")
+private val DOW_LETTER = mapOf(1 to "S", 2 to "M", 3 to "T", 4 to "W", 5 to "T", 6 to "F", 7 to "S")
+
+/** "Wed, Sat" for a weekly script; null when it runs every day (nothing worth showing). */
+private fun daysLabel(days: List<Int>?): String? =
+    if (days.isNullOrEmpty() || days.size >= 7) null
+    else days.sorted().joinToString(", ") { DOW_SHORT[it] ?: "" }
+
 @Composable
 fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
     val context = LocalContext.current
@@ -81,9 +91,10 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
         medicationHistory.filter { it.status.lowercase() == "active" }.forEach { med ->
             val activeSlots = parseRoutine(med.currentFrequency, med.currentDosage)
                 .filter { it.second }.map { it.first }
+            val days = parseWeekdays(med.weeklySchedule, med.currentFrequency)
             MedicineScheduleStore.autoSeedIfAbsent(
                 context, med.medicineName, med.patientName,
-                med.currentDosage, med.currentFrequency, activeSlots
+                med.currentDosage, med.currentFrequency, activeSlots, days
             )
         }
         schedules = MedicineScheduleStore.loadAll(context)
@@ -622,6 +633,16 @@ private fun ManageCard(
                     Text(schedule.medicineName, fontWeight = FontWeight.Bold, fontSize = 19.sp)
                     Text(schedule.patientName, fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    daysLabel(schedule.daysOfWeek)?.let { lbl ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.DateRange, null, modifier = Modifier.size(13.dp),
+                                tint = MaterialTheme.colorScheme.secondary)
+                            Spacer(Modifier.width(4.dp))
+                            Text("${tr("Only")}: $lbl", fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.secondary)
+                        }
+                    }
                 }
                 if (schedule.dosage.isNotEmpty()) {
                     Box(
@@ -750,6 +771,11 @@ private fun AddMedicineDialog(
     var dosage by remember { mutableStateOf(initialSchedule?.dosage ?: "") }
     var frequency by remember { mutableStateOf(initialSchedule?.frequency ?: "Daily") }
 
+    // Empty = every day; specific codes = weekly script (e.g. Wed & Sat).
+    val selectedDays = remember {
+        mutableStateListOf<Int>().apply { initialSchedule?.daysOfWeek?.let { addAll(it) } }
+    }
+
     val slotConfigMap = remember {
         mutableStateMapOf<String, SlotConfig>().apply {
             MedicineScheduleStore.defaultSlotTimes.forEach { (slot, hm) ->
@@ -807,6 +833,36 @@ private fun AddMedicineDialog(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f)
                     )
+                }
+
+                // Weekly days — all-off means "Every day"; tap letters for a weekly script.
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        if (selectedDays.isEmpty()) "${tr("Repeat on")}: ${tr("Every day")}"
+                        else "${tr("Repeat on")}: " + selectedDays.sorted().joinToString(", ") { DOW_SHORT[it] ?: "" },
+                        fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                        DOW_CODES.forEach { code ->
+                            val on = selectedDays.contains(code)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(CircleShape)
+                                    .background(if (on) MaterialTheme.colorScheme.secondary
+                                                else MaterialTheme.colorScheme.surfaceVariant)
+                                    .clickable {
+                                        if (on) selectedDays.remove(code) else selectedDays.add(code)
+                                    }
+                                    .padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(DOW_LETTER[code] ?: "", fontWeight = FontWeight.Bold,
+                                    color = if (on) MaterialTheme.colorScheme.onSecondary
+                                            else MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
                 }
 
                 Text(tr("Select reminder slots"), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
@@ -878,7 +934,8 @@ private fun AddMedicineDialog(
                             patientName = patName.trim(),
                             dosage = dosage.trim(),
                             frequency = frequency.trim(),
-                            slots = slotConfigMap.toMap()
+                            slots = slotConfigMap.toMap(),
+                            daysOfWeek = selectedDays.sorted().ifEmpty { null }
                         )
                     )
                 }

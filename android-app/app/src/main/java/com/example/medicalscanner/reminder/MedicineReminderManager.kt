@@ -48,15 +48,20 @@ object MedicineReminderManager {
         }
     }
 
-    /** All medicines whose enabled slots fire at exactly hour:minute. */
-    fun dueMedicines(context: Context, hour: Int, minute: Int): List<DueMedicine> =
-        MedicineScheduleStore.loadAll(context).flatMap { schedule ->
+    /** All medicines whose enabled slots fire at exactly hour:minute AND are due today (weekly
+     *  scripts like "Wed & Sat only" are skipped on other days). */
+    fun dueMedicines(context: Context, hour: Int, minute: Int): List<DueMedicine> {
+        val today = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
+        return MedicineScheduleStore.loadAll(context)
+            .filter { it.runsOn(today) }
+            .flatMap { schedule ->
             schedule.slots.mapNotNull { (slot, cfg) ->
                 if (cfg.enabled && cfg.hour == hour && cfg.minute == minute)
                     DueMedicine(schedule.medicineName, schedule.patientName, schedule.dosage, slot)
                 else null
             }
         }
+    }
 
     /**
      * Recomputes and (re)sets one alarm per distinct enabled reminder time, cancelling
