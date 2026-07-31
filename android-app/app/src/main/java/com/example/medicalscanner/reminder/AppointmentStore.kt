@@ -43,6 +43,19 @@ object AppointmentStore {
         saveAll(context, list)
     }
 
+    /** Adds [appointment] unless one for the same doctor on the same date already exists (so a
+     *  re-scan of the same discharge summary doesn't pile up duplicate follow-ups). Returns true if added. */
+    fun addIfAbsent(context: Context, appointment: AppointmentSchedule): Boolean {
+        val list = loadAll(context)
+        val exists = list.any {
+            it.doctorName.trim().equals(appointment.doctorName.trim(), ignoreCase = true) &&
+                it.date == appointment.date
+        }
+        if (exists) return false
+        saveAll(context, list + appointment)
+        return true
+    }
+
     fun delete(context: Context, id: String) {
         saveAll(context, loadAll(context).filterNot { it.id == id })
     }

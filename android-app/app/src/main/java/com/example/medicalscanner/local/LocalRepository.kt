@@ -13,6 +13,9 @@ import com.example.medicalscanner.backup.BackupSync
 import com.example.medicalscanner.backup.ExportManager
 import com.example.medicalscanner.reminder.MedicineReminderManager
 import com.example.medicalscanner.reminder.MedicineScheduleStore
+import com.example.medicalscanner.reminder.AppointmentStore
+import com.example.medicalscanner.reminder.AppointmentSchedule
+import com.example.medicalscanner.reminder.AppointmentReminderManager
 import com.example.medicalscanner.model.*
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
@@ -215,10 +218,13 @@ object LocalRepository {
                     ))
                 }
             }
+            // Auto-add follow-up doctor visits from a discharge summary's "FOLLOW UP" section.
+            addFollowUpAppointments(context, section.followUps, reportDate)
+
             autoResolvePending(context, report)
             saved.add(report)
             Log.i("ScanDiag", "SAVED report id=${report.id} type=$sectionType category=$category " +
-                "patient=$patientName date=$reportDate meds=${report.medications.size}")
+                "patient=$patientName date=$reportDate meds=${report.medications.size} followUps=${section.followUps.size}")
         }
 
         if (saved.isEmpty()) {
@@ -296,6 +302,63 @@ object LocalRepository {
         }
         return fixed
     }
+
+    /**
+     * Turns a discharge summary's "FOLLOW UP" entries into doctor appointments. Each visit's date is
+     * the explicit printed date if given, otherwise the report date plus its "after N days" offset.
+     * De-duplicated by doctor+date so re-scanning the same summary doesn't pile up copies.
+     */
+    private fun addFollowUpAppointments(
+        context: Context,
+        followUps: List<com.example.medicalscanner.ai.FollowUp>,
+        reportDate: String
+    ) {
+        if (followUps.isEmpty()) return
+        var addedAny = false
+        for (f in followUps) {
+            val doctor = f.doctorName?.trim().orEmpty()
+            val specialty = f.specialty?.trim().orEmpty()
+            val notes = f.notes?.trim().orEmpty()
+            // Where it can be placed on the calendar: an explicit date, else reportDate + afterDays.
+            val date = f.date?.takeIf { isValidIsoDate(it) }
+                ?: f.afterDays?.let { addDaysIso(reportDate, it) }
+                ?: continue
+            val label = when {
+                doctor.isNotBlank() -> doctor
+                specialty.isNotBlank() -> specialty
+                else -> "Follow-up visit"
+            }
+            val place = listOf(f.place?.trim().orEmpty(), specialty, notes)
+                .firstOrNull { it.isNotBlank() }.orEmpty()
+            val added = AppointmentStore.addIfAbsent(
+                context,
+                AppointmentSchedule(
+                    doctorName = label,
+                    date = date,
+                    time = "10:00",
+                    place = place,
+                    isRecurring = false,
+                    recurrence = "None",
+                    hour = 10,
+                    minute = 0
+                )
+            )
+            if (added) addedAny = true
+        }
+        if (addedAny) AppointmentReminderManager.scheduleAll(context)
+    }
+
+    private fun isValidIsoDate(s: String): Boolean =
+        Regex("""\d{4}-\d{2}-\d{2}""").matches(s.trim())
+
+    /** [baseIso] ("YYYY-MM-DD") advanced by [days]; null if the base date can't be parsed. */
+    private fun addDaysIso(baseIso: String, days: Int): String? = try {
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val cal = java.util.Calendar.getInstance()
+        cal.time = fmt.parse(baseIso.trim()) ?: throw IllegalArgumentException()
+        cal.add(java.util.Calendar.DAY_OF_YEAR, days)
+        fmt.format(cal.time)
+    } catch (e: Exception) { null }
 
     /** Resolves a scanned patient name to an existing patient/family member when the names clearly
      *  refer to the same person (shared name tokens), so a longer printed name doesn't fragment into

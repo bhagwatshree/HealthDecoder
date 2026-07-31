@@ -13,6 +13,17 @@ data class RecommendedTest(
     @SerializedName("dueDate") val dueDate: String? = null
 )
 
+/** A follow-up doctor visit read from a discharge summary's "FOLLOW UP" / "Review" section. */
+data class FollowUp(
+    @SerializedName("doctorName") val doctorName: String? = null,
+    @SerializedName("specialty") val specialty: String? = null,
+    // "after 7 days" -> 7; "after 2 weeks" -> 14; "after 1 month" -> 30. Null when an explicit date is given.
+    @SerializedName("afterDays") val afterDays: Int? = null,
+    @SerializedName("date") val date: String? = null,   // explicit YYYY-MM-DD if the summary printed one
+    @SerializedName("place") val place: String? = null, // clinic / OPD / hospital
+    @SerializedName("notes") val notes: String? = null  // e.g. "bring Lipid Profile", "Medicine OPD"
+)
+
 /** One date visible on a page together with its printed label ("Reported", "Collected"…). */
 data class FoundDate(
     @SerializedName("label") val label: String? = null,
@@ -30,6 +41,7 @@ data class ScanExtraction(
     @SerializedName("comments") val comments: String? = null,
     @SerializedName("medications") val medications: List<Medication> = emptyList(),
     @SerializedName("recommendedTests") val recommendedTests: List<RecommendedTest> = emptyList(),
+    @SerializedName("followUps") val followUps: List<FollowUp> = emptyList(),
     @SerializedName("testResults") val testResults: TestResults? = null,
     @SerializedName("rawText") val rawText: String? = null
 )
@@ -56,6 +68,7 @@ data class MultiScanExtraction(
             comments = reports.mapNotNull { it.comments?.takeIf { c -> c.isNotBlank() } }.joinToString("\n"),
             medications = reports.flatMap { it.medications },
             recommendedTests = reports.flatMap { it.recommendedTests },
+            followUps = reports.flatMap { it.followUps },
             testResults = TestResults(
                 parameters = reports.flatMap { it.testResults?.parameters ?: emptyList() },
                 findings = reports.flatMap { it.testResults?.findings ?: emptyList() }
@@ -142,6 +155,8 @@ object OcrEngine {
                     medications = prev.medications + section.medications,
                     recommendedTests = (prev.recommendedTests + section.recommendedTests)
                         .distinctBy { it.testName.trim().lowercase() },
+                    followUps = (prev.followUps + section.followUps)
+                        .distinctBy { "${it.doctorName?.trim()?.lowercase()}|${it.afterDays}|${it.date}" },
                     datesFound = (prev.datesFound + section.datesFound).distinct(),
                     testResults = TestResults(
                         parameters = (prev.testResults?.parameters ?: emptyList()) +
@@ -245,6 +260,13 @@ Also ensure that:
    When the doctor has struck through a printed medicine and handwritten a replacement next to it,
    use the handwritten one as the name and note the original in "notes".
 5. Future recommended tests go into that report's "recommendedTests".
+   FOLLOW-UP VISITS: from a "FOLLOW UP", "Review", "Revisit", "Come after" or "Next appointment"
+   section, extract EACH doctor visit into "followUps": the "doctorName", the "specialty" if named
+   (Cardiology, Endocrinology, Medicine OPD...), WHEN as "afterDays" — a NUMBER of days from the
+   discharge/report date (convert "after 1 week"→7, "after 2 weeks"→14, "after 15 days"→15,
+   "after 1 month"→30, "after 3 months"→90) — or an explicit "date" (YYYY-MM-DD) if one is printed,
+   the "place"/clinic/OPD, and "notes" (e.g. tests to carry like "bring Lipid Profile", or "check
+   PT/INR after 3 days"). One entry per doctor/visit. Leave "followUps" empty if there is no such section.
 6. Test results go into that report's "testResults": lab parameters into "parameters"; scan/diagnostic conclusions into "findings".
 7. For each parameter, also classify it for trend-charting across multiple reports over time:
    - "trendCategory": if it matches one of these, use that EXACT text (case-sensitive) —
@@ -277,6 +299,7 @@ The response MUST be a JSON object with this schema:
         { "name": "", "dosage": "", "frequency": "", "duration": "", "isOptional": false, "weeklySchedule": ["Everyday"], "notes": "" }
       ],
       "recommendedTests": [ { "testName": "", "dueDate": "YYYY-MM-DD or null" } ],
+      "followUps": [ { "doctorName": "", "specialty": "", "afterDays": 7, "date": "YYYY-MM-DD or null", "place": "", "notes": "" } ],
       "testResults": {
         "parameters": [
           {
