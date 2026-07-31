@@ -706,6 +706,18 @@ object LocalRepository {
         // real document type) before building the dashboard.
         val fixed = reclassifyMiscategorized(context, LocalStore.getReports(context))
         if (fixed > 0) Log.i("ScanDiag", "reclassified $fixed report(s) to their real document type")
+        runCatching {
+            val names = LocalStore.getReports(context)
+                .flatMap { it.testResults?.parameters ?: emptyList() }
+                .filter { it.name.isNotBlank() }
+                .groupBy { DashboardEngine.canonicalParamName(it.name) }
+            Log.i("ParamDiag", "distinctCanonical=${names.size}")
+            names.entries.chunked(6).forEach { chunk ->
+                Log.i("ParamDiag", chunk.joinToString(" ;; ") { (canon, ps) ->
+                    "$canon <= ${ps.map { it.name }.distinct().joinToString("/")} [${ps.firstOrNull()?.unit}]"
+                })
+            }
+        }
         var reports: List<MedicalReport> = filterByPeriod(LocalStore.getReports(context), period)
         var pending: List<PendingTest> = LocalStore.getPendingTests(context)
         if (active != null) {

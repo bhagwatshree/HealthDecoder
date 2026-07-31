@@ -97,7 +97,8 @@ fun TrendsScreen(
     var patients by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedPatient by remember { mutableStateOf<String?>(null) }
     var period by remember { mutableStateOf<String?>(null) }
-    var keyOnly by remember { mutableStateOf(true) }
+    var selectedCategory by remember { mutableStateOf(DashboardEngine.CATEGORY_ALL) }
+    var categoryMenu by remember { mutableStateOf(false) }
     var trends by remember { mutableStateOf<List<ParameterTrend>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var patientMenu by remember { mutableStateOf(false) }
@@ -126,9 +127,23 @@ fun TrendsScreen(
         isLoading = false
     }
 
-    val visibleTrends = remember(trends, keyOnly) {
-        val withData = trends.filter { t -> t.dataPoints.any { parseNum(it.value) != null } }
-        if (keyOnly) withData.filter { DashboardEngine.isKeyParameter(it.name) }.ifEmpty { withData } else withData
+    val withData = remember(trends) {
+        trends.filter { t -> t.dataPoints.any { parseNum(it.value) != null } }
+    }
+    // Only offer panels that actually have data, so the dropdown never leads to an empty screen.
+    val availableCategories = remember(withData) {
+        val present = withData.map { DashboardEngine.categoryOf(it.name) }.toSet()
+        listOf(DashboardEngine.CATEGORY_ALL) +
+            DashboardEngine.TREND_CATEGORIES.map { it.first }.filter { it in present } +
+            listOf(DashboardEngine.CATEGORY_OTHER).filter { it in present }
+    }
+    val visibleTrends = remember(withData, selectedCategory) {
+        if (selectedCategory == DashboardEngine.CATEGORY_ALL) withData
+        else withData.filter { DashboardEngine.categoryOf(it.name) == selectedCategory }
+    }
+    // A previously chosen panel can vanish when the patient/period changes — fall back to All.
+    LaunchedEffect(availableCategories) {
+        if (selectedCategory !in availableCategories) selectedCategory = DashboardEngine.CATEGORY_ALL
     }
 
     Scaffold(
@@ -194,12 +209,34 @@ fun TrendsScreen(
                 } else {
                     Text(selectedPatient ?: "", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 }
-                FilterChip(
-                    selected = keyOnly,
-                    onClick = { keyOnly = !keyOnly },
-                    label = { Text(if (keyOnly) tr("Key tests") else tr("All tests"), fontSize = 12.sp) },
-                    leadingIcon = { Icon(if (keyOnly) Icons.Default.Star else Icons.Default.StarBorder, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            }
+
+            // Test-panel selector — "All tests" plus every panel that has data for this patient.
+            ExposedDropdownMenuBox(
+                expanded = categoryMenu,
+                onExpandedChange = { categoryMenu = it },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                OutlinedTextField(
+                    value = selectedCategory,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text(tr("Test group")) },
+                    leadingIcon = { Icon(Icons.Default.Category, contentDescription = null) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryMenu) },
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.menuAnchor().fillMaxWidth()
                 )
+                ExposedDropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
+                    availableCategories.forEach { cat ->
+                        val count = if (cat == DashboardEngine.CATEGORY_ALL) withData.size
+                                    else withData.count { DashboardEngine.categoryOf(it.name) == cat }
+                        DropdownMenuItem(
+                            text = { Text(if (count > 0) "$cat  ($count)" else cat) },
+                            onClick = { selectedCategory = cat; categoryMenu = false }
+                        )
+                    }
+                }
             }
 
             // Period chips

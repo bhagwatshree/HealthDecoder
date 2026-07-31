@@ -49,7 +49,9 @@ object DashboardEngine {
             n.contains("wbc") || n.contains("white blood") || n.contains("leucocyte") || n.contains("leukocyte") -> "WBC"
             // Exclude MPV / platelet distribution width, which aren't the platelet count.
             n.contains("platelet") && !n.contains("volume") && !n.contains("mpv") && !n.contains("distribution") -> "Platelets"
-            n.contains("ldl") && !n.contains("vldl") -> "LDL"
+            // VLDL first: "VLDL Cholesterol" must not fall through to Total Cholesterol.
+            n.contains("vldl") -> "VLDL"
+            n.contains("ldl") -> "LDL"
             n.contains("hdl") -> "HDL"
             n.contains("triglyceride") -> "Triglycerides"
             n.contains("cholesterol") -> "Total Cholesterol"
@@ -60,9 +62,109 @@ object DashboardEngine {
             n.contains("ejection") || n == "ef" || n.contains("lvef") -> "Ejection Fraction"
             n.contains("vitamin d") || n.contains("25-oh") || n.contains("25 oh") -> "Vitamin D"
             n.contains("b12") || n.contains("cobalamin") -> "Vitamin B12"
+
+            // ── Coagulation (PT/INR) — critical for anyone on a blood thinner ──────────
+            n.contains("inr") || n.contains("international normali") -> "INR"
+            n.contains("prothrombin") || Regex("\\bpt\\b").containsMatchIn(n) -> "Prothrombin Time"
+            n.contains("aptt") || n.contains("activated partial") -> "APTT"
+            n.contains("fibrinogen") -> "Fibrinogen"
+            n.contains("d-dimer") || n.contains("d dimer") -> "D-Dimer"
+
+            // ── Electrolytes & minerals ───────────────────────────────────────────────
+            n.contains("sodium") || Regex("\\bna\\+?\\b").containsMatchIn(n) -> "Sodium"
+            // Bare "K" means potassium — but never inside "Vitamin K".
+            n.contains("potassium") || (!n.contains("vitamin") && Regex("\\bk\\+?\\b").containsMatchIn(n)) -> "Potassium"
+            n.contains("chloride") -> "Chloride"
+            n.contains("bicarbonate") || n.contains("hco3") -> "Bicarbonate"
+            n.contains("calcium") && !n.contains("urin") -> "Calcium"
+            n.contains("magnesium") -> "Magnesium"
+            n.contains("phosphor") || n.contains("phosphate") -> "Phosphorus"
+
+            // ── Kidney ────────────────────────────────────────────────────────────────
+            n.contains("egfr") || n.contains("gfr") -> "eGFR"
+            n.contains("uric acid") -> "Uric Acid"
+            (n.contains("urea") || n.contains("bun")) && !n.contains("urin") -> "Urea"
+
+            // ── Liver ─────────────────────────────────────────────────────────────────
+            n.contains("bilirubin") && n.contains("direct") -> "Bilirubin (Direct)"
+            n.contains("bilirubin") -> "Bilirubin (Total)"
+            n.contains("sgot") || n.contains("aspartate") || Regex("\\bast\\b").containsMatchIn(n) -> "SGOT (AST)"
+            n.contains("sgpt") || n.contains("alanine") || Regex("\\balt\\b").containsMatchIn(n) -> "SGPT (ALT)"
+            n.contains("alkaline phosphat") || Regex("\\balp\\b").containsMatchIn(n) -> "Alkaline Phosphatase"
+            n.contains("ggt") || n.contains("gamma gluta") || n.contains("gamma-gluta") -> "GGT"
+            n.contains("globulin") && !n.contains("ratio") -> "Globulin"
+            n.contains("albumin") && !n.contains("urin") && !n.contains("micro") && !n.contains("ratio") -> "Albumin"
+            n.contains("protein") && !n.contains("urin") && !n.contains("c-reactive") -> "Total Protein"
+
+            // ── Heart ─────────────────────────────────────────────────────────────────
+            n.contains("troponin") -> "Troponin"
+            n.contains("bnp") || n.contains("natriuretic") -> "BNP"
+            n.contains("ck-mb") || n.contains("ckmb") || n.contains("creatine kinase") || n.contains("cpk") -> "CPK / CK-MB"
+
+            // ── Blood count (CBC) extras ──────────────────────────────────────────────
+            n.contains("rbc") || n.contains("red blood") || n.contains("erythrocyte count") -> "RBC Count"
+            n.contains("hematocrit") || n.contains("haematocrit") || n.contains("pcv") -> "Hematocrit (PCV)"
+            n.contains("mchc") -> "MCHC"
+            n.contains("mcv") || n.contains("mean corpuscular volume") -> "MCV"
+            n.contains("mch") || n.contains("mean corpuscular h") -> "MCH"
+            n.contains("rdw") -> "RDW"
+            n.contains("neutrophil") -> "Neutrophils"
+            n.contains("lymphocyte") -> "Lymphocytes"
+            n.contains("monocyte") -> "Monocytes"
+            n.contains("eosinophil") -> "Eosinophils"
+            n.contains("basophil") -> "Basophils"
+            n.contains("esr") || n.contains("sedimentation") -> "ESR"
+
+            // ── Vitamins, iron & inflammation ─────────────────────────────────────────
+            n.contains("ferritin") -> "Ferritin"
+            n.contains("tibc") || n.contains("iron binding") -> "TIBC"
+            n.contains("iron") -> "Iron"
+            n.contains("folate") || n.contains("folic") -> "Folate"
+            n.contains("c-reactive") || n.contains("crp") -> "CRP"
+            n.contains("vldl") -> "VLDL"
             else -> raw.trim()
         }
     }
+
+    /**
+     * Trend panels shown in the Trends dropdown, in display order. A test lands in the FIRST
+     * category listing its canonical name; anything unmatched falls into "Other tests", so no
+     * scanned value can ever be hidden from the Trends screen.
+     */
+    const val CATEGORY_ALL = "All tests"
+    const val CATEGORY_OTHER = "Other tests"
+
+    val TREND_CATEGORIES: List<Pair<String, List<String>>> = listOf(
+        "Blood Count" to listOf(
+            "Hemoglobin", "RBC Count", "WBC", "Platelets", "Hematocrit (PCV)",
+            "MCV", "MCH", "MCHC", "RDW",
+            "Neutrophils", "Lymphocytes", "Monocytes", "Eosinophils", "Basophils", "ESR"
+        ),
+        "Diabetes" to listOf("Blood Sugar", "HbA1c"),
+        "Heart & Cholesterol" to listOf(
+            "Total Cholesterol", "LDL", "HDL", "VLDL", "Triglycerides",
+            "Ejection Fraction", "Oxygen (SpO2)", "Troponin", "BNP", "CPK / CK-MB"
+        ),
+        "Coagulation (PT/INR)" to listOf(
+            "Prothrombin Time", "INR", "APTT", "Fibrinogen", "D-Dimer"
+        ),
+        "Electrolytes & Minerals" to listOf(
+            "Sodium", "Potassium", "Chloride", "Calcium", "Magnesium", "Phosphorus", "Bicarbonate"
+        ),
+        "Kidney & Liver" to listOf(
+            "Creatinine", "Urea", "Uric Acid", "eGFR",
+            "Bilirubin (Total)", "Bilirubin (Direct)", "SGOT (AST)", "SGPT (ALT)",
+            "Alkaline Phosphatase", "GGT", "Total Protein", "Albumin", "Globulin"
+        ),
+        "Thyroid & Vitamins" to listOf(
+            "TSH", "T3", "T4", "Vitamin D", "Vitamin B12", "Folate", "Iron", "Ferritin", "TIBC", "CRP"
+        )
+    )
+
+    /** The panel a canonical test name belongs to — [CATEGORY_OTHER] when it matches none. */
+    fun categoryOf(canonicalName: String): String =
+        TREND_CATEGORIES.firstOrNull { (_, members) -> members.contains(canonicalName) }?.first
+            ?: CATEGORY_OTHER
 
     /** Test condition for a blood-sugar reading (Fasting / PP / Random), or "" if unspecified —
      *  shown per-point alongside the value since a fasting and a post-meal reading aren't
@@ -210,7 +312,10 @@ object DashboardEngine {
         // AI classified this at scan time (sees full report/panel context) — trust it when
         // present. Reports scanned before that existed fall back to the keyword heuristics.
         if (p.excludeFromTrend == true) return null
-        var canon = p.trendCategory?.takeIf { it.isNotBlank() } ?: canonicalParamName(p.name)
+        // Normalize BOTH paths through canonicalParamName: the AI's own trendCategory is free text
+        // ("Serum Sodium", "S. Creatinine"), so without this the same test fragments into separate
+        // lines depending on which report it came from.
+        var canon = canonicalParamName(p.trendCategory?.takeIf { it.isNotBlank() } ?: p.name)
         // A urine dipstick's semi-quantitative "++" (or "Negative"/"Trace") can share a bare
         // name like "Glucose" with no "urine" qualifier — never let a non-numeric reading merge
         // onto a numeric mg/dL line regardless of spelling (defense-in-depth vs excludeFromTrend).
