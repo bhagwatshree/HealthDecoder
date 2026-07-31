@@ -600,6 +600,9 @@ object LocalRepository {
     // family-member selector together.
     suspend fun getDashboard(context: Context, period: String?): DashboardData = withContext(Dispatchers.IO) {
         val active = AppSettings.getActivePatient(context)
+        val allNow = LocalStore.getReports(context)
+        Log.i("ScanDiag", "DASHBOARD active=${active ?: "Everyone"} period=$period totalStored=${allNow.size} :: " +
+            allNow.joinToString(" | ") { "[${it.patientName} | ${it.reportType} | ${it.reportCategory} | ${it.reportDate} | meds=${it.medications.size}]" })
         var reports: List<MedicalReport> = filterByPeriod(LocalStore.getReports(context), period)
         var pending: List<PendingTest> = LocalStore.getPendingTests(context)
         if (active != null) {

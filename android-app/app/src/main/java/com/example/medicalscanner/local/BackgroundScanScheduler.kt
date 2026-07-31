@@ -26,7 +26,10 @@ data class ScanJob(
     var status: ScanJobStatus,
     var progress: Float, // 0.0 to 1.0
     var error: String? = null,
-    var resultReportId: String? = null
+    var resultReportId: String? = null,
+    // When the scan was rejected as a duplicate, the id of the already-saved report so the UI can
+    // offer "View existing" — letting the user jump to that document (e.g. to delete it).
+    var duplicateReportId: String? = null
 )
 
 object BackgroundScanScheduler {
@@ -103,7 +106,7 @@ object BackgroundScanScheduler {
                 val who = dup.existing.patientName ?: "this patient"
                 val date = dup.existing.reportDate ?: ""
                 val err = "This report is already saved for $who${if (date.isNotBlank()) " (dated $date)" else ""}"
-                updateJobProgress(scanJob.id, ScanJobStatus.ERROR, 1.0f, error = err)
+                updateJobProgress(scanJob.id, ScanJobStatus.ERROR, 1.0f, error = err, duplicateReportId = dup.existing.id)
             } catch (oom: OutOfMemoryError) {
                 updateJobProgress(scanJob.id, ScanJobStatus.ERROR, 1.0f, error = "Too many pages. Please scan fewer documents.")
             } catch (e: Exception) {
@@ -156,7 +159,7 @@ object BackgroundScanScheduler {
                 _onJobCompleted.emit(report.id)
             } catch (dup: DuplicateReportException) {
                 val who = dup.existing.patientName ?: "this patient"
-                updateJobProgress(scanJob.id, ScanJobStatus.ERROR, 1.0f, error = "This file is already saved for $who.")
+                updateJobProgress(scanJob.id, ScanJobStatus.ERROR, 1.0f, error = "This file is already saved for $who.", duplicateReportId = dup.existing.id)
             } catch (e: Exception) {
                 e.printStackTrace()
                 updateJobProgress(scanJob.id, ScanJobStatus.ERROR, 1.0f, error = "Upload failed. Please try again.")
@@ -176,7 +179,8 @@ object BackgroundScanScheduler {
         status: ScanJobStatus,
         progress: Float,
         error: String? = null,
-        resultReportId: String? = null
+        resultReportId: String? = null,
+        duplicateReportId: String? = null
     ) {
         scope.launch(Dispatchers.Main) {
             val index = activeJobs.indexOfFirst { it.id == jobId }
@@ -186,7 +190,8 @@ object BackgroundScanScheduler {
                     status = status,
                     progress = progress,
                     error = error,
-                    resultReportId = resultReportId
+                    resultReportId = resultReportId,
+                    duplicateReportId = duplicateReportId
                 )
             }
         }

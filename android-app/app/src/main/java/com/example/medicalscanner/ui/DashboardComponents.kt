@@ -1471,6 +1471,23 @@ fun BackgroundScanProgressBar(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
+                    // Duplicate scan: let the user jump to the already-saved document (e.g. to delete it).
+                    if (job.status == ScanJobStatus.ERROR && job.duplicateReportId != null) {
+                        Button(
+                            onClick = {
+                                job.duplicateReportId?.let { onNavigateToDetail(it) }
+                                BackgroundScanScheduler.removeJob(job.id)
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(tr("View existing document"), fontWeight = FontWeight.Bold)
+                        }
+                    }
+
                     if (job.status != ScanJobStatus.COMPLETED && job.status != ScanJobStatus.ERROR) {
                         LinearProgressIndicator(
                             progress = { job.progress },
