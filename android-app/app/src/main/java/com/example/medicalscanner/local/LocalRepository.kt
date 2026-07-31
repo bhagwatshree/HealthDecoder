@@ -124,8 +124,13 @@ object LocalRepository {
 
         val extraction = OcrEngine.scan(context, pages, localOcrText, scanType, reportCategory)
         val sections = extraction.reports.ifEmpty { listOf(extraction.merged()) }
-        val patientName = patientNameOverride.trim()
+        val detectedName = patientNameOverride.trim()
             .ifBlank { extraction.patientName ?: sections.firstOrNull()?.patientName ?: "Unknown Patient" }
+        // Match the detected name to an existing patient/family member by name tokens so a longer
+        // printed name (e.g. "Bhagwat Jayant Shriram") files under the existing short one ("Jayant")
+        // instead of fragmenting into a new patient. A user-typed override is trusted as-is.
+        val patientName = if (patientNameOverride.isNotBlank()) detectedName
+            else matchToExistingPatient(context, detectedName)
 
         // The scanned page images and original files are stored ONCE and shared by every
         // report in the bundle (deletion is reference-aware, see LocalStore.deleteReport).
@@ -211,8 +216,34 @@ object LocalRepository {
             throw DuplicateReportException(firstDuplicate ?: LocalStore.getReports(context).first())
         }
 
+        // A freshly scanned prescription should revive its reminder even if the user had previously
+        // deleted it (a new script = the medicine is wanted again) — un-dismiss each medicine so the
+        // reminders screen re-seeds it.
+        for (r in saved) for (m in r.medications) if (m.name.isNotBlank())
+            MedicineScheduleStore.clearDismissed(context, m.name, r.patientName ?: patientName)
+
         afterWrite(context)
         saved
+    }
+
+    /** Resolves a scanned patient name to an existing patient/family member when the names clearly
+     *  refer to the same person (shared name tokens), so a longer printed name doesn't fragment into
+     *  a new patient. Returns the detected name unchanged when there's no confident match. */
+    private fun matchToExistingPatient(context: Context, detected: String): String {
+        val d = detected.trim()
+        if (d.isEmpty() || d.equals("Unknown Patient", ignoreCase = true)) return d
+        val existing = (LocalStore.getReports(context).mapNotNull { it.patientName?.takeIf { n -> n.isNotBlank() } } +
+            AppSettings.getFamilyProfilesRaw(context).map { it.name }).filter { it.isNotBlank() }.distinct()
+        existing.firstOrNull { it.equals(d, ignoreCase = true) }?.let { return it }
+        fun tokens(s: String) = s.lowercase().split(Regex("[^a-z0-9]+")).filter { it.length >= 3 }.toSet()
+        val dt = tokens(d)
+        if (dt.isEmpty()) return d
+        // Existing name whose tokens are fully inside the detected name (or vice versa): "jayant" ⊆
+        // "bhagwat jayant shriram". Prefer the one sharing the most tokens.
+        return existing.filter {
+            val et = tokens(it)
+            et.isNotEmpty() && (dt.containsAll(et) || et.containsAll(dt))
+        }.maxByOrNull { tokens(it).intersect(dt).size } ?: d
     }
 
     suspend fun updateReport(context: Context, id: String, req: ReportUpdateRequest): MedicalReport? = withContext(Dispatchers.IO) {

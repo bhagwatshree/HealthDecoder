@@ -47,6 +47,13 @@ object MedicineScheduleStore {
     fun isDismissed(context: Context, medicineName: String, patientName: String): Boolean =
         loadDismissed(context).contains(dismissKey(medicineName, patientName))
 
+    /** Un-dismiss a medicine so it can be auto-seeded again — called when a NEW scan brings a fresh
+     *  prescription of it, so a previously-deleted reminder legitimately comes back for the new script. */
+    fun clearDismissed(context: Context, medicineName: String, patientName: String) {
+        val set = loadDismissed(context)
+        if (set.remove(dismissKey(medicineName, patientName))) saveDismissed(context, set)
+    }
+
     val defaultSlotTimes = mapOf(
         "Morning"   to Pair(8,  0),
         "Afternoon" to Pair(13, 0),
