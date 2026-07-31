@@ -54,6 +54,7 @@ fun HomeScreen(
     onNavigateToRecords: () -> Unit,
     onNavigateToMedicationTracker: () -> Unit,
     onNavigateToReminders: () -> Unit,
+    onNavigateToAppointments: () -> Unit = {},
     onNavigateToPendingTests: () -> Unit,
     onNavigateToDiscovery: (String) -> Unit,
     onNavigateToLiveVision: () -> Unit,
@@ -91,7 +92,8 @@ fun HomeScreen(
     val actions = buildList {
         add(HomeAction("Scan Report", "📸", Color(0xFFE8F5E9), Color(0xFF2E7D32), onNavigateToScan))
         add(HomeAction("Records", "📜", Color(0xFFECEFF1), Color(0xFF455A64), onNavigateToRecords))
-        add(HomeAction("Reminders", "⏰", Color(0xFFFFF3E0), Color(0xFFE65100), onNavigateToReminders))
+        add(HomeAction("Medication Reminders", "⏰", Color(0xFFFFF3E0), Color(0xFFE65100), onNavigateToReminders))
+        add(HomeAction("Doctor Appointments", "📅", Color(0xFFE8EAF6), Color(0xFF283593), onNavigateToAppointments))
         add(HomeAction("Medications", "💊", Color(0xFFF3E5F5), Color(0xFF6A1B9A), onNavigateToMedicationTracker))
         add(HomeAction("Pending Tests", "🚨", Color(0xFFFFF9C4), Color(0xFFC62828), onNavigateToPendingTests))
         if (isBackendReady) {

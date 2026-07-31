@@ -69,7 +69,13 @@ private fun daysLabel(days: List<Int>?): String? =
     else days.sorted().joinToString(", ") { DOW_SHORT[it] ?: "" }
 
 @Composable
-fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
+fun TodaysMedicinesTab(
+    medicationHistory: List<MedicationHistory>,
+    // Home offers "Medication Reminders" and "Doctor Appointments" as separate tiles; this scopes the
+    // screen to one. Medicine reminders still auto-seed in the background either way.
+    showAppointments: Boolean = false
+) {
+    val showMedicines = !showAppointments
     val context = LocalContext.current
 
     var hasNotifPermission by remember {
@@ -166,44 +172,48 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
             }
         }
 
-        // Custom quick-add actions row
+        // Custom quick-add action (scoped to the current section)
         item {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Button(
-                    onClick = { showAddMedDialog = true },
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(tr("Add Med"), fontWeight = FontWeight.Bold)
+                if (showMedicines) {
+                    Button(
+                        onClick = { showAddMedDialog = true },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(tr("Add Med"), fontWeight = FontWeight.Bold)
+                    }
                 }
 
-                Button(
-                    onClick = { showAddApptDialog = true },
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                ) {
-                    Icon(Icons.Default.Event, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(tr("Add Appt"), fontWeight = FontWeight.Bold)
+                if (showAppointments) {
+                    Button(
+                        onClick = { showAddApptDialog = true },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    ) {
+                        Icon(Icons.Default.Event, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(tr("Add Appointment"), fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
 
         // Today's dose sections grouped by time slot
-        TIME_SLOTS.forEach { slot ->
+        if (showMedicines) TIME_SLOTS.forEach { slot ->
             val medsForSlot = schedules.filter { it.slots[slot]?.enabled == true }
             if (medsForSlot.isNotEmpty()) {
                 item(key = "header_$slot") {
@@ -231,7 +241,7 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
         }
 
         // Empty state
-        if (!hasMedsToday) {
+        if (showMedicines && !hasMedsToday) {
             item {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -253,12 +263,9 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
             }
         }
 
-        // Appointments section
-        if (appointments.isNotEmpty()) {
+        // Appointments section (shown only on the Doctor Appointments tile)
+        if (showAppointments) {
             item {
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(12.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -275,6 +282,27 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
                 Spacer(Modifier.height(12.dp))
             }
 
+            if (appointments.isEmpty()) {
+                item {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp, horizontal = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Icon(Icons.Default.EventAvailable, tr("No appointments"),
+                            modifier = Modifier.size(72.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f))
+                        Text(tr("No Doctor Appointments"),
+                            fontSize = 22.sp, fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center)
+                        Text(tr("Tap \"Add Appointment\" above to schedule a doctor visit or check-up. You'll be reminded before it's due."),
+                            fontSize = 15.sp, textAlign = TextAlign.Center, lineHeight = 22.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                    }
+                }
+            }
+
             items(appointments, key = { "${it.id}_appt" }) { appt ->
                 AppointmentCard(
                     appointment = appt,
@@ -285,7 +313,7 @@ fun TodaysMedicinesTab(medicationHistory: List<MedicationHistory>) {
         }
 
         // Manage all schedules section
-        if (schedules.isNotEmpty()) {
+        if (showMedicines && schedules.isNotEmpty()) {
             item {
                 Spacer(Modifier.height(8.dp))
                 HorizontalDivider()

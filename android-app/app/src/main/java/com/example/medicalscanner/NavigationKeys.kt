@@ -42,8 +42,10 @@ data object Records : NavKey
 @Serializable
 data object MedicationTracker : NavKey
 
+// focus = "medicines" (Medication Reminders) or "appointments" (Doctor Appointments) — the Home
+// screen offers each as its own tile, both landing on this screen scoped to the chosen section.
 @Serializable
-data object Reminders : NavKey
+data class Reminders(val focus: String = "medicines") : NavKey
 
 @Serializable
 data object PendingTests : NavKey

@@ -30,8 +30,11 @@ import kotlinx.coroutines.launch
 fun RemindersScreen(
     onNavigateBack: () -> Unit,
     onNavigateToChat: () -> Unit,
+    focus: String = "medicines",  // "medicines" (Medication Reminders) or "appointments" (Doctor Appointments)
     modifier: Modifier = Modifier
 ) {
+    val showAppointments = focus == "appointments"
+    val screenTitle = if (showAppointments) "Doctor Appointments" else "Medication Reminders"
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -64,7 +67,7 @@ fun RemindersScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         TopBarLogo()
-                        Text(tr("Reminders"), fontWeight = FontWeight.Bold)
+                        Text(tr(screenTitle), fontWeight = FontWeight.Bold)
                     }
                 },
                 navigationIcon = {
@@ -101,7 +104,7 @@ fun RemindersScreen(
                     CircularProgressIndicator()
                 }
             } else {
-                TodaysMedicinesTab(medicationHistory = medicationHistory)
+                TodaysMedicinesTab(medicationHistory = medicationHistory, showAppointments = showAppointments)
             }
         }
     }

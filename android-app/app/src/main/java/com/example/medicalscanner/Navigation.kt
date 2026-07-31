@@ -387,7 +387,8 @@ fun MainNavigation() {
             onNavigateToAccount = { backStack.add(Account) },
             onNavigateToRecords = { backStack.add(Records) },
             onNavigateToMedicationTracker = { backStack.add(MedicationTracker) },
-            onNavigateToReminders = { backStack.add(Reminders) },
+            onNavigateToReminders = { backStack.add(Reminders("medicines")) },
+            onNavigateToAppointments = { backStack.add(Reminders("appointments")) },
             onNavigateToPendingTests = { backStack.add(PendingTests) },
             onNavigateToDiscovery = { category -> backStack.add(Discovery(category = category)) },
             onNavigateToLiveVision = { backStack.add(LiveVision) },
@@ -416,10 +417,11 @@ fun MainNavigation() {
             modifier = Modifier.safeDrawingPadding()
           )
         }
-        entry<Reminders> {
+        entry<Reminders> { key ->
           RemindersScreen(
+            focus = key.focus,
             onNavigateBack = { backStack.removeLastOrNull() },
-            onNavigateToChat = { backStack.add(Chat(contextHint = "Reminders")) },
+            onNavigateToChat = { backStack.add(Chat(contextHint = if (key.focus == "appointments") "Doctor Appointments" else "Medication Reminders")) },
             modifier = Modifier.safeDrawingPadding()
           )
         }
