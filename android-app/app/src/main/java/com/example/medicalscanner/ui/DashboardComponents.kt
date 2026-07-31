@@ -116,7 +116,26 @@ fun parseRoutine(frequencyStr: String, dosageStr: String): List<Pair<String, Boo
     var afternoon = false
     var evening = false
     var night = false
-    
+
+    // An explicit clock time ("at 6 pm", "8am", "10 pm") is unambiguous — place the dose by the time
+    // of day rather than by a position code, so "0-0-1 (at 6 pm)" is Evening, not Night.
+    val timeMatches = Regex("""(\d{1,2})\s*(?::\s*\d{2})?\s*([ap])\.?\s*m""").findAll(freq).toList()
+    if (timeMatches.isNotEmpty()) {
+        for (mt in timeMatches) {
+            var h = mt.groupValues[1].toIntOrNull() ?: continue
+            val pm = mt.groupValues[2] == "p"
+            if (pm && h != 12) h += 12
+            if (!pm && h == 12) h = 0
+            when {
+                h < 12 -> morning = true
+                h < 16 -> afternoon = true
+                h < 21 -> evening = true
+                else   -> night = true
+            }
+        }
+        return listOf("Morning" to morning, "Afternoon" to afternoon, "Evening" to evening, "Night" to night)
+    }
+
     if (freq.contains("1-0-1") || freq.contains("1 - 0 - 1")) {
         morning = true
         night = true

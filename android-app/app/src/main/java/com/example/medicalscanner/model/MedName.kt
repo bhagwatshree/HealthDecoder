@@ -2,41 +2,40 @@ package com.example.medicalscanner.model
 
 /**
  * Medicine-name normalization so the SAME drug written differently across scans is treated as one.
- * The AI (and different prompt versions) emit a drug as "Tab. Concor", "Concor 5mg" or "concor 5 mg";
- * without this they became separate reminders/medications. [canonicalKey] collapses them to one key;
- * [cleanDisplay] gives a tidy label (form prefix dropped).
+ * The AI (and different prompt versions) emit a drug as "Tab. Concor", "Concor 5mg", "Syp. Alex SF"
+ * or "Alex SF Syrup"; without this they became separate reminders/medications. [canonicalKey]
+ * collapses them to one key; [cleanDisplay] gives a tidy label (form words dropped).
  */
 object MedName {
-    private val FORM_PREFIXES = listOf(
-        "tablet", "tab.", "tab", "capsule", "cap.", "cap", "syrup", "syp.", "syp",
-        "suspension", "susp.", "susp", "injection", "inj.", "inj", "ointment", "oint.",
-        "solution", "sol.", "cream", "gel", "drops", "drop", "lotion", "powder", "sachet", "spray"
+    // Dosage-form words (without dots) that describe HOW a medicine is taken, not which drug it is.
+    // Stripped wherever they appear (prefix or suffix) so "Syp. Cremaffin" == "Cremaffin Syrup".
+    private val FORM_TOKENS = setOf(
+        "tab", "tablet", "tablets", "cap", "caps", "capsule", "capsules", "syp", "syrup", "syrp",
+        "susp", "suspension", "inj", "injection", "oint", "ointment", "sol", "soln", "solution",
+        "cream", "gel", "drops", "drop", "lotion", "powder", "sachet", "spray", "soap", "tube"
     )
 
-    /** Strips a leading form word ("Tab.", "Syp." …) so "Tab. Concor 5mg" -> "Concor 5mg". */
+    private fun isFormWord(token: String) = token.trimEnd('.').lowercase() in FORM_TOKENS
+
+    /** Drops leading/trailing form words: "Tab. Pan D" -> "Pan D", "Alex SF Syrup" -> "Alex SF". */
     fun cleanDisplay(raw: String): String {
-        var s = raw.trim()
-        var changed = true
-        while (changed) {
-            changed = false
-            for (p in FORM_PREFIXES) {
-                if (s.length > p.length && s.lowercase().startsWith("$p ")) {
-                    s = s.substring(p.length).trim(); changed = true; break
-                }
-            }
-        }
-        return s.ifBlank { raw.trim() }
+        val tokens = raw.trim().split(Regex("""\s+""")).toMutableList()
+        while (tokens.isNotEmpty() && isFormWord(tokens.first())) tokens.removeAt(0)
+        while (tokens.isNotEmpty() && isFormWord(tokens.last())) tokens.removeAt(tokens.size - 1)
+        return tokens.joinToString(" ").ifBlank { raw.trim() }
     }
 
     /**
-     * Canonical match key: lowercase, form word dropped, strength/number tokens removed, punctuation
-     * flattened. "Tab. Concor", "Concor 5mg", "concor 5 mg" all -> "concor"; "Tayo 60 K" -> "tayo".
+     * Canonical match key: lowercase, ALL form words removed, strength/number tokens removed,
+     * punctuation flattened. "Tab. Concor", "Concor 5mg", "Syp. Alex SF", "Alex SF Syrup" collapse
+     * to "concor" / "alex sf"; "Tayo 60 K" -> "tayo".
      */
     fun canonicalKey(raw: String): String {
-        var s = cleanDisplay(raw).lowercase()
+        var s = raw.lowercase()
         // Drop strength tokens: a number (optional decimal) with an optional unit.
         s = s.replace(Regex("""\b\d+(\.\d+)?\s*(mg|mcg|ml|g|gm|iu|k|units?|%)?\b"""), " ")
-        s = s.replace(Regex("""[^a-z0-9]+"""), " ").trim().replace(Regex("""\s+"""), " ")
-        return s.ifBlank { raw.trim().lowercase() }
+        val tokens = s.split(Regex("""[^a-z0-9]+"""))
+            .filter { it.isNotBlank() && it !in FORM_TOKENS }
+        return tokens.joinToString(" ").ifBlank { raw.trim().lowercase() }
     }
 }

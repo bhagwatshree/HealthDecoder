@@ -205,32 +205,33 @@ object MedicineScheduleStore {
      */
     fun dedupeCanonical(context: Context) {
         val list = loadAll(context)
-        if (list.size < 2) return
+        if (list.isEmpty()) return
         val merged = LinkedHashMap<String, MedicineSchedule>()
         for (s in list) {
             val key = "${s.patientName.trim().lowercase()}|${MedName.canonicalKey(s.medicineName)}"
             val existing = merged[key]
-            merged[key] = if (existing == null) s else mergeSchedules(existing, s)
+            // Even singletons get a tidied display name ("Tab. Pan D" -> "Pan D").
+            merged[key] = if (existing == null) s.copy(medicineName = MedName.cleanDisplay(s.medicineName))
+                          else mergeSchedules(existing, s)
         }
-        if (merged.size != list.size) saveAll(context, merged.values.toList())
+        val result = merged.values.toList()
+        if (result != list) saveAll(context, result)
     }
 
     private fun mergeSchedules(a: MedicineSchedule, b: MedicineSchedule): MedicineSchedule {
-        // Richer label wins (one carrying a strength/digit, else the longer).
-        fun score(n: String) = (if (n.any(Char::isDigit)) 1000 else 0) + n.length
-        val name = if (score(b.medicineName) > score(a.medicineName)) b.medicineName else a.medicineName
-        val slots = defaultSlotTimes.keys.associateWith { slot ->
-            val ca = a.slots[slot]; val cb = b.slots[slot]
-            val enabled = (ca?.enabled == true) || (cb?.enabled == true)
-            val src = when { ca?.enabled == true -> ca; cb?.enabled == true -> cb; else -> ca ?: cb }
-            SlotConfig(enabled = enabled, hour = src?.hour ?: 8, minute = src?.minute ?: 0)
-        }
-        return a.copy(
-            medicineName = name,
-            dosage = a.dosage.ifBlank { b.dosage },
-            frequency = a.frequency.ifBlank { b.frequency },
+        // The richer-labelled entry (carries a strength/digit, else longer) is the primary; keep ITS
+        // slots so a user's edit on it isn't overwritten. We do NOT union slots — unioning used to
+        // resurrect an old auto-seeded slot (e.g. Night) that the user had switched to Evening.
+        fun score(n: String) = (if (n.any(Char::isDigit)) 1000 else 0) + MedName.cleanDisplay(n).length
+        val primary = if (score(b.medicineName) > score(a.medicineName)) b else a
+        val secondary = if (primary === a) b else a
+        val slots = if (primary.slots.values.any { it.enabled }) primary.slots else secondary.slots
+        return primary.copy(
+            medicineName = MedName.cleanDisplay(primary.medicineName),
+            dosage = primary.dosage.ifBlank { secondary.dosage },
+            frequency = primary.frequency.ifBlank { secondary.frequency },
             slots = slots,
-            daysOfWeek = a.daysOfWeek ?: b.daysOfWeek
+            daysOfWeek = primary.daysOfWeek ?: secondary.daysOfWeek
         )
     }
 }
