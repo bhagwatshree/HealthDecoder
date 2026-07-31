@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import android.content.Context
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -28,6 +29,57 @@ import com.example.medicalscanner.model.MedicineInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/**
+ * Drop-in "tap a medicine name to learn why it's used" flow, shared by the Reminders and Medication
+ * screens. Create one with [rememberMedicineInfoController], place [MedicineInfoHost] once in the
+ * screen, and call [MedicineInfoController.open] from any medicine-name click.
+ *
+ * If the medicine was looked up before, its saved reference opens immediately; otherwise a small
+ * dialog asks first (the first lookup uses AI, then it's stored). A name the AI doesn't recognise —
+ * e.g. one you typed in by hand — comes back as "not recognised / no info available".
+ */
+class MedicineInfoController {
+    var pendingConfirm by mutableStateOf<String?>(null)   // waiting for the user to confirm a lookup
+        internal set
+    var showFor by mutableStateOf<String?>(null)          // sheet currently open for this name
+        internal set
+
+    /** Handle a medicine-name tap: open the saved reference if we have it, else ask to look it up. */
+    fun open(context: Context, name: String) {
+        val n = name.trim()
+        if (n.isEmpty()) return
+        if (MedicalEngine.getCachedMedicineInfo(context, n) != null) showFor = n else pendingConfirm = n
+    }
+}
+
+@Composable
+fun rememberMedicineInfoController(): MedicineInfoController = remember { MedicineInfoController() }
+
+/** Hosts the confirm dialog + info sheet for a [MedicineInfoController]. Place once per screen. */
+@Composable
+fun MedicineInfoHost(controller: MedicineInfoController) {
+    controller.pendingConfirm?.let { name ->
+        AlertDialog(
+            onDismissRequest = { controller.pendingConfirm = null },
+            icon = { Icon(Icons.Default.Medication, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text(tr("Why is this medicine used?")) },
+            text = {
+                Text("Get a short, easy explanation of why \"$name\" is prescribed, plus key tips. " +
+                    "The first lookup uses the internet, then it's saved so it opens instantly next time.")
+            },
+            confirmButton = {
+                Button(onClick = { controller.showFor = name; controller.pendingConfirm = null }) {
+                    Text(tr("Look it up"))
+                }
+            },
+            dismissButton = { TextButton(onClick = { controller.pendingConfirm = null }) { Text(tr("Not now")) } }
+        )
+    }
+    controller.showFor?.let { name ->
+        MedicineInfoSheet(medicineName = name, onDismiss = { controller.showFor = null })
+    }
+}
 
 /**
  * Category → (emoji-label, icon, accent colour) mapping for visual badges.

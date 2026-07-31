@@ -77,6 +77,7 @@ fun TodaysMedicinesTab(
 ) {
     val showMedicines = !showAppointments
     val context = LocalContext.current
+    val medInfo = rememberMedicineInfoController()
 
     var hasNotifPermission by remember {
         mutableStateOf(
@@ -226,6 +227,7 @@ fun TodaysMedicinesTab(
                     MedicineCard(
                         schedule = schedule,
                         slot = slot,
+                        onNameClick = { medInfo.open(context, schedule.medicineName) },
                         onToggle = { enabled ->
                             val updated = schedule.copy(
                                 slots = schedule.slots.toMutableMap().also {
@@ -339,6 +341,7 @@ fun TodaysMedicinesTab(
             items(schedules, key = { "${it.patientName}_${it.medicineName}_manage" }) { schedule ->
                 ManageCard(
                     schedule = schedule,
+                    onNameClick = { medInfo.open(context, schedule.medicineName) },
                     onToggle = { slot, enabled ->
                         val updated = schedule.copy(
                             slots = schedule.slots.toMutableMap().also {
@@ -358,6 +361,9 @@ fun TodaysMedicinesTab(
 
         item { Spacer(Modifier.height(80.dp)) }
     }
+
+    // Hosts the "why is this medicine used?" confirm dialog + info sheet for clickable names.
+    MedicineInfoHost(medInfo)
 
     // Confirm deletion of a medicine reminder
     deletingSchedule?.let { sched ->
@@ -557,7 +563,8 @@ private fun MedicineCard(
     schedule: MedicineSchedule,
     slot: String,
     onToggle: (Boolean) -> Unit,
-    onEditTime: () -> Unit
+    onEditTime: () -> Unit,
+    onNameClick: () -> Unit = {}
 ) {
     val cfg = schedule.slots[slot] ?: return
     val style = SLOT_STYLES[slot] ?: return
@@ -582,11 +589,20 @@ private fun MedicineCard(
             }
 
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(
-                    schedule.medicineName,
-                    fontWeight = FontWeight.ExtraBold, fontSize = 22.sp,
-                    color = MaterialTheme.colorScheme.onSurface, lineHeight = 26.sp
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.clickable(onClick = onNameClick)
+                ) {
+                    Text(
+                        schedule.medicineName,
+                        fontWeight = FontWeight.ExtraBold, fontSize = 22.sp,
+                        color = MaterialTheme.colorScheme.onSurface, lineHeight = 26.sp,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Icon(Icons.Default.HelpOutline, tr("Why is this used?"),
+                        tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                }
                 if (schedule.dosage.isNotEmpty()) {
                     Text(schedule.dosage, fontSize = 17.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -642,7 +658,8 @@ private fun ManageCard(
     onToggle: (String, Boolean) -> Unit,
     onEditTime: (String) -> Unit,
     onDelete: () -> Unit,
-    onEdit: () -> Unit
+    onEdit: () -> Unit,
+    onNameClick: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -660,7 +677,15 @@ private fun ManageCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(schedule.medicineName, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.clickable(onClick = onNameClick)
+                    ) {
+                        Text(schedule.medicineName, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                        Icon(Icons.Default.HelpOutline, tr("Why is this used?"),
+                            tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                    }
                     Text(schedule.patientName, fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     daysLabel(schedule.daysOfWeek)?.let { lbl ->

@@ -437,17 +437,28 @@ Return ONLY raw JSON (no code fences):
 If you don't recognise the medicine name or it seems misspelled, set category to "Unknown" and basicUse to a suggestion like "This name was not recognised. Please check the spelling."
 """.trim()
 
-        val result = aiJson(context, prompt)?.let { json ->
-            runCatching { gson.fromJson(json, MedicineInfo::class.java) }.getOrNull()
+        val json = aiJson(context, prompt)
+        val result = json?.let {
+            runCatching { gson.fromJson(it, MedicineInfo::class.java) }.getOrNull()
         } ?: MedicineInfo(
             category = "Unknown",
             basicUse = "Could not look up this medicine. Check your internet connection or Gemini API key."
         )
 
-        // Cache the result
-        cache[key] = result
-        saveInfoCache(context, cache)
+        // Cache only a real answer — never a "no internet" failure, so it can be retried later.
+        if (json != null) {
+            cache[key] = result
+            saveInfoCache(context, cache)
+        }
 
         return result
+    }
+
+    /** The saved reference for a medicine if it was looked up before (no network/AI call), else null. */
+    fun getCachedMedicineInfo(context: Context, medicineName: String): MedicineInfo? {
+        val trimmed = medicineName.trim()
+        if (trimmed.isEmpty()) return null
+        val lang = AppSettings.getPreferredLanguage(context)
+        return loadInfoCache(context)["${trimmed.lowercase()}::${lang.lowercase()}"]
     }
 }

@@ -37,6 +37,7 @@ fun MedicationTrackerScreen(
     var searchQuery by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
     var selectedMedForDetails by remember { mutableStateOf<MedicationHistory?>(null) }
+    val medInfo = rememberMedicineInfoController()
 
     var medSelectionMode by remember { mutableStateOf(false) }
     val selectedMedKeys = remember { mutableStateListOf<String>() }
@@ -245,9 +246,17 @@ fun MedicationTrackerScreen(
                 onUpdateSuccess = {
                     selectedMedForDetails = null
                     loadDashboard()
+                },
+                onWhyUsed = {
+                    val m = selectedMedForDetails
+                    selectedMedForDetails = null
+                    if (m != null) medInfo.open(context, m.medicineName)
                 }
             )
         }
+
+        // Hosts the "why is this medicine used?" confirm dialog + info sheet.
+        MedicineInfoHost(medInfo)
 
         if (showBulkFrequencyDialog) {
             val allMeds = dashboardData?.medicationHistory ?: emptyList()

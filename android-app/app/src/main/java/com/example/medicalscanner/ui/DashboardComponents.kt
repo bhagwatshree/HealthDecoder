@@ -855,7 +855,8 @@ fun getActiveDaysFromSchedule(weeklySchedule: List<String>, frequencyStr: String
 fun MedicationDetailsDialog(
     med: MedicationHistory,
     onDismiss: () -> Unit,
-    onUpdateSuccess: () -> Unit
+    onUpdateSuccess: () -> Unit,
+    onWhyUsed: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -929,6 +930,17 @@ fun MedicationDetailsDialog(
                     .fillMaxHeight(0.7f),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                item {
+                    OutlinedButton(
+                        onClick = onWhyUsed,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.HelpOutline, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(tr("Why is this medicine used?"), fontWeight = FontWeight.Bold)
+                    }
+                }
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
