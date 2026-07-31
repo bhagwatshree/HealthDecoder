@@ -227,7 +227,23 @@ Also ensure that:
 1. Patient name is identified accurately.
 2. "reportName" is the specific printed name of each report (e.g. "Complete Blood Count", "Lipid Profile", "2D Echocardiography").
 3. Comments, instructions, remarks, or advice are extracted per report.
-4. Medicines mentioned are extracted as an array in the report where they appear.
+4. MEDICATIONS — extract EVERY medicine listed, including all rows of a "DISCHARGE MEDICATION",
+   "Treatment", "Rx", or "Medicines on discharge" table in a discharge summary (these tables are
+   often long — do not stop early or summarise; return one entry per medicine). For each medicine:
+   - "name": drug name WITH its strength (e.g. "Concor 5mg", "Dolo 650mg", "Amifru 40mg"). Drop the
+     form prefix (Tab./Cap./Syp./Inj.) from the name.
+   - "frequency": the dosing schedule EXACTLY as written. Indian prescriptions use position codes —
+     "1-0-1" = morning-afternoon-night, "0-0-1" = night only, "1-0-0" = morning only,
+     "1/2-0-0" = half tablet in the morning, "1-1-1" = three times a day. For non-daily schedules
+     write it plainly: "twice a week (Wed, Sat)", "once a week", "at 6 pm".
+   - "duration": e.g. "till follow-up", "10 days", "1 month", "5 days".
+   - "weeklySchedule": the days it is taken — ["Everyday"] for a daily medicine, or the specific days
+     for a weekly one, e.g. ["Wednesday","Saturday"] or ["Sunday"] for once-weekly.
+   - "isOptional": true only for SOS / PRN / "if required" medicines.
+   - "notes": special instructions (empty stomach, before/after food, "no food 2 hrs"), AND any
+     HANDWRITTEN substitution or brand the doctor wrote beside the printed drug.
+   When the doctor has struck through a printed medicine and handwritten a replacement next to it,
+   use the handwritten one as the name and note the original in "notes".
 5. Future recommended tests go into that report's "recommendedTests".
 6. Test results go into that report's "testResults": lab parameters into "parameters"; scan/diagnostic conclusions into "findings".
 7. For each parameter, also classify it for trend-charting across multiple reports over time:
