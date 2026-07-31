@@ -62,7 +62,7 @@
             android:name=".reminder.MedicineReminderReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.example.medicalscanner.MEDICINE_REMINDER" />
+                <action android:name="com.healthdecoder.app.MEDICINE_REMINDER" />
             </intent-filter>
         </receiver>
 
@@ -70,7 +70,7 @@
             android:name=".reminder.AppointmentReminderReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.example.medicalscanner.APPOINTMENT_REMINDER" />
+                <action android:name="com.healthdecoder.app.APPOINTMENT_REMINDER" />
             </intent-filter>
         </receiver>
 
@@ -78,7 +78,7 @@
             android:name=".reminder.EmailScanAlarmReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.example.medicalscanner.EMAIL_SCAN" />
+                <action android:name="com.healthdecoder.app.EMAIL_SCAN" />
             </intent-filter>
         </receiver>
 

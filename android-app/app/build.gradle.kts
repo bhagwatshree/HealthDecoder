@@ -26,10 +26,10 @@ val localProperties = Properties().apply {
 fun localProp(key: String): String = (localProperties.getProperty(key) ?: "")
 
 android {
-    namespace = "com.example.medicalscanner"
+    namespace = "com.healthdecoder.app"
     compileSdk = 36
     defaultConfig {
-        applicationId = "com.example.medicalscanner"
+        applicationId = "com.healthdecoder.app"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
