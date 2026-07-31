@@ -82,7 +82,10 @@ object DashboardEngine {
 
     private data class MedPoint(
         val reportId: String, val dosage: String, val frequency: String, val duration: String,
-        val isOptional: Boolean, val weeklySchedule: List<String>, val notes: String, val date: String
+        val isOptional: Boolean, val weeklySchedule: List<String>, val notes: String, val date: String,
+        // When the report was SCANNED (createdAt). Printed report dates are often mis-read, so
+        // medication currency (which prescription is "latest") follows scan time, not [date].
+        val scanTime: String
     )
 
     fun buildDashboard(reports: List<MedicalReport>, pendingTests: List<PendingTest>): DashboardData {
@@ -111,10 +114,12 @@ object DashboardEngine {
     }
 
     private fun buildMedicationHistory(reports: List<MedicalReport>): List<MedicationHistory> {
-        // Chronological (oldest first) so we can detect dosage changes over time.
-        val chrono = reports.sortedBy { it.reportDate ?: it.createdAt }
+        // Ordered by SCAN time (oldest first) so we can detect dosage changes over time. Printed
+        // report dates are frequently mis-read on discharge summaries, which used to reorder
+        // prescriptions and wrongly discontinue medicines — scan order is what the user controls.
+        val chrono = reports.sortedBy { it.createdAt }
         val patientMed = mutableMapOf<String, MutableMap<String, MutableList<MedPoint>>>()
-        val latestDate = mutableMapOf<String, String>()
+        val latestScan = mutableMapOf<String, String>()
 
         for (r in chrono) {
             // Only reports that carry medicines (prescriptions) can change medication
@@ -124,21 +129,22 @@ object DashboardEngine {
             // "non-null" String fields can actually be null at runtime — guard every access.
             if (r.medications.none { !it.name.isNullOrBlank() }) continue
             val patient = r.patientName ?: "Unknown Patient"
-            val date = r.reportDate ?: r.createdAt
-            if ((latestDate[patient] ?: "") <= date) latestDate[patient] = date
+            val date = r.reportDate ?: r.createdAt          // shown to the user
+            val scanTime = r.createdAt                       // decides which prescription is current
+            if ((latestScan[patient] ?: "") <= scanTime) latestScan[patient] = scanTime
             val medMap = patientMed.getOrPut(patient) { mutableMapOf() }
             for (m in r.medications) {
                 if (m.name.isNullOrBlank()) continue
                 medMap.getOrPut(m.name.trim()) { mutableListOf() }.add(
                     MedPoint(r.id, m.dosage.orEmpty().ifEmpty { "1 tablet" }, m.frequency.orEmpty(), m.duration ?: "",
-                        m.isOptional, m.weeklySchedule ?: emptyList(), m.notes ?: "", date)
+                        m.isOptional, m.weeklySchedule ?: emptyList(), m.notes ?: "", date, scanTime)
                 )
             }
         }
 
         val out = mutableListOf<MedicationHistory>()
         for ((patient, medMap) in patientMed) {
-            val latest = latestDate[patient] ?: ""
+            val latest = latestScan[patient] ?: ""
             for ((medName, list) in medMap) {
                 if (list.isEmpty()) continue
                 val current = list.last()
@@ -149,7 +155,10 @@ object DashboardEngine {
                     }
                     if (previous == null) previous = list[list.size - 2]
                 }
-                val isOmitted = current.date < latest
+                // A medicine is "Discontinued" only when a MORE RECENTLY SCANNED prescription omitted
+                // it — i.e. the doctor's newer script dropped it. Not when an out-of-order printed date
+                // makes it look old.
+                val isOmitted = current.scanTime < latest
                 val status = when {
                     isOmitted -> "Discontinued"
                     previous != null && (previous.dosage != current.dosage || previous.frequency != current.frequency) -> "Changed"
