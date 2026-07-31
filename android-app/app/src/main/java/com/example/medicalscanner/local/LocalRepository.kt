@@ -493,6 +493,12 @@ object LocalRepository {
         val insights = MedicalEngine.healthInsights(context, updated)
         updated = updated.copy(comparisonResult = comparison, healthInsights = insights)
         LocalStore.upsertReport(context, updated)
+        // Analyzing a (possibly upload-only) discharge summary should also add its follow-up visits
+        // and revive reminders for its medicines, just like a fresh scan does.
+        addFollowUpAppointments(context, section.followUps, updated.reportDate ?: today())
+        for (m in updated.medications) if (m.name.isNotBlank())
+            MedicineScheduleStore.clearDismissed(context, m.name, updated.patientName ?: "")
+        Log.i("ScanDiag", "REPROCESSED id=$id meds=${updated.medications.size} followUps=${section.followUps.size}")
         detailedCacheFile(context, id).delete() // invalidate cached detailed analysis
         afterWrite(context)
         updated
