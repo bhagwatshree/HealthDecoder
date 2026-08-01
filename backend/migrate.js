@@ -308,6 +308,25 @@ ON CONFLICT (language, text_key) DO NOTHING;
     `);
     console.log('Table uhi_search_sessions created or checked.');
 
+    // Anonymous per-install identity for the AI proxy (POST /api/ai/generate). Phone OTP
+    // login is optional/off by default (see FeatureFlags.PHONE_AUTH_ENABLED), so most phones
+    // never authenticate as a `users` row — this lets the backend still meter/pool a Gemini
+    // key per device without any SMS-based sign-in. Mirrors users' usage_count/usage_period_start.
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS devices (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          device_id TEXT UNIQUE NOT NULL,
+          usage_count INTEGER NOT NULL DEFAULT 0,
+          usage_period_start DATE NOT NULL DEFAULT CURRENT_DATE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          last_seen_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table devices created or checked.');
+
+    await db.query(`ALTER TABLE api_usage_events ADD COLUMN IF NOT EXISTS device_id UUID REFERENCES devices(id) ON DELETE SET NULL;`);
+    console.log('Column api_usage_events.device_id checked/added.');
+
     console.log('Database migration completed successfully!');
     process.exit(0);
   } catch (error) {

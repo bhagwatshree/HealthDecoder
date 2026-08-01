@@ -101,6 +101,19 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_msisdn ON users(msisdn);
 
+-- Anonymous per-install identity for the AI proxy (POST /api/ai/generate). Phone OTP login is
+-- optional/off by default, so most phones never authenticate as a `users` row — this lets the
+-- backend still meter/pool a Gemini key per device without any SMS-based sign-in. Mirrors
+-- users' usage_count/usage_period_start.
+CREATE TABLE IF NOT EXISTS devices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    device_id TEXT UNIQUE NOT NULL,
+    usage_count INTEGER NOT NULL DEFAULT 0,
+    usage_period_start DATE NOT NULL DEFAULT CURRENT_DATE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- One row per external AI/SMS call, written by backend/usageTracker.js. Feeds the local cost
 -- dashboard (D:\Medical_Admin_Dashboard) — cost_usd is an estimate computed at write time from
 -- backend/pricing.js, not a real invoice line.
@@ -108,6 +121,7 @@ CREATE TABLE IF NOT EXISTS api_usage_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    device_id UUID REFERENCES devices(id) ON DELETE SET NULL,
     provider VARCHAR(20) NOT NULL, -- 'gemini' | 'sarvam' | 'firebase'
     operation VARCHAR(50) NOT NULL, -- 'ocr' | 'chat' | 'tts' | 'compare' | 'detailed-analysis' | 'translate' | 'otp-verify' | ...
     model VARCHAR(100),

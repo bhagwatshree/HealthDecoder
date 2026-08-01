@@ -64,6 +64,7 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 fun AccountScreen(
     onNavigateBack: () -> Unit,
     onLoggedOut: () -> Unit,
+    onNavigateToLogin: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -81,6 +82,17 @@ fun AccountScreen(
     // peek endpoint here. AccountSync.refreshAssignedKeys (which does consume one, and also
     // updates the locally cached active key) is only called after actually saving a new key.
     fun load() {
+        // Phone OTP sign-in is optional/off by default (FeatureFlags.PHONE_AUTH_ENABLED) — most
+        // installs are never a logged-in `users` row at all, and that is a normal state, NOT a
+        // session expiring. Only call the account API (and treat its 401 as "log the user out")
+        // when we actually had a session to begin with; otherwise just render the guest view below.
+        if (!AppSettings.isLoggedIn(context)) {
+            account = null
+            assignment = null
+            isLoading = false
+            loadError = null
+            return
+        }
         isLoading = true
         loadError = null
         coroutineScope.launch {
@@ -177,6 +189,30 @@ fun AccountScreen(
                 }
             }
 
+            if (account == null && !isLoading) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("You're using HealthDecoder without an account", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Scanning, reminders, and everything else work fully on this device without signing in. " +
+                                "Sign-in is optional (it sends an SMS code, so it isn't automatic) — use it if you want a " +
+                                "profile or a personal API key that follows you across devices.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Button(
+                            onClick = onNavigateToLogin,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) { Text("Sign In") }
+                    }
+                }
+            }
+
             account?.let { acc ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -199,6 +235,10 @@ fun AccountScreen(
                         )
                     }
                 }
+            } // account?.let ends here — everything below is LOCAL (theme, units, import/export,
+              // fingerprint lock, server address, ...) and doesn't need a logged-in account. Only
+              // the profile card above actually reads `acc`; the "AI Vision Engine & API Key" card
+              // just below has its own independent `assignment?.let` null-check.
 
                 Card(
                     modifier = Modifier.fillMaxWidth().clickable(onClick = onNavigateToSettings),
@@ -1062,16 +1102,19 @@ fun AccountScreen(
                     }
                 }
 
-                OutlinedButton(
-                    onClick = {
-                        AppSettings.logout(context)
-                        onLoggedOut()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC62828))
-                ) { Text("Log Out") }
-            }
+                // Only meaningful while actually logged in (see the early-closed account?.let
+                // above, which now only wraps the profile card) — a guest has no session to log out of.
+                if (account != null) {
+                    OutlinedButton(
+                        onClick = {
+                            AppSettings.logout(context)
+                            onLoggedOut()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC62828))
+                    ) { Text("Log Out") }
+                }
         }
     }
 }

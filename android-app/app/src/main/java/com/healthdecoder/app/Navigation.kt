@@ -374,9 +374,11 @@ fun MainNavigation() {
             onNavigateBack = { backStack.removeLastOrNull() },
             onLoggedOut = {
               backStack.clear()
-              // No sign-in screen exists when phone OTP is off — go back to Home instead.
+              // No automatic redirect to Login when phone OTP is off — go back to Home instead.
+              // Signing in is still reachable on purpose: the guest card's "Sign In" button.
               backStack.add(if (FeatureFlags.PHONE_AUTH_ENABLED) Login else Main)
             },
+            onNavigateToLogin = { backStack.add(Login) },
             onNavigateToSettings = { backStack.add(IPConfig) },
             modifier = Modifier.safeDrawingPadding()
           )

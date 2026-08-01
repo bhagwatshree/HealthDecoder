@@ -2,19 +2,24 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import db from './db.js';
-import { hashPassword, verifyPassword, signToken, requireAuth, encrypt, decrypt, publicUser, verifyPhoneIdToken, isPhoneAuthConfigured, verifyGoogleSignInIdToken, isGoogleAuthConfigured } from './auth.js';
+import { hashPassword, verifyPassword, signToken, requireAuth, encrypt, decrypt, publicUser, verifyPhoneIdToken, isPhoneAuthConfigured, verifyGoogleSignInIdToken, isGoogleAuthConfigured, signDeviceToken, requireDeviceOrUser } from './auth.js';
 import crypto from 'crypto';
 
-import { resolveKeysForUser, peekAssignmentForUser } from './keyPool.js';
-import { trackFirebaseVerify } from './usageTracker.js';
+import { resolveKeysForUser, peekAssignmentForUser, resolveKeysForDevice, getOrCreateDevice } from './keyPool.js';
+import { trackFirebaseVerify, trackGemini, runWithUsageContext } from './usageTracker.js';
+import { GoogleGenAI } from '@google/genai';
 import jwt from 'jsonwebtoken';
 import { searchCommercial, startUhiSearch, processUhiWebhook } from './discovery.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Named distinctly from __filename/__dirname: esbuild bundles this whole file (and its
+// dependencies, including @google/genai) into ONE scope for Lambda, and @google/genai's own
+// CJS-interop shim declares a top-level `const __filename` — colliding with the standard
+// name here throws "Identifier '__filename' has already been declared" at cold start.
+const __serverFilename = fileURLToPath(import.meta.url);
+const __serverDirname = path.dirname(__serverFilename);
 
 dotenv.config();
 
@@ -31,11 +36,22 @@ const isLambda = !!process.env.AWS_LAMBDA_FUNCTION_NAME;
 
 // Enable CORS for mobile app connectivity
 app.use(cors());
-app.use(express.json());
+// Raised from Express's 100kb default: /api/ai/generate carries base64 scan-page images.
+// A default 6-page chunk (1600px JPEG @ q85) is ~1-3MB even after base64 inflation, so 8mb
+// leaves comfortable headroom while staying well clear of the platform's ~10MB request cap.
+app.use(express.json({ limit: '8mb' }));
+// A body over the limit above throws here as a generic Express error — turn it into the same
+// JSON error shape every other route returns, with a message that tells the app what happened.
+app.use((err, req, res, next) => {
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Request too large — try scanning fewer pages at once.' });
+  }
+  next(err);
+});
 
 // Serve Interactive Clickable Mockup & Figma Canvas Simulator
-app.use(express.static(path.join(__dirname, '../mockup')));
-app.use('/mockup', express.static(path.join(__dirname, '../mockup')));
+app.use(express.static(path.join(__serverDirname, '../mockup')));
+app.use('/mockup', express.static(path.join(__serverDirname, '../mockup')));
 
 // Test Endpoint
 app.get('/api/health', (req, res) => {
@@ -612,6 +628,76 @@ app.post('/api/user/sarvam-key', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error saving Sarvam key:', error);
     res.status(500).json({ error: 'Failed to save Sarvam API key' });
+  }
+});
+
+// ─── Anonymous device identity + AI proxy ─────────────────────────────────────
+// No OTP/login involved — the app calls this once on first launch (or whenever it has no
+// token yet) with a UUID it generated itself, and gets back a long-lived device token. This
+// lets /api/ai/generate meter/pool a Gemini key per install without requiring an account,
+// since phone OTP sign-in is optional/off by default.
+app.post('/api/device/register', async (req, res) => {
+  try {
+    const { deviceId } = req.body || {};
+    if (typeof deviceId !== 'string' || deviceId.length < 8 || deviceId.length > 128) {
+      return res.status(400).json({ error: 'A valid deviceId is required.' });
+    }
+    await getOrCreateDevice(deviceId);
+    res.json({ token: signDeviceToken(deviceId) });
+  } catch (error) {
+    console.error('Error registering device:', error);
+    res.status(500).json({ error: 'Failed to register device.' });
+  }
+});
+
+// Generic Gemini text/vision proxy — the phone sends a prompt (+ optional page images) and
+// gets back the raw text response, exactly like calling Gemini directly used to, EXCEPT the
+// Gemini API key never reaches the device: it's resolved server-side (pooled/BYOK) per call.
+// Accepts either a real user session or an anonymous device token (see requireDeviceOrUser).
+const MAX_AI_PROXY_IMAGES = 30;
+
+app.post('/api/ai/generate', requireDeviceOrUser, async (req, res) => {
+  try {
+    const { prompt, images, operation } = req.body || {};
+    if (typeof prompt !== 'string' || !prompt.trim()) {
+      return res.status(400).json({ error: 'A prompt is required.' });
+    }
+    const imgs = Array.isArray(images) ? images : [];
+    if (imgs.length > MAX_AI_PROXY_IMAGES) {
+      return res.status(400).json({ error: 'Too many images in one request.' });
+    }
+    for (const img of imgs) {
+      if (typeof img?.data !== 'string' || !img.data) {
+        return res.status(400).json({ error: 'Each image needs base64 "data".' });
+      }
+    }
+
+    const resolved = req.auth.kind === 'user'
+      ? await resolveKeysForUser(req.auth.user)
+      : await resolveKeysForDevice(req.auth.deviceId);
+
+    if (resolved.quotaExceeded || !resolved.geminiKey) {
+      return res.status(429).json({
+        error: 'Daily free analysis limit reached. Try again tomorrow, or add your own Gemini key in Settings.',
+      });
+    }
+
+    const ai = new GoogleGenAI({ apiKey: resolved.geminiKey });
+    const parts = [
+      ...imgs.map((img) => ({ inlineData: { data: img.data, mimeType: img.mimeType || 'image/jpeg' } })),
+      prompt,
+    ];
+
+    const deviceRowId = req.auth.kind === 'device' ? await getOrCreateDevice(req.auth.deviceId) : null;
+    const response = await runWithUsageContext(
+      { userId: req.auth.kind === 'user' ? req.auth.user.id : null, deviceId: deviceRowId, operation: operation || 'scan' },
+      () => trackGemini(ai, { model: process.env.GEMINI_MODEL || 'gemini-3.6-flash', contents: parts })
+    );
+
+    res.json({ text: (response.text || '').trim() });
+  } catch (error) {
+    console.error('AI proxy error:', error);
+    res.status(502).json({ error: 'The analysis service is temporarily unavailable. Please try again shortly.' });
   }
 });
 

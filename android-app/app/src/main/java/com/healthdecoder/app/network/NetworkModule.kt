@@ -217,6 +217,14 @@ object NetworkModule {
     // Leave empty to require manual IP config from the app settings screen.
     private const val DEFAULT_SERVER_URL = "https://k6tdi2uzoh.execute-api.us-east-1.amazonaws.com"
 
+    // Lambda Function URL (same function/code as the API above) — used ONLY by the AI proxy
+    // (BackendAiClient / DeviceIdentity), NEVER by NetworkModule.getApi(). API Gateway HTTP APIs
+    // hard-cap their integration timeout at 30s, not configurable, regardless of the Lambda's
+    // own timeout — a large discharge summary's Gemini extraction call can take 35-60s and would
+    // get killed by that ceiling even though the Lambda itself finishes fine. The Function URL
+    // bypasses API Gateway entirely, so the only limit is the Lambda's own (120s) timeout.
+    const val AI_PROXY_BASE_URL = "https://wbbcabjmv7uyjsxegna633yqhe0mwhvs.lambda-url.us-east-1.on.aws/"
+
     private var currentRetrofit: Retrofit? = null
     private var currentIp: String? = null
 
@@ -237,10 +245,11 @@ object NetworkModule {
     }
 
     /**
-     * Builds and caches the Retrofit API service. If the server IP changes,
-     * the client is automatically rebuilt.
+     * The backend base URL (always ends with "/"), resolved from the saved server IP/override
+     * or [DEFAULT_SERVER_URL]. Shared by [getApi] (Retrofit) and [BackendAiClient] (raw OkHttp,
+     * since the AI-proxy call sites are synchronous/blocking like GeminiClient was).
      */
-    fun getApi(context: Context): MedicalScannerApi {
+    fun resolveBaseUrl(context: Context): String {
         val savedIp = getServerIp(context)
         // DEFAULT_SERVER_URL (hardcoded domain) wins unless the user has saved a different override
         val ip = when {
@@ -248,22 +257,23 @@ object NetworkModule {
             savedIp.isNotEmpty() -> savedIp
             else -> "10.0.2.2"
         }
-        
+        return when {
+            ip.startsWith("http://") || ip.startsWith("https://") -> if (ip.endsWith("/")) ip else "$ip/"
+            ip.contains(":") -> "http://$ip/"
+            else -> "http://$ip:3000/" // Default to port 3000 if no port specified
+        }
+    }
+
+    /**
+     * Builds and caches the Retrofit API service. If the server IP changes,
+     * the client is automatically rebuilt.
+     */
+    fun getApi(context: Context): MedicalScannerApi {
+        val ip = getServerIp(context).ifEmpty { DEFAULT_SERVER_URL }
+        val baseUrl = resolveBaseUrl(context)
+
         if (currentRetrofit == null || currentIp != ip) {
             currentIp = ip
-            
-            // Format base URL
-            val baseUrl = when {
-                ip.startsWith("http://") || ip.startsWith("https://") -> {
-                    if (ip.endsWith("/")) ip else "$ip/"
-                }
-                ip.contains(":") -> {
-                    "http://$ip/"
-                }
-                else -> {
-                    "http://$ip:3000/" // Default to port 3000 if no port specified
-                }
-            }
 
             // Full request/response bodies include the Authorization bearer token, login
             // passwords, and patient health data — never log them in a release build.
@@ -278,13 +288,14 @@ object NetworkModule {
                 .writeTimeout(60, TimeUnit.SECONDS)
                 .addInterceptor { chain ->
                     // Bypass ngrok's browser-warning interstitial page for API calls, and attach
-                    // the logged-in user's session (if any) — read fresh per-request so login/
-                    // logout takes effect immediately without rebuilding the Retrofit client.
+                    // the logged-in user's session if any — read fresh per-request so login/logout
+                    // takes effect immediately without rebuilding the Retrofit client. Falls back to
+                    // the anonymous device token (see DeviceIdentity) when no one is logged in, so
+                    // /api/ai/generate still authenticates without requiring an account.
                     val builder = chain.request().newBuilder()
                         .addHeader("ngrok-skip-browser-warning", "true")
-                    AppSettings.getAuthToken(context)?.let { token ->
-                        builder.addHeader("Authorization", "Bearer $token")
-                    }
+                    val token = AppSettings.getAuthToken(context) ?: AppSettings.getDeviceToken(context)
+                    token?.let { builder.addHeader("Authorization", "Bearer $it") }
                     chain.proceed(builder.build())
                 }
                 .addInterceptor(logging)
@@ -296,7 +307,7 @@ object NetworkModule {
                 .client(client)
                 .build()
         }
-        
+
         return currentRetrofit!!.create(MedicalScannerApi::class.java)
     }
 

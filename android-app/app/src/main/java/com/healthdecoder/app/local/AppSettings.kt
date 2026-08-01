@@ -258,6 +258,28 @@ object AppSettings {
 
     fun isLoggedIn(context: Context): Boolean = getAuthToken(context) != null
 
+    // ── Anonymous device identity (no OTP/login) ────────────────────────────
+    // Backs the AI proxy (BackendAiClient / POST /api/ai/generate): phone OTP sign-in is
+    // optional/off by default, so most installs authenticate as this anonymous device instead
+    // of a real user. installId is generated once and never changes; deviceToken is the JWT
+    // DeviceIdentity gets back from POST /api/device/register using that id.
+    private const val KEY_INSTALL_ID = "device_install_id"
+    private const val KEY_DEVICE_TOKEN = "device_auth_token"
+
+    fun getOrCreateInstallId(context: Context): String {
+        prefs(context).getString(KEY_INSTALL_ID, null)?.takeIf { it.isNotBlank() }?.let { return it }
+        val fresh = java.util.UUID.randomUUID().toString()
+        prefs(context).edit().putString(KEY_INSTALL_ID, fresh).apply()
+        return fresh
+    }
+
+    fun getDeviceToken(context: Context): String? =
+        prefs(context).getString(KEY_DEVICE_TOKEN, null)?.takeIf { it.isNotBlank() }
+
+    fun setDeviceToken(context: Context, token: String?) {
+        prefs(context).edit().putString(KEY_DEVICE_TOKEN, token).apply()
+    }
+
     /** Logs out. Deliberately does NOT clear the Gemini/Sarvam keys — they fall back to
      *  BuildKeys so scanning still works offline/logged-out, just without a personal quota. */
     fun logout(context: Context) {

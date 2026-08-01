@@ -127,7 +127,10 @@ object OcrEngine {
         totalParts: Int
     ): MultiScanExtraction? = try {
         val prompt = buildPrompt(referenceText, scanType, reportCategory, images.size, part, totalParts)
-        val raw = GeminiClient.generateFromImages(context, prompt, images)
+        // Scan calls go through our backend proxy (BackendAiClient), NOT GeminiClient directly —
+        // the Gemini key never touches the device. Other AI features (chat, medicine lookup,
+        // identify, TTS) still use GeminiClient/local BuildKeys for now; migrating first.
+        val raw = BackendAiClient.generateFromImages(context, prompt, images)
         parse(GeminiClient.stripJsonFences(raw))
     } catch (e: Exception) {
         e.printStackTrace()
