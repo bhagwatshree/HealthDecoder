@@ -44,6 +44,7 @@ import com.healthdecoder.app.reminder.SlotConfig
 import com.healthdecoder.app.reminder.AppointmentSchedule
 import com.healthdecoder.app.reminder.AppointmentStore
 import com.healthdecoder.app.reminder.AppointmentReminderManager
+import com.healthdecoder.app.reminder.doctorLabel
 import java.util.Calendar
 import java.util.UUID
 
@@ -1233,7 +1234,7 @@ private fun AppointmentCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Dr. ${appointment.doctorName}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text(appointment.doctorLabel(), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(

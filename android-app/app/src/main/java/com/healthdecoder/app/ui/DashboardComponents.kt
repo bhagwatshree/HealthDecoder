@@ -1348,24 +1348,7 @@ fun ClinicalInsightsPanel(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 
-                                val trendColors = when (inference.status.lowercase()) {
-                                    "improved" -> Pair(Color(0xFFE8F5E9), Color(0xFF2E7D32))
-                                    "worsened" -> Pair(Color(0xFFFFEBEE), Color(0xFFC62828))
-                                    else -> Pair(Color(0xFFFFF3E0), Color(0xFFE65100))
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(trendColors.first)
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = inference.status.uppercase(java.util.Locale.getDefault()),
-                                        color = trendColors.second,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
+                                StatusBadge(inference.status)
                             }
                             Text(
                                 text = inference.summary,

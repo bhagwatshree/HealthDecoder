@@ -289,59 +289,31 @@ private fun periodLabel(period: String?): String = when (period) {
 @Composable
 private fun OverviewCard(trends: List<ParameterTrend>, period: String?) {
     if (trends.isEmpty()) return
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8EAF6)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ClinicalSectionCard(
+        title = tr("Trends Overview"),
+        icon = Icons.Default.Dashboard,
+        accentColor = MaterialTheme.colorScheme.primary,
+        subtitle = periodLabel(period).replaceFirstChar { it.uppercase() }
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.Dashboard, contentDescription = null, tint = Color(0xFF3F51B5))
-                Text("Overview — ${periodLabel(period)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall, color = Color(0xFF1A237E))
-            }
-            // Two-column grid of compact metric tiles.
-            trends.chunked(2).forEach { row ->
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    row.forEach { t -> Box(Modifier.weight(1f)) { OverviewTile(t) } }
-                    if (row.size == 1) Spacer(Modifier.weight(1f))
+        trends.chunked(2).forEach { row ->
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { t ->
+                    val latest = t.dataPoints.lastOrNull()
+                    val arrow = when (t.trend) {
+                        "improving", "decreasing" -> "↓"; "worsening", "increasing" -> "↑"; else -> "→"
+                    }
+                    ResultTile(
+                        label = t.name,
+                        value = latest?.value ?: "—",
+                        unit = latest?.unit ?: "",
+                        status = latest?.status ?: "",
+                        trendArrow = arrow,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
-    }
-}
-
-@Composable
-private fun OverviewTile(trend: ParameterTrend) {
-    val latest = trend.dataPoints.lastOrNull()
-    val (icon, tint) = when (trend.trend) {
-        "improving", "decreasing" -> Icons.Default.TrendingDown to statusNormal
-        "worsening", "increasing" -> Icons.Default.TrendingUp to statusHigh
-        else -> Icons.Default.TrendingFlat to Color(0xFF607D8B)
-    }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp))
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        Text(trend.name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = latest?.let { "${it.value} ${it.unit}".trim() } ?: "—",
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleMedium,
-                color = statusColor(latest?.status ?: "", MaterialTheme.colorScheme.onSurface)
-            )
-            Icon(icon, contentDescription = trend.trend, tint = tint, modifier = Modifier.size(16.dp))
-        }
-        val statusText = latest?.status?.takeIf { it.isNotBlank() }?.replaceFirstChar { it.uppercase() } ?: ""
-        Text(
-            text = listOfNotNull(statusText.ifBlank { null }, "${trend.dataPoints.size} reading(s)").joinToString(" · "),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
@@ -383,16 +355,18 @@ private fun TrendCard(trend: ParameterTrend, onPointClick: (TrendDataPoint) -> U
                     }
                 }
             }
-            // Latest status in words, so the number has meaning to the reader.
+            // Latest status as a colored badge + plain-language line, so the number has meaning.
             latest?.status?.takeIf { it.isNotBlank() }?.let { st ->
-                Text(
-                    text = "Latest reading is ${st.uppercase()}" +
-                        (latest.unit.takeIf { it.isNotBlank() }?.let { " (measured in $it)" } ?: "") +
-                        (latest.context.takeIf { it.isNotBlank() }?.let { " — $it" } ?: ""),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = statusColor(st, MaterialTheme.colorScheme.onSurfaceVariant),
-                    fontWeight = FontWeight.SemiBold
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    StatusBadge(st)
+                    Text(
+                        text = "Latest reading" +
+                            (latest.unit.takeIf { it.isNotBlank() }?.let { " (measured in $it)" } ?: "") +
+                            (latest.context.takeIf { it.isNotBlank() }?.let { " — $it" } ?: ""),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
             // The standard unit this test's line is drawn in — the one converted points were
             // brought to, or (if none were converted) the unit shared by the readings.

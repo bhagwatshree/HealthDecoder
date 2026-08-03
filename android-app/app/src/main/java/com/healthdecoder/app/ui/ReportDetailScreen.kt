@@ -521,15 +521,19 @@ fun ReportDetailScreen(
                     // Clinical Insights & Trend Comparison Card
                     val comp = currentReport.comparisonResult
                     if (comp != null && comp.hasComparison) {
+        val insightAccent = when (comp.status?.lowercase()) {
+                            "improved" -> Color(0xFF2E7D32)
+                            "worsened" -> Color(0xFFC62828)
+                            "mixed" -> Color(0xFFE65100)
+                            else -> null
+                        }
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
-                                containerColor = when (comp.status?.lowercase()) {
-                                    "improved" -> Color(0xFFE8F5E9)
-                                    "worsened" -> Color(0xFFFFEBEE)
-                                    "mixed" -> Color(0xFFFFF3E0)
-                                    else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                                }
+                                // Tinted OVER the theme's own surface (not a hardcoded pale hex) so
+                                // the card reads correctly in dark theme too — see statusContainerColor.
+                                containerColor = insightAccent?.let { statusContainerColor(it) }
+                                    ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             ),
                             shape = RoundedCornerShape(12.dp)
                         ) {
@@ -707,33 +711,11 @@ fun ReportDetailScreen(
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     Text(text = param.referenceRange.ifEmpty { "-" }, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                    
+
                                                     val paramStatus = param.status ?: ""
                                                     if (paramStatus.isNotEmpty()) {
                                                         Spacer(modifier = Modifier.width(4.dp))
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .clip(RoundedCornerShape(4.dp))
-                                                                .background(
-                                                                    when (paramStatus.lowercase()) {
-                                                                        "high" -> Color(0xFFFFEBEE)
-                                                                        "normal" -> Color(0xFFE8F5E9)
-                                                                        else -> Color(0xFFE3F2FD)
-                                                                    }
-                                                                )
-                                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                        ) {
-                                                            Text(
-                                                                text = paramStatus.uppercase(),
-                                                                color = when (paramStatus.lowercase()) {
-                                                                    "high" -> Color(0xFFC62828)
-                                                                    "normal" -> Color(0xFF2E7D32)
-                                                                    else -> Color(0xFF1565C0)
-                                                                },
-                                                                fontSize = 9.sp,
-                                                                fontWeight = FontWeight.Bold
-                                                            )
-                                                        }
+                                                        StatusBadge(paramStatus)
                                                     }
                                                 }
                                             }

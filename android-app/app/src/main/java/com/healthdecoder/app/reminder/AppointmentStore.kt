@@ -17,6 +17,16 @@ data class AppointmentSchedule(
     val minute: Int
 )
 
+/**
+ * "Dr. Karne" whether [AppointmentSchedule.doctorName] was stored as "Karne" or already
+ * "Dr. Karne" — a discharge summary's "Consultant: Dr. X" line is often OCR-extracted WITH the
+ * honorific already attached, so unconditionally prefixing "Dr. " produced "Dr. Dr. Karne".
+ */
+fun AppointmentSchedule.doctorLabel(): String {
+    val n = doctorName.trim()
+    return if (Regex("(?i)^dr\\.?\\s").containsMatchIn(n)) n else "Dr. $n"
+}
+
 object AppointmentStore {
     private const val PREFS_NAME = "appointment_schedules"
     private const val KEY_APPOINTMENTS = "appointments_v1"
