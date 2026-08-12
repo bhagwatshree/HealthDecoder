@@ -29,6 +29,15 @@
     @com.google.gson.annotations.SerializedName <fields>;
 }
 
+# `new TypeToken<List<X>>() {}` anonymous subclasses (used throughout for generic JSON
+# collections/maps) need their own generic superclass signature preserved too — R8 can still
+# erase that even with -keepattributes Signature above unless the subclasses are kept directly.
+# Without this, any TypeToken-based Gson call throws IllegalStateException at runtime in release
+# builds only (confirmed crash: opening Server Settings, via RemoteUiTranslations' TypeToken use).
+-keep class * extends com.google.gson.reflect.TypeToken
+-keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken
+-keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
+
 # Retrofit inspects interface methods/annotations via reflection at runtime.
 -keepattributes Signature, InnerClasses, EnclosingMethod
 -keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
