@@ -1659,6 +1659,37 @@ async function sarvamTranslate(text, targetCode, apiKey) {
   }
 }
 
+/**
+ * Translates arbitrary-length text to a target language via Sarvam, for the /api/ai/translate
+ * proxy route (the app no longer talks to Sarvam directly). Splits on blank lines so each
+ * paragraph stays under sarvamTranslate's ~900-char limit, and degrades gracefully: any
+ * missing key, unsupported language, or upstream failure returns the ORIGINAL text rather
+ * than throwing, since translation is a nice-to-have and must never break the caller.
+ */
+export async function translateText(text, targetLanguage = 'English') {
+  if (!text || !text.trim()) return text;
+  if (!targetLanguage || targetLanguage.toLowerCase() === 'english') return text;
+
+  try {
+    const targetCode = LANGUAGE_CODES[targetLanguage.toLowerCase()] || 'en-IN';
+    if (targetCode === 'en-IN') return text;
+
+    const apiKey = process.env.SARVAM_API_KEY;
+    if (!apiKey || apiKey === 'YOUR_SARVAM_API_KEY_HERE') return text;
+
+    const paragraphs = text.split('\n\n');
+    const translated = await Promise.all(paragraphs.map(async (p) => {
+      if (!p.trim()) return p;
+      const result = await sarvamTranslate(p, targetCode, apiKey);
+      return result || p;
+    }));
+    return translated.join('\n\n');
+  } catch (e) {
+    console.warn('translateText failed:', e.message);
+    return text;
+  }
+}
+
 /** Splits text into chunks of at most maxLen chars, preferring sentence boundaries. */
 function chunkText(text, maxLen = 450) {
   const clean = (text || '').replace(/\s+/g, ' ').trim();

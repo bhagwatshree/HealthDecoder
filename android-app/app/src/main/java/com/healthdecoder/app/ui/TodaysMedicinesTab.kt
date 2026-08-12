@@ -95,6 +95,39 @@ fun TodaysMedicinesTab(
     var schedules by remember { mutableStateOf(MedicineScheduleStore.loadAll(context)) }
     var appointments by remember { mutableStateOf(AppointmentStore.loadAll(context)) }
 
+    // Scoped to the "active patient" chosen on Home, same as Records/Pending Tests (getDashboard) —
+    // a family member's reminders/appointments shouldn't show up while a different member is selected.
+    // Appointments saved before patientName existed are blank, not missing, so they stay visible to
+    // everyone rather than silently disappearing; every MedicineSchedule already has a real patient.
+    val activePatient = com.healthdecoder.app.local.AppSettings.getActivePatient(context)
+    // "Everyone" (activePatient == null) must mean everyone visible to the CURRENT viewer, not
+    // literally every record ever stored — otherwise a signed-out (or different-account) viewer
+    // would still see another account's family member's reminders/appointments, even though that
+    // member is correctly hidden from the picker itself. Mirrors LocalRepository.getDashboard().
+    var visiblePatientNames by remember { mutableStateOf<Set<String>?>(null) }
+    LaunchedEffect(Unit) {
+        visiblePatientNames = com.healthdecoder.app.local.LocalRepository.familyMembers(context)
+            .map { it.name.trim().lowercase() }.toHashSet()
+    }
+    val visibleSchedules = when {
+        activePatient != null -> schedules.filter { it.patientName.equals(activePatient, ignoreCase = true) }
+        visiblePatientNames == null -> emptyList() // names still loading — avoid a one-frame flash of hidden patients' data
+        else -> schedules.filter { visiblePatientNames!!.contains(it.patientName.trim().lowercase()) }
+    }
+    // .orEmpty() is load-bearing, not decoration: patientName is a NEW field on AppointmentSchedule,
+    // and Gson assigns raw null (not the Kotlin default) when deserializing an appointment saved
+    // before this field existed — calling .isBlank()/.equals() straight on that null throws.
+    val visibleAppointments = when {
+        activePatient != null -> appointments.filter {
+            it.patientName.orEmpty().isBlank() || it.patientName.orEmpty().equals(activePatient, ignoreCase = true)
+        }
+        visiblePatientNames == null -> emptyList()
+        else -> appointments.filter {
+            val p = it.patientName.orEmpty().trim().lowercase()
+            p.isBlank() || visiblePatientNames!!.contains(p)
+        }
+    }
+
     LaunchedEffect(medicationHistory) {
         // Collapse any duplicate reminders left by the same drug scanned under different name formats.
         MedicineScheduleStore.dedupeCanonical(context)
@@ -128,7 +161,7 @@ fun TodaysMedicinesTab(
     var editingAppt by remember { mutableStateOf<AppointmentSchedule?>(null) }
     var deletingAppt by remember { mutableStateOf<AppointmentSchedule?>(null) }
 
-    val hasMedsToday = schedules.any { s -> s.slots.values.any { it.enabled } }
+    val hasMedsToday = visibleSchedules.any { s -> s.slots.values.any { it.enabled } }
 
     val canScheduleExact = remember {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
@@ -218,7 +251,7 @@ fun TodaysMedicinesTab(
 
         // Today's dose sections grouped by time slot
         if (showMedicines) TIME_SLOTS.forEach { slot ->
-            val medsForSlot = schedules.filter { it.slots[slot]?.enabled == true }
+            val medsForSlot = visibleSchedules.filter { it.slots[slot]?.enabled == true }
             if (medsForSlot.isNotEmpty()) {
                 item(key = "header_$slot") {
                     SlotHeader(slot = slot, isCurrent = slot == currentSlot,
@@ -287,7 +320,7 @@ fun TodaysMedicinesTab(
                 Spacer(Modifier.height(12.dp))
             }
 
-            if (appointments.isEmpty()) {
+            if (visibleAppointments.isEmpty()) {
                 item {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -308,7 +341,7 @@ fun TodaysMedicinesTab(
                 }
             }
 
-            items(appointments, key = { "${it.id}_appt" }) { appt ->
+            items(visibleAppointments, key = { "${it.id}_appt" }) { appt ->
                 AppointmentCard(
                     appointment = appt,
                     onEdit = { editingAppt = appt },
@@ -318,7 +351,7 @@ fun TodaysMedicinesTab(
         }
 
         // Manage all schedules section
-        if (showMedicines && schedules.isNotEmpty()) {
+        if (showMedicines && visibleSchedules.isNotEmpty()) {
             item {
                 Spacer(Modifier.height(8.dp))
                 HorizontalDivider()
@@ -339,7 +372,7 @@ fun TodaysMedicinesTab(
                 Spacer(Modifier.height(12.dp))
             }
 
-            items(schedules, key = { "${it.patientName}_${it.medicineName}_manage" }) { schedule ->
+            items(visibleSchedules, key = { "${it.patientName}_${it.medicineName}_manage" }) { schedule ->
                 ManageCard(
                     schedule = schedule,
                     onNameClick = { medInfo.open(context, schedule.medicineName) },
@@ -372,7 +405,7 @@ fun TodaysMedicinesTab(
             onDismissRequest = { deletingSchedule = null },
             icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
             title = { Text(tr("Delete reminder?")) },
-            text = { Text("Remove the reminder for \"${sched.medicineName}\" (${sched.patientName})? Its alarms will be cancelled. This won't affect the scanned report.") },
+            text = { Text("${tr("Remove the reminder for")} \"${sched.medicineName}\" (${sched.patientName})? ${tr("Its alarms will be cancelled. This won't affect the scanned report.")}") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -469,7 +502,7 @@ fun TodaysMedicinesTab(
             onDismissRequest = { deletingAppt = null },
             icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
             title = { Text(tr("Delete Appointment?")) },
-            text = { Text("Are you sure you want to cancel and delete the appointment with Dr. ${appt.doctorName}?") },
+            text = { Text("${tr("Are you sure you want to cancel and delete the appointment with")} Dr. ${appt.doctorName}?") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -784,7 +817,7 @@ private fun SlotTimePickerDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("Set $slot Alarm Time",
+            Text("${tr("Set")} $slot ${tr("Alarm Time")}",
                 fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
         },
         text = {
@@ -969,7 +1002,7 @@ private fun AddMedicineDialog(
                 }
 
                 errorMsg?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Text(tr(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
             }
         },
@@ -1167,7 +1200,7 @@ private fun AddAppointmentDialog(
                 }
 
                 errorMsg?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Text(tr(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
             }
         },
@@ -1202,7 +1235,11 @@ private fun AddAppointmentDialog(
                             date = finalDate,
                             time = "%02d:%02d".format(hour, minute),
                             hour = hour,
-                            minute = minute
+                            minute = minute,
+                            // Editing keeps its existing owner; a brand-new appointment is scoped to
+                            // whichever family member is currently selected on Home (blank = everyone).
+                            patientName = initialAppointment?.patientName
+                                ?: com.healthdecoder.app.local.AppSettings.getActivePatient(context).orEmpty()
                         )
                     )
                 }
@@ -1254,11 +1291,11 @@ private fun AppointmentCard(
                     )
                     Spacer(Modifier.width(4.dp))
                     val recLabel = when (appointment.recurrence) {
-                        "None", "" -> if (appointment.isRecurring) "Daily" else "One-off"
+                        "None", "" -> if (appointment.isRecurring) tr("Daily") else tr("One-off")
                         else -> appointment.recurrence
                     }
-                    val dateStr = if (recLabel == "One-off") appointment.date else "$recLabel starting ${appointment.date}"
-                    Text("$dateStr at ${appointment.time}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val dateStr = if (recLabel == tr("One-off")) appointment.date else "$recLabel ${tr("starting")} ${appointment.date}"
+                    Text("$dateStr ${tr("at")} ${appointment.time}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Row {

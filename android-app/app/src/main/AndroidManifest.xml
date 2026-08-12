@@ -11,17 +11,24 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    <uses-permission android:name="android.permission.GET_ACCOUNTS" />
 
     <application
         android:allowBackup="false"
-        android:icon="@drawable/medical_assist_logo"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@drawable/medical_assist_logo"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:windowSoftInputMode="adjustResize"
         android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/Theme.MedicalScanner">
+
+        <!-- The firebase-analytics dependency is present only as a transitive companion to
+             Firebase Auth; nothing in this codebase calls the Analytics API. Auto-collection
+             defaults to ON the moment the SDK is present, so it must be explicitly disabled to
+             match the app's actual no-telemetry, local-first design. -->
+        <meta-data
+            android:name="firebase_analytics_collection_enabled"
+            android:value="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

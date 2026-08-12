@@ -182,6 +182,11 @@ interface MedicalScannerApi {
     @POST("api/auth/change-password")
     suspend fun changePassword(@Body request: ChangePasswordRequest): SimpleResponse
 
+    /** Permanently deletes the signed-in user's server account. Irreversible — see AccountScreen
+     *  for the confirmation dialog and the local-data wipe that accompanies it. */
+    @DELETE("api/user/account")
+    suspend fun deleteAccount(): SimpleResponse
+
     @GET("api/auth/google/token")
     suspend fun getGoogleAccessToken(): GoogleTokenResponse
 

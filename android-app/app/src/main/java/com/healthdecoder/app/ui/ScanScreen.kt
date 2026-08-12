@@ -113,6 +113,27 @@ fun ScanScreen(
     // time, at their own pace, rather than an auto-popping dialog.
     var pendingEmailQueue by remember { mutableStateOf<List<ProcessedEmail>>(emptyList()) }
 
+    // Hoisted here because tr() is @Composable and can't be called from the plain local
+    // functions / listener lambdas below that assign these into errorMessage/localOcrText.
+    val failedLocalOcrError = tr("Failed to run local OCR.")
+    val failedEmailInboxError = tr("Failed to connect and read email inbox. Please verify settings.")
+    val couldntReadSelectedFilesError = tr("Couldn't read the selected file(s). Try an image, PDF, or Word document.")
+    val pageLimitSkippedText = tr("Page limit is") to tr("per scan — extra pages were skipped. Analyze these first, then scan the rest.")
+    val failedImportSelectedFilesError = tr("Failed to import selected files.")
+    val qrNoReportLinkError = tr("That QR code doesn't contain a report link.")
+    val qrFetchFailedError = tr("Couldn't fetch the report from that QR code.")
+    val qrOpenedWebPageError = tr("That QR opened a web page, not a direct file. Opening it in your browser — " +
+        "download the report there, then use \"From Device\" to import it.")
+    val cameraInitFailedPrefix = tr("Camera initialization failed:")
+    val cameraPermissionNeededError = tr("Camera permission is needed to take a photo. Please allow it, or use 'From Gallery' instead.")
+    val reportAddedToPreviewText = tr("Report added to scan preview.")
+    val scanStartedText = tr("Scan started — watch the progress above.")
+    val documentTextAttachedPrefix = tr("Document text attached")
+    val documentTextAttachedSuffix = tr("chars). It will be analyzed with any images.")
+    val pagesSelectedPrefix = tr("page(s) selected. Add more pages of the SAME report, then analyze.")
+    val noNewReportsFoundText = tr("No new reports found (already scanned or none available).")
+    val uploadedOpenLaterText = tr("Uploaded. Open it later to analyze when you're ready.")
+
     // ON_RESUME (not LaunchedEffect(Unit)) so this re-checks every time the screen comes back
     // into view — e.g. after "Scan Now" finds something while the user was on AccountScreen —
     // not just the first time ScanScreen is composed.
@@ -169,7 +190,7 @@ fun ScanScreen(
                     }
                     .addOnFailureListener { e ->
                         e.printStackTrace()
-                        localOcrText = "Failed to run local OCR."
+                        localOcrText = failedLocalOcrError
                         localOcrRunning = false
                     }
             } catch (e: Exception) {
@@ -225,7 +246,7 @@ fun ScanScreen(
                         emailResultMessageId = msgId
                         showEmailResultDialog = true
                     } else {
-                        android.widget.Toast.makeText(context, "No new reports found (already scanned or none available).", android.widget.Toast.LENGTH_LONG).show()
+                        android.widget.Toast.makeText(context, noNewReportsFoundText, android.widget.Toast.LENGTH_LONG).show()
                     }
                 }
 
@@ -371,7 +392,7 @@ fun ScanScreen(
                     e.printStackTrace()
                     withContext(Dispatchers.Main) {
                         importingFiles = false
-                        errorMessage = "Failed to connect and read email inbox. Please verify settings."
+                        errorMessage = failedEmailInboxError
                     }
                 }
             }
@@ -395,11 +416,11 @@ fun ScanScreen(
                 val newImages = imported.flatMap { it.second.images }
                 val newText = imported.joinToString("\n\n") { it.second.text }.trim()
                 if (newImages.isEmpty() && newText.isBlank()) {
-                    errorMessage = "Couldn't read the selected file(s). Try an image, PDF, or Word document."
+                    errorMessage = couldntReadSelectedFilesError
                 } else {
                     val room = maxPagesPerScan - pages.size
                     errorMessage = if (newImages.size > room)
-                        "Page limit is $maxPagesPerScan per scan — extra pages were skipped. Analyze these first, then scan the rest."
+                        "${pageLimitSkippedText.first} $maxPagesPerScan ${pageLimitSkippedText.second}"
                     else ""
                     if (newImages.isNotEmpty() && room > 0) {
                         pages.addAll(newImages.take(room))
@@ -410,7 +431,7 @@ fun ScanScreen(
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                errorMessage = "Failed to import selected files."
+                errorMessage = failedImportSelectedFilesError
             } finally {
                 importingFiles = false
             }
@@ -423,7 +444,7 @@ fun ScanScreen(
     fun handleQrResult(raw: String) {
         showQrScanner = false
         if (!raw.startsWith("http://") && !raw.startsWith("https://")) {
-            errorMessage = "That QR code doesn't contain a report link."
+            errorMessage = qrNoReportLinkError
             return
         }
         coroutineScope.launch {
@@ -434,7 +455,7 @@ fun ScanScreen(
             } catch (e: Exception) {
                 e.printStackTrace()
                 importingFiles = false
-                errorMessage = "Couldn't fetch the report from that QR code."
+                errorMessage = qrFetchFailedError
                 return@launch
             }
             importingFiles = false
@@ -442,8 +463,7 @@ fun ScanScreen(
                 // importSelectedFiles manages its own importingFiles/errorMessage from here.
                 is QrFetchResult.ImportableFile -> importSelectedFiles(listOf(fetched.uri))
                 is QrFetchResult.WebPage -> {
-                    errorMessage = "That QR opened a web page, not a direct file. Opening it in your browser — " +
-                        "download the report there, then use \"From Device\" to import it."
+                    errorMessage = qrOpenedWebPageError
                     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(raw))) }
                 }
                 is QrFetchResult.Failed -> errorMessage = fetched.message
@@ -519,7 +539,7 @@ fun ScanScreen(
             cameraLauncher.launch(uri)
         } catch (e: Exception) {
             e.printStackTrace()
-            errorMessage = "Camera initialization failed: ${e.localizedMessage}"
+            errorMessage = "$cameraInitFailedPrefix ${e.localizedMessage}"
         }
     }
 
@@ -530,7 +550,7 @@ fun ScanScreen(
             if (granted) {
                 launchCamera()
             } else {
-                errorMessage = "Camera permission is needed to take a photo. Please allow it, or use 'From Gallery' instead."
+                errorMessage = cameraPermissionNeededError
             }
         }
     )
@@ -662,7 +682,7 @@ fun ScanScreen(
                                 ) {
                                     Image(
                                         painter = rememberAsyncImagePainter(model = uri),
-                                        contentDescription = "Page ${index + 1}",
+                                        contentDescription = "${tr("Page")} ${index + 1}",
                                         modifier = Modifier.fillMaxSize(),
                                         contentScale = ContentScale.Fit
                                     )
@@ -670,7 +690,7 @@ fun ScanScreen(
                                         Modifier.align(Alignment.BottomStart).padding(6.dp)
                                             .clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.6f))
                                             .padding(horizontal = 6.dp, vertical = 2.dp)
-                                    ) { Text("Page ${index + 1}", color = Color.White, fontSize = 10.sp) }
+                                    ) { Text("${tr("Page")} ${index + 1}", color = Color.White, fontSize = 10.sp) }
                                     IconButton(
                                         onClick = {
                                             pages.removeAt(index)
@@ -1099,7 +1119,7 @@ fun ScanScreen(
                                                     )
                                                 )
                                             }
-                                            android.widget.Toast.makeText(context, "Report added to scan preview.", android.widget.Toast.LENGTH_SHORT).show()
+                                            android.widget.Toast.makeText(context, reportAddedToPreviewText, android.widget.Toast.LENGTH_SHORT).show()
                                         }) { Text(tr("Analyze")) }
                                     }
                                 }
@@ -1122,7 +1142,7 @@ fun ScanScreen(
                         ) {
                             Icon(Icons.Default.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Text(
-                                "Document text attached (${docText.length} chars). It will be analyzed with any images.",
+                                "$documentTextAttachedPrefix (${docText.length} $documentTextAttachedSuffix",
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.weight(1f)
                             )
@@ -1135,7 +1155,7 @@ fun ScanScreen(
 
                 if (pages.isNotEmpty() || docText.isNotBlank()) {
                     Text(
-                        text = if (pages.isNotEmpty()) "${pages.size} page(s) selected. Add more pages of the SAME report, then analyze."
+                        text = if (pages.isNotEmpty()) "${pages.size} $pagesSelectedPrefix"
                                else tr("Document attached. Add pages/images if needed, then analyze."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1164,7 +1184,7 @@ fun ScanScreen(
                         pages.clear(); sources.clear(); docText = ""; localOcrText = ""; autoUseSarvam = false
                         android.widget.Toast.makeText(
                             context,
-                            "Scan started — watch the progress above.",
+                            scanStartedText,
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
                     },
@@ -1195,7 +1215,7 @@ fun ScanScreen(
                             pages.clear(); sources.clear(); docText = ""; localOcrText = ""; autoUseSarvam = false
                             android.widget.Toast.makeText(
                                 context,
-                                "Uploaded. Open it later to analyze when you're ready.",
+                                uploadedOpenLaterText,
                                 android.widget.Toast.LENGTH_LONG
                             ).show()
                         },
@@ -1284,7 +1304,7 @@ fun ScanScreen(
                     title = { Text(tr("Email Access Consent"), fontWeight = FontWeight.Bold) },
                     text = {
                         Text(
-                            text = tr("Medical Assist (MA) requires your permission to connect to your email inbox. We will only search for emails from the last 2 days containing potential medical report attachments (PDFs) and extract them locally on your phone. No email contents are sent to our servers. Do you consent to this?"),
+                            text = tr("Health Decoder requires your permission to connect to your email inbox. We will only search for emails from the last 2 days containing potential medical report attachments (PDFs) and extract them locally on your phone. No email contents are sent to our servers. Do you consent to this?"),
                             style = MaterialTheme.typography.bodyMedium
                         )
                     },
@@ -1357,7 +1377,7 @@ fun ScanScreen(
                                         )
                                     )
                                 }
-                                android.widget.Toast.makeText(context, "Report added to scan preview.", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(context, reportAddedToPreviewText, android.widget.Toast.LENGTH_SHORT).show()
                             }
                         ) {
                             Text(tr("Yes, Import"))

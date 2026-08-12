@@ -79,6 +79,15 @@ fun ChatScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
 
+    // Hoisted here because tr() is @Composable and can't be called from inside the
+    // coroutineScope.launch block below where these Toasts are shown.
+    val navigatingToFindCareToast = tr("Action: Navigating to Find Care...")
+    val reminderSetToastPrefix = tr("Action: Reminder set for")
+    val reminderSetToastMid = tr("at")
+    val appointmentBookedToastPrefix = tr("Action: Appointment booked with")
+    val appointmentBookedToastMid1 = tr("on")
+    val appointmentBookedToastMid2 = tr("at")
+
     val listState = rememberLazyListState()
     
     var attachedImagePath by remember { mutableStateOf<String?>(null) }
@@ -169,7 +178,7 @@ fun ChatScreen(
                     finalAnswer = finalAnswer.replace(match.value, "").trim()
                     
                     if (toolCommand.startsWith("navigate")) {
-                        android.widget.Toast.makeText(context, "Action: Navigating to Find Care...", android.widget.Toast.LENGTH_LONG).show()
+                        android.widget.Toast.makeText(context, navigatingToFindCareToast, android.widget.Toast.LENGTH_LONG).show()
                     } else if (toolCommand.startsWith("scanDocument")) {
                         if (imageToSend != null) {
                             onNavigateToScan(imageToSend)
@@ -208,7 +217,7 @@ fun ChatScreen(
                             val updatedSchedule = schedule.copy(slots = slots)
                             com.healthdecoder.app.reminder.MedicineScheduleStore.upsert(context, updatedSchedule)
                             
-                            android.widget.Toast.makeText(context, "Action: Reminder set for \$med at \$time", android.widget.Toast.LENGTH_LONG).show()
+                            android.widget.Toast.makeText(context, "$reminderSetToastPrefix $med $reminderSetToastMid $time", android.widget.Toast.LENGTH_LONG).show()
                         }
                     } else if (toolCommand.startsWith("addAppointment")) {
                         val regex = "addAppointment\\((.*?),(.*?),(.*?)\\)".toRegex()
@@ -234,10 +243,11 @@ fun ChatScreen(
                                 time = time,
                                 place = "Unknown",
                                 hour = hour,
-                                minute = min
+                                minute = min,
+                                patientName = AppSettings.getActivePatient(context).orEmpty()
                             ))
                             
-                            android.widget.Toast.makeText(context, "Action: Appointment booked with \$doctor on \$date at \$time", android.widget.Toast.LENGTH_LONG).show()
+                            android.widget.Toast.makeText(context, "$appointmentBookedToastPrefix $doctor $appointmentBookedToastMid1 $date $appointmentBookedToastMid2 $time", android.widget.Toast.LENGTH_LONG).show()
                         }
                     }
                 }
@@ -409,7 +419,7 @@ fun ChatScreen(
 
             if (errorMessage.isNotEmpty()) {
                 Text(
-                    text = errorMessage,
+                    text = tr(errorMessage),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
@@ -656,7 +666,7 @@ private fun ChatInputBar(
                         // For now we show an icon indicating an attachment is ready.
                         Icon(
                             imageVector = Icons.Default.Image,
-                            contentDescription = "Attachment",
+                            contentDescription = tr("Attachment"),
                             modifier = Modifier.size(64.dp).padding(8.dp),
                             tint = MaterialTheme.colorScheme.primary
                         )
@@ -664,7 +674,7 @@ private fun ChatInputBar(
                             onClick = onRemoveAttachment,
                             modifier = Modifier.align(Alignment.TopEnd).size(24.dp).padding(2.dp)
                         ) {
-                            Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color.Red)
+                            Icon(Icons.Default.Close, contentDescription = tr("Remove"), tint = Color.Red)
                         }
                     }
                 }
@@ -698,7 +708,7 @@ private fun ChatInputBar(
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { onSend() }),
                     trailingIcon = {
                         IconButton(onClick = onAttach, enabled = enabled) {
-                            Icon(Icons.Default.AttachFile, contentDescription = "Attach image", tint = Color.Gray)
+                            Icon(Icons.Default.AttachFile, contentDescription = tr("Attach image"), tint = Color.Gray)
                         }
                     }
                 )

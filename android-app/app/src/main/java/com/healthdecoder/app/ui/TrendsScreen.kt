@@ -359,8 +359,7 @@ private fun TrendCard(trend: ParameterTrend, onPointClick: (TrendDataPoint) -> U
             latest?.status?.takeIf { it.isNotBlank() }?.let { st ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     StatusBadge(st)
-                    Text(
-                        text = "Latest reading" +
+                    Text(text = tr("Latest reading") +
                             (latest.unit.takeIf { it.isNotBlank() }?.let { " (measured in $it)" } ?: "") +
                             (latest.context.takeIf { it.isNotBlank() }?.let { " — $it" } ?: ""),
                         style = MaterialTheme.typography.labelSmall,

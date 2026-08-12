@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Color
+import com.healthdecoder.app.FeatureFlags
 import com.healthdecoder.app.local.SecureKeyManager
 import android.widget.Toast
 import com.healthdecoder.app.model.ResetPasswordRequest
@@ -93,6 +94,19 @@ fun LoginScreen(
     var pendingToken by remember { mutableStateOf("") }
     var pendingEmail by remember { mutableStateOf("") }
 
+    // Hoisted here because tr() is @Composable and can't be called from the plain (non-composable)
+    // local functions below that assign these into errorMessage.
+    val genericErrorText = tr("Something went wrong. Check your connection and try again.")
+    val enterEmailPasswordError = tr("Enter an email and password.")
+    val enterValidMobileError = tr("Enter a valid 10-digit mobile number.")
+    val couldntStartPhoneVerificationError = tr("Couldn't start phone verification. Please try again.")
+    val googleSignInFailedError = tr("Google sign-in failed. Please try again.")
+    val enter6DigitCodeError = tr("Enter the 6-digit code sent to your phone.")
+    val incorrectExpiredCodeError = tr("Incorrect or expired code. Please try again.")
+    val passwordResetSuccessToast = tr("Password reset successfully. Log in with your new password.")
+    val enableFingerprintOnboardingTitle = tr("Enable Fingerprint Login")
+    val enableFingerprintOnboardingSubtitle = tr("Confirm your fingerprint to register")
+
     fun onAuthSuccess(token: String, userEmail: String) {
         AppSettings.setAuthToken(context, token)
         AppSettings.setUserEmail(context, userEmail)
@@ -111,7 +125,7 @@ fun LoginScreen(
     fun loginWithEmail() {
         val trimmedEmail = email.trim()
         if (trimmedEmail.isEmpty() || password.isEmpty()) {
-            errorMessage = "Enter an email and password."
+            errorMessage = enterEmailPasswordError
             return
         }
         errorMessage = null
@@ -123,7 +137,7 @@ fun LoginScreen(
                 .onFailure { e ->
                     errorMessage = e.apiErrorMessage()
                         ?: e.message?.takeIf { it.isNotBlank() }
-                        ?: "Something went wrong. Check your connection and try again."
+                        ?: genericErrorText
                 }
         }
     }
@@ -143,7 +157,7 @@ fun LoginScreen(
                     } else {
                         errorMessage = e.apiErrorMessage()
                             ?: e.message?.takeIf { it.isNotBlank() }
-                            ?: "Something went wrong. Check your connection and try again."
+                            ?: genericErrorText
                     }
                 }
         }
@@ -162,14 +176,14 @@ fun LoginScreen(
                             .onFailure { e ->
                                 errorMessage = e.apiErrorMessage()
                                     ?: e.message?.takeIf { it.isNotBlank() }
-                                    ?: "Something went wrong. Check your connection and try again."
+                                    ?: genericErrorText
                             }
                     }
                 }.onFailure { e ->
                     isLoading = false
                     // User simply closed the account picker — not an error worth showing.
                     if (e !is androidx.credentials.exceptions.GetCredentialCancellationException) {
-                        errorMessage = e.message?.takeIf { it.isNotBlank() } ?: "Google sign-in failed. Please try again."
+                        errorMessage = e.message?.takeIf { it.isNotBlank() } ?: googleSignInFailedError
                     }
                 }
             }
@@ -178,11 +192,11 @@ fun LoginScreen(
 
     fun sendLoginOtp() {
         if (phoneDigits.length != 10) {
-            errorMessage = "Enter a valid 10-digit mobile number."
+            errorMessage = enterValidMobileError
             return
         }
         if (activity == null) {
-            errorMessage = "Couldn't start phone verification. Please try again."
+            errorMessage = couldntStartPhoneVerificationError
             return
         }
         errorMessage = null
@@ -203,7 +217,7 @@ fun LoginScreen(
     fun verifyLoginOtp() {
         val id = verificationId ?: return
         if (otpCode.length < 6) {
-            errorMessage = "Enter the 6-digit code sent to your phone."
+            errorMessage = enter6DigitCodeError
             return
         }
         errorMessage = null
@@ -212,7 +226,7 @@ fun LoginScreen(
             result.onSuccess { loginWithPhoneToken(it) }
                 .onFailure {
                     isLoading = false
-                    errorMessage = "Incorrect or expired code. Please try again."
+                    errorMessage = incorrectExpiredCodeError
                 }
         }
     }
@@ -229,19 +243,18 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Image(
-                painter = painterResource(id = com.healthdecoder.app.R.drawable.medical_assist_logo),
-                contentDescription = "Medical Assist Logo",
+                painter = painterResource(id = com.healthdecoder.app.R.drawable.ic_health_decoder_logo),
+                contentDescription = tr("Health Decoder Logo"),
                 modifier = Modifier
                     .size(80.dp)
                     .clip(RoundedCornerShape(16.dp))
             )
             Spacer(modifier = Modifier.height(12.dp))
-            Text(text = "Medical Assist", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(text = "Health Decoder", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
-            Text(text = "Secure Medical Report Analyzer", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = tr("Secure Medical Report Analyzer"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Signing in gives you your own free daily AI usage allowance, separate from other users of this app.",
+            Text(text = tr("Signing in gives you your own free daily AI usage allowance, separate from other users of this app."),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -249,6 +262,11 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             if (AppSettings.isBiometricEnabled(context) && AppSettings.getBiometricToken(context) != null) {
+                val fingerprintLoginTitle = tr("Fingerprint Login")
+                val fingerprintLoginSubtitle = tr("Confirm fingerprint to sign in")
+                val noSavedFingerprintError = tr("No saved fingerprint credentials found.")
+                val biometricAuthFailedError = tr("Biometric authentication failed.")
+                val couldNotStartBiometricError = tr("Could not start biometric authentication.")
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -260,9 +278,9 @@ fun LoginScreen(
                         modifier = Modifier.padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        val savedEmail = AppSettings.getBiometricUserEmail(context) ?: "your account"
+                        val savedEmail = AppSettings.getBiometricUserEmail(context) ?: tr("your account")
                         Text(
-                            text = "Saved Login: $savedEmail",
+                            text = "${tr("Saved Login:")} $savedEmail",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -275,8 +293,8 @@ fun LoginScreen(
                                     errorMessage = null
                                     BiometricHelper.showBiometricPrompt(
                                         activity = fragmentActivity,
-                                        title = "Fingerprint Login",
-                                        subtitle = "Confirm fingerprint to sign in",
+                                        title = fingerprintLoginTitle,
+                                        subtitle = fingerprintLoginSubtitle,
                                         onResult = { result ->
                                             if (result.isSuccess) {
                                                 val savedToken = AppSettings.getBiometricToken(context)
@@ -284,15 +302,15 @@ fun LoginScreen(
                                                 if (savedToken != null && savedEmail != null) {
                                                     onAuthSuccess(savedToken, savedEmail)
                                                 } else {
-                                                    errorMessage = "No saved fingerprint credentials found."
+                                                    errorMessage = noSavedFingerprintError
                                                 }
                                             } else {
-                                                errorMessage = result.exceptionOrNull()?.message ?: "Biometric authentication failed."
+                                                errorMessage = result.exceptionOrNull()?.message ?: biometricAuthFailedError
                                             }
                                         }
                                     )
                                 } else {
-                                    errorMessage = "Could not start biometric authentication."
+                                    errorMessage = couldNotStartBiometricError
                                 }
                             },
                             modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -300,38 +318,42 @@ fun LoginScreen(
                         ) {
                             Icon(Icons.Default.Fingerprint, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Log In with Fingerprint", fontWeight = FontWeight.SemiBold)
+                            Text(tr("Log In with Fingerprint"), fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
 
                 Text(
-                    text = "Or sign in with another method",
+                    text = tr("Or sign in with another method"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
             }
 
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                SegmentedButton(
-                    selected = !usePhoneLogin,
-                    onClick = { usePhoneLogin = false; errorMessage = null },
-                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
-                ) { Text("Email") }
-                SegmentedButton(
-                    selected = usePhoneLogin,
-                    onClick = { usePhoneLogin = true; errorMessage = null },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
-                ) { Text("Phone OTP") }
+            // Phone OTP tab hidden while PHONE_AUTH_ENABLED is off (billed SMS cost) — email/
+            // password is the only login path for an existing account until that's re-enabled.
+            if (FeatureFlags.PHONE_AUTH_ENABLED) {
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    SegmentedButton(
+                        selected = !usePhoneLogin,
+                        onClick = { usePhoneLogin = false; errorMessage = null },
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                    ) { Text(tr("Email")) }
+                    SegmentedButton(
+                        selected = usePhoneLogin,
+                        onClick = { usePhoneLogin = true; errorMessage = null },
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                    ) { Text(tr("Phone OTP")) }
+                }
+                Spacer(modifier = Modifier.height(20.dp))
             }
-            Spacer(modifier = Modifier.height(20.dp))
 
             if (!usePhoneLogin) {
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
-                    label = { Text("Email") },
+                    label = { Text(tr("Email")) },
                     leadingIcon = { Icon(imageVector = Icons.Default.Email, contentDescription = null) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
@@ -342,7 +364,7 @@ fun LoginScreen(
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("Password") },
+                    label = { Text(tr("Password")) },
                     leadingIcon = { Icon(imageVector = Icons.Default.Lock, contentDescription = null) },
                     singleLine = true,
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -362,8 +384,7 @@ fun LoginScreen(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.CenterEnd
                 ) {
-                    Text(
-                        text = "Forgot Password?",
+                    Text(text = tr("Forgot Password?"),
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp,
@@ -388,14 +409,14 @@ fun LoginScreen(
                     if (isLoading) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("Log In", fontWeight = FontWeight.SemiBold)
+                        Text(tr("Log In"), fontWeight = FontWeight.SemiBold)
                     }
                 }
             } else if (!otpSent) {
                 OutlinedTextField(
                     value = phoneDigits,
                     onValueChange = { phoneDigits = it.filter { c -> c.isDigit() }.take(10) },
-                    label = { Text("Mobile number") },
+                    label = { Text(tr("Mobile number")) },
                     singleLine = true,
                     leadingIcon = { Text("+91", modifier = Modifier.padding(start = 12.dp)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
@@ -418,7 +439,7 @@ fun LoginScreen(
                     if (isSendingOtp) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("Send OTP", fontWeight = FontWeight.SemiBold)
+                        Text(tr("Send OTP"), fontWeight = FontWeight.SemiBold)
                     }
                 }
             } else {
@@ -431,7 +452,7 @@ fun LoginScreen(
                 OutlinedTextField(
                     value = otpCode,
                     onValueChange = { otpCode = it.filter { c -> c.isDigit() }.take(6) },
-                    label = { Text("OTP code") },
+                    label = { Text(tr("OTP code")) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     shape = RoundedCornerShape(12.dp),
@@ -453,42 +474,48 @@ fun LoginScreen(
                     if (isLoading) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("Verify & Log In", fontWeight = FontWeight.SemiBold)
+                        Text(tr("Verify & Log In"), fontWeight = FontWeight.SemiBold)
                     }
                 }
                 TextButton(onClick = { otpSent = false; otpCode = ""; errorMessage = null }) {
-                    Text("Change phone number")
+                    Text(tr("Change phone number"))
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Google Sign In Button — native account picker via Credential Manager, no browser.
-            OutlinedButton(
-                onClick = { loginWithGoogle() },
-                enabled = !isLoading,
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Image(
-                    painter = painterResource(id = com.healthdecoder.app.R.drawable.ic_google_logo),
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
+            // Google Sign-In creates a real account with no OTP step, using an OAuth client
+            // that was only ever tested against one account — hidden until its public-scale
+            // cost/quota story (and OAuth consent screen publishing status) is verified.
+            if (FeatureFlags.GOOGLE_SIGNIN_ENABLED) {
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                    modifier = Modifier.padding(vertical = 8.dp)
                 )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text("Sign In with Google", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Google Sign In Button — native account picker via Credential Manager, no browser.
+                OutlinedButton(
+                    onClick = { loginWithGoogle() },
+                    enabled = !isLoading,
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Image(
+                        painter = painterResource(id = com.healthdecoder.app.R.drawable.ic_google_logo),
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(tr("Sign In with Google"), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                }
             }
 
-
+            // Signup no longer needs phone OTP (see RegisterScreen — email+password is enough),
+            // so this is always available, regardless of PHONE_AUTH_ENABLED.
             Spacer(modifier = Modifier.height(8.dp))
             TextButton(onClick = { onNavigateToRegister(null) }) {
-                Text("New here? Create an account")
+                Text(tr("New here? Create an account"))
             }
         }
     }
@@ -499,8 +526,8 @@ fun LoginScreen(
                 showBiometricOnboarding = false
                 onLoggedIn()
             },
-            title = { Text("Enable Fingerprint Login?") },
-            text = { Text("Use your fingerprint to quickly sign in next time without waiting for an OTP or entering passwords.") },
+            title = { Text(tr("Enable Fingerprint Login?")) },
+            text = { Text(tr("Use your fingerprint to quickly sign in next time without waiting for an OTP or entering passwords.")) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -509,8 +536,8 @@ fun LoginScreen(
                         if (fragmentActivity != null) {
                             BiometricHelper.showBiometricPrompt(
                                 activity = fragmentActivity,
-                                title = "Enable Fingerprint Login",
-                                subtitle = "Confirm your fingerprint to register",
+                                title = enableFingerprintOnboardingTitle,
+                                subtitle = enableFingerprintOnboardingSubtitle,
                                 onResult = { result ->
                                     if (result.isSuccess) {
                                         AppSettings.setBiometricEnabled(context, true)
@@ -525,7 +552,7 @@ fun LoginScreen(
                         }
                     }
                 ) {
-                    Text("Enable")
+                    Text(tr("Enable"))
                 }
             },
             dismissButton = {
@@ -535,7 +562,7 @@ fun LoginScreen(
                         onLoggedIn()
                     }
                 ) {
-                    Text("Not Now")
+                    Text(tr("Not Now"))
                 }
             }
         )
@@ -547,7 +574,7 @@ fun LoginScreen(
             onDismiss = { showForgotPasswordDialog = false },
             onSuccess = {
                 showForgotPasswordDialog = false
-                Toast.makeText(context, "Password reset successfully. Log in with your new password.", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, passwordResetSuccessToast, Toast.LENGTH_LONG).show()
             }
         )
     }
@@ -577,9 +604,20 @@ private fun ForgotPasswordDialog(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
+    // Hoisted here because tr() is @Composable and can't be called from the plain onClick
+    // lambdas below that assign these into errorMsg.
+    val enterValidMobileError = tr("Enter a valid 10-digit mobile number.")
+    val enter6DigitOtpError = tr("Enter the 6-digit OTP code.")
+    val passwordMin6CharsError = tr("Password must be at least 6 characters.")
+    val passwordsDoNotMatchError = tr("Passwords do not match.")
+    val failedToResetPasswordError = tr("Failed to reset password.")
+    val authFailedRetryOtpError = tr("Authentication failed. Try requesting OTP again.")
+    val verificationTimedOutError = tr("Verification timed out. Please try again.")
+    val incorrectExpiredOtpError = tr("Incorrect or expired OTP code.")
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Forgot Password", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+        title = { Text(tr("Forgot Password"), fontWeight = FontWeight.Bold, fontSize = 20.sp) },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
@@ -587,13 +625,13 @@ private fun ForgotPasswordDialog(
             ) {
                 if (step == 1) {
                     Text(
-                        "Enter the 10-digit mobile number linked to your account to verify your identity via OTP.",
+                        tr("Enter the 10-digit mobile number linked to your account to verify your identity via OTP."),
                         fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedTextField(
                         value = phoneDigits,
                         onValueChange = { phoneDigits = it.filter { c -> c.isDigit() }.take(10) },
-                        label = { Text("Mobile Number") },
+                        label = { Text(tr("Mobile Number")) },
                         singleLine = true,
                         leadingIcon = { Text("+91 ", modifier = Modifier.padding(start = 12.dp)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
@@ -602,13 +640,13 @@ private fun ForgotPasswordDialog(
                     )
                 } else {
                     Text(
-                        "Enter the 6-digit OTP code sent to +91 $phoneDigits and set your new password.",
+                        "${tr("Enter the 6-digit OTP code sent to")} +91 $phoneDigits ${tr("and set your new password.")}",
                         fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedTextField(
                         value = otpCode,
                         onValueChange = { otpCode = it.filter { c -> c.isDigit() }.take(6) },
-                        label = { Text("6-Digit OTP") },
+                        label = { Text(tr("6-Digit OTP")) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         shape = RoundedCornerShape(10.dp),
@@ -617,7 +655,7 @@ private fun ForgotPasswordDialog(
                     OutlinedTextField(
                         value = newPassword,
                         onValueChange = { newPassword = it },
-                        label = { Text("New Password (min 6 chars)") },
+                        label = { Text(tr("New Password (min 6 chars)")) },
                         singleLine = true,
                         visualTransformation = if (newPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
@@ -633,7 +671,7 @@ private fun ForgotPasswordDialog(
                     OutlinedTextField(
                         value = confirmPassword,
                         onValueChange = { confirmPassword = it },
-                        label = { Text("Confirm New Password") },
+                        label = { Text(tr("Confirm New Password")) },
                         singleLine = true,
                         visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
@@ -658,7 +696,7 @@ private fun ForgotPasswordDialog(
                 Button(
                     onClick = {
                         if (phoneDigits.length != 10) {
-                            errorMsg = "Enter a valid 10-digit mobile number."
+                            errorMsg = enterValidMobileError
                             return@Button
                         }
                         errorMsg = null
@@ -686,22 +724,22 @@ private fun ForgotPasswordDialog(
                     if (isSending) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("Send OTP")
+                        Text(tr("Send OTP"))
                     }
                 }
             } else {
                 Button(
                     onClick = {
                         if (otpCode.length < 6 && verificationId != "auto-verified") {
-                            errorMsg = "Enter the 6-digit OTP code."
+                            errorMsg = enter6DigitOtpError
                             return@Button
                         }
                         if (newPassword.length < 6) {
-                            errorMsg = "Password must be at least 6 characters."
+                            errorMsg = passwordMin6CharsError
                             return@Button
                         }
                         if (newPassword != confirmPassword) {
-                            errorMsg = "Passwords do not match."
+                            errorMsg = passwordsDoNotMatchError
                             return@Button
                         }
                         errorMsg = null
@@ -719,7 +757,7 @@ private fun ForgotPasswordDialog(
                                 result.onSuccess {
                                     onSuccess()
                                 }.onFailure { e ->
-                                    errorMsg = e.apiErrorMessage() ?: e.message ?: "Failed to reset password."
+                                    errorMsg = e.apiErrorMessage() ?: e.message ?: failedToResetPasswordError
                                 }
                             }
                         }
@@ -731,11 +769,11 @@ private fun ForgotPasswordDialog(
                                     performReset(it.token ?: "")
                                 }.addOnFailureListener {
                                     isLoading = false
-                                    errorMsg = "Authentication failed. Try requesting OTP again."
+                                    errorMsg = authFailedRetryOtpError
                                 }
                             } else {
                                 isLoading = false
-                                errorMsg = "Verification timed out. Please try again."
+                                errorMsg = verificationTimedOutError
                             }
                         } else {
                             PhoneAuthHelper.verifyOtp(verificationId!!, otpCode) { result ->
@@ -743,7 +781,7 @@ private fun ForgotPasswordDialog(
                                     performReset(token)
                                 }.onFailure {
                                     isLoading = false
-                                    errorMsg = "Incorrect or expired OTP code."
+                                    errorMsg = incorrectExpiredOtpError
                                 }
                             }
                         }
@@ -753,13 +791,13 @@ private fun ForgotPasswordDialog(
                     if (isLoading) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("Reset Password")
+                        Text(tr("Reset Password"))
                     }
                 }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(tr("Cancel")) }
         }
     )
 }

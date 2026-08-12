@@ -334,7 +334,7 @@ fun ReportDetailScreen(
                                 ) {
                                     Image(
                                         painter = rememberAsyncImagePainter(model = java.io.File(path)),
-                                        contentDescription = "Page ${idx + 1}",
+                                        contentDescription = "${tr("Page")} ${idx + 1}",
                                         modifier = Modifier.fillMaxSize(),
                                         contentScale = ContentScale.Crop
                                     )
@@ -610,13 +610,13 @@ fun ReportDetailScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     medChg.added.forEach { m ->
-                                        Text(text = "+ Added: $m", fontSize = 12.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Medium)
+                                        Text(text = "+ ${tr("Added:")} $m", fontSize = 12.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Medium)
                                     }
                                     medChg.removed.forEach { m ->
-                                        Text(text = "- Discontinued: $m", fontSize = 12.sp, color = Color(0xFFC62828), fontWeight = FontWeight.Medium)
+                                        Text(text = "- ${tr("Discontinued:")} $m", fontSize = 12.sp, color = Color(0xFFC62828), fontWeight = FontWeight.Medium)
                                     }
                                     medChg.changed.forEach { m ->
-                                        Text(text = "• Modified: $m", fontSize = 12.sp, color = Color(0xFFE65100), fontWeight = FontWeight.Medium)
+                                        Text(text = "• ${tr("Modified:")} $m", fontSize = 12.sp, color = Color(0xFFE65100), fontWeight = FontWeight.Medium)
                                     }
                                 }
 
@@ -1279,7 +1279,7 @@ fun ReportDetailScreen(
                                                     horizontalArrangement = Arrangement.SpaceBetween,
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Text("Medication #${index + 1}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+                                                    Text("${tr("Medication")} #${index + 1}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
                                                     IconButton(onClick = { editMedications.removeAt(index) }) {
                                                         Icon(imageVector = Icons.Default.Delete, contentDescription = tr("Remove"), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
                                                     }
@@ -1348,14 +1348,14 @@ fun ReportDetailScreen(
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
                                                         if (med.dosage.isNotEmpty()) {
-                                                            Text(text = "Dosage: ${med.dosage}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                            Text(text = "${tr("Dosage:")} ${med.dosage}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                         }
                                                         if (med.frequency.isNotEmpty()) {
                                                             Text(text = "•  ${med.frequency}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                         }
                                                     }
                                                     if (!med.duration.isNullOrEmpty()) {
-                                                        Text(text = "Duration: ${med.duration}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+                                                        Text(text = "${tr("Duration:")} ${med.duration}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
                                                     }
                                                 }
                                             }

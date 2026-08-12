@@ -166,7 +166,7 @@ fun CompareScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                            Text(errorMessage, color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodyMedium)
+                            Text(tr(errorMessage), color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
@@ -417,7 +417,7 @@ private fun CompareResultPanel(result: CompareResponse) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Info, contentDescription = null, tint = statusColors.second, modifier = Modifier.size(18.dp))
                         Text(
-                            text = "Overall: ${comparison.status?.replaceFirstChar { it.uppercase() } ?: "Compared"}",
+                            text = "${tr("Overall:")} ${comparison.status?.replaceFirstChar { it.uppercase() } ?: tr("Compared")}",
                             fontWeight = FontWeight.Bold,
                             color = statusColors.second
                         )

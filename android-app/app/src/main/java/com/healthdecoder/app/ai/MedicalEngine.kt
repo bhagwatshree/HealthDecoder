@@ -8,8 +8,9 @@ import com.google.gson.GsonBuilder
 
 /**
  * On-device port of the Node backend's clinical logic: report comparison, health insights,
- * chat, and detailed analysis. Each method tries Gemini (direct from phone) and falls back
- * to rule-based local logic so the app is fully usable offline / without an API key.
+ * chat, and detailed analysis. Each method tries Gemini (via the backend AI proxy — the key
+ * never touches the device) and falls back to rule-based local logic so the app stays usable
+ * offline or when the proxy is unreachable.
  */
 object MedicalEngine {
 
@@ -17,7 +18,7 @@ object MedicalEngine {
 
     private fun aiJson(context: Context, prompt: String): String? {
         return try {
-            val raw = GeminiClient.generateText(context, prompt)
+            val raw = BackendAiClient.generateText(context, prompt)
             GeminiClient.stripJsonFences(raw)
         } catch (e: Exception) {
             e.printStackTrace()
@@ -239,12 +240,12 @@ Answer (in $language):
                 if (file.exists()) {
                     val bytes = file.readBytes()
                     val mime = if (imagePath.endsWith(".png", true)) "image/png" else "image/jpeg"
-                    GeminiClient.generateFromImage(context, prompt, bytes, mime).trim()
+                    BackendAiClient.generateFromImage(context, prompt, bytes, mime).trim()
                 } else {
-                    GeminiClient.generateText(context, prompt).trim()
+                    BackendAiClient.generateText(context, prompt).trim()
                 }
             } else {
-                GeminiClient.generateText(context, prompt).trim()
+                BackendAiClient.generateText(context, prompt).trim()
             }
             if (answer.isNotBlank()) {
                 answer to "ai"
@@ -401,7 +402,7 @@ Use short paragraphs and dashed lists ("- item"). If a section has nothing, keep
             If no medicine name is legible, return exactly: NONE
         """.trimIndent()
         return try {
-            val raw = GeminiClient.generateFromImage(context, prompt, imageBytes, mimeType)
+            val raw = BackendAiClient.generateFromImage(context, prompt, imageBytes, mimeType)
             val cleaned = GeminiClient.stripJsonFences(raw).trim().removeSurrounding("\"").trim()
             if (cleaned.equals("NONE", ignoreCase = true) || cleaned.isBlank()) "" else cleaned.lines().first().trim()
         } catch (e: Exception) {

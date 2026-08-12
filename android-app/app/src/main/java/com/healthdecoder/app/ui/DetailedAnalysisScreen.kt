@@ -141,7 +141,7 @@ fun DetailedAnalysisScreen(
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            errorMessage,
+                            tr(errorMessage),
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

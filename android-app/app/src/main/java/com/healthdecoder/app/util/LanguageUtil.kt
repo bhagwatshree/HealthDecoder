@@ -1,14 +1,8 @@
 package com.healthdecoder.app.util
 
 import android.content.Context
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
+import com.healthdecoder.app.ai.BackendAiClient
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 
 /**
  * Maps the app's language names to BCP-47 tags used by speech recognition (STT) and
@@ -34,57 +28,12 @@ object LanguageUtil {
 
     fun localeFor(language: String): Locale = Locale.forLanguageTag(tagFor(language))
 
-    /** Translates text from English to target language via Sarvam Translate API */
+    /** Translates text from English to target language via the backend's /api/ai/translate
+     *  proxy (see BackendAiClient) — no Sarvam key ships on the device. */
     fun translate(context: Context, text: String, targetLanguage: String): String {
         if (targetLanguage.equals("English", ignoreCase = true) || text.isBlank()) {
             return text
         }
-        val targetCode = tagFor(targetLanguage)
-        val apiKey = com.healthdecoder.app.local.AppSettings.getSarvamKey(context)
-        if (apiKey.isBlank()) {
-            return text
-        }
-
-        val paragraphs = text.split("\n\n")
-        val translatedParagraphs = paragraphs.map { paragraph ->
-            if (paragraph.isBlank()) "" else translateChunk(paragraph, targetCode, apiKey)
-        }
-        return translatedParagraphs.joinToString("\n\n")
-    }
-
-    private fun translateChunk(text: String, targetCode: String, apiKey: String): String {
-        return try {
-            val client = OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(15, TimeUnit.SECONDS)
-                .build()
-
-            val bodyJson = JsonObject().apply {
-                addProperty("input", text)
-                addProperty("source_language_code", "en-IN")
-                addProperty("target_language_code", targetCode)
-                addProperty("model", "sarvam-translate:v1")
-            }
-
-            val request = Request.Builder()
-                .url("https://api.sarvam.ai/translate")
-                .addHeader("api-subscription-key", apiKey)
-                .addHeader("Content-Type", "application/json")
-                .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val respText = response.body?.string() ?: ""
-                    val root = JsonParser.parseString(respText).asJsonObject
-                    root.get("translated_text")?.asString ?: text
-                } else {
-                    text
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            text
-        }
+        return BackendAiClient.translate(context, text, targetLanguage)
     }
 }

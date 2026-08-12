@@ -89,7 +89,7 @@ private fun DoctorBriefData.toPlainText(): String = buildString {
             append("• ${m.name}${if (meta.isNotBlank()) " ($meta)" else ""}\n")
         }
     }
-    append("\n— Prepared by HealthDecoder")
+    append("\n— Prepared by Health Decoder")
 }.trim()
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -260,7 +260,7 @@ fun DoctorBriefScreen(
                     }
                     if (data.reportCount > 0) {
                         Text(
-                            "${data.reportCount} report(s) on file", fontSize = 12.sp,
+                            "${data.reportCount} ${tr("report(s) on file")}", fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold
                         )
                     }

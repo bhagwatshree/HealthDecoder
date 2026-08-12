@@ -28,6 +28,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import com.healthdecoder.app.local.DemoDataSeeder
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.graphicsLayer
 import com.healthdecoder.app.model.MockProfiles
@@ -51,6 +53,7 @@ fun HomeScreen(
     onNavigateToChat: () -> Unit,
     onNavigateToTrends: () -> Unit,
     onNavigateToAccount: () -> Unit,
+    onNavigateToLogin: () -> Unit = {},
     onNavigateToRecords: () -> Unit,
     onNavigateToMedicationTracker: () -> Unit,
     onNavigateToReminders: () -> Unit,
@@ -65,6 +68,7 @@ fun HomeScreen(
     val isBackendReady = false
 
     val context = androidx.compose.ui.platform.LocalContext.current
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     var profiles by remember { mutableStateOf(listOf<FamilyProfile>()) }
     var selectedProfile by remember { mutableStateOf<FamilyProfile?>(null) }
     var expandedProfileMenu by remember { mutableStateOf(false) }
@@ -112,7 +116,7 @@ fun HomeScreen(
                 onClick = onNavigateToChat,
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                icon = { Icon(Icons.Default.Mic, contentDescription = "Voice Search") },
+                icon = { Icon(Icons.Default.Mic, contentDescription = tr("Voice Search")) },
                 text = { Text(text = tr("Voice Search"), fontWeight = FontWeight.Bold) }
             )
         },
@@ -135,7 +139,7 @@ fun HomeScreen(
                             modifier = Modifier.clickable { expandedProfileMenu = true }
                         ) {
                             Text(
-                                text = selectedProfile?.let { "${it.avatarEmoji} ${it.name}" } ?: "👨‍👩‍👧 Everyone",
+                                text = selectedProfile?.let { "${it.avatarEmoji} ${it.name}" } ?: tr("👨‍👩‍👧 Everyone"),
                                 maxLines = 1,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                 fontWeight = FontWeight.Bold,
@@ -144,7 +148,7 @@ fun HomeScreen(
                             )
                             Icon(
                                 imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = "Switch Profile",
+                                contentDescription = tr("Switch Profile"),
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -153,7 +157,7 @@ fun HomeScreen(
                             onDismissRequest = { expandedProfileMenu = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("👨‍👩‍👧 Everyone") },
+                                text = { Text(tr("👨‍👩‍👧 Everyone")) },
                                 onClick = {
                                     selectedProfile = null
                                     com.healthdecoder.app.local.AppSettings.setActivePatient(context, null)
@@ -174,7 +178,7 @@ fun HomeScreen(
                             }
                             HorizontalDivider()
                             DropdownMenuItem(
-                                text = { Text("⚙️  Manage / edit family") },
+                                text = { Text(tr("⚙️  Manage / edit family")) },
                                 onClick = { expandedProfileMenu = false; showFamilyManager = true }
                             )
                         }
@@ -208,6 +212,37 @@ fun HomeScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                if (selectedProfile?.name.equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true)) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                tr("🧪 You're viewing sample demo data"),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                tr("This isn't real. Remove it, or sign in to start tracking your own records."),
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = {
+                                    coroutineScope.launch {
+                                        DemoDataSeeder.removeDemoData(context)
+                                        familyReload++
+                                        onRefresh()
+                                    }
+                                }) { Text(tr("Remove Demo Data")) }
+                                Button(onClick = onNavigateToLogin) { Text(tr("Sign In")) }
+                            }
+                        }
+                    }
+                }
+
                 actions.chunked(2).forEach { rowActions ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),

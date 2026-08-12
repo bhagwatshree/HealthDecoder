@@ -59,6 +59,39 @@ object LocalRepository {
         dir.listFiles()?.forEach { it.deleteRecursively() }
     }
 
+    /**
+     * Wipes EVERYTHING this app stores about the user on this device — used by "Delete Account"
+     * (AccountScreen), which pairs this with deleting the server account. Broader than
+     * [clearAllData]: that only covers `recordsDir` (the encrypted SQLite DB — reports, pending
+     * tests, medication logs — plus images/sources/detailed-analysis files); family profiles and
+     * medicine/appointment reminders live in separate SharedPreferences and are cleared here too,
+     * along with cancelling their scheduled alarms so nothing fires for data that no longer exists.
+     *
+     * The delete-account dialog promises the user TOTAL removal, so this also clears everything
+     * that merely *identifies* them rather than just their clinical data — see
+     * [AppSettings.clearAllPersonalData] for that list (linked mailbox, biometric session,
+     * patient-keyed trend units, ...) — plus the two secrets kept outside AppSettings: the Gmail
+     * OAuth token and the IMAP password in SecureKeyManager. Leaving any of those behind would
+     * make the promise false.
+     */
+    suspend fun clearAllLocalData(context: Context) = withContext(Dispatchers.IO) {
+        clearAllData(context) // DB (reports, pending tests, med logs) + images/sources/detailed_analysis files
+
+        MedicineReminderManager.cancelAll(context)
+        AppointmentStore.loadAll(context).forEach { AppointmentReminderManager.cancel(context, it.id) }
+        // The mailbox link is about to be wiped, so stop the daily scan that depends on it.
+        com.healthdecoder.app.reminder.EmailScanReminderManager.cancel(context)
+
+        MedicineScheduleStore.clearAll(context)
+        AppointmentStore.clearAll(context)
+
+        SecureKeyManager.setEmailToken(context, null)
+        SecureKeyManager.setImapPassword(context, null)
+        // Covers family profiles, active patient, session + biometric tokens, linked mailbox
+        // config, trend units and the export marker in one pass.
+        AppSettings.clearAllPersonalData(context)
+    }
+
     // ── Reports ───────────────────────────────────────────────────────────────
     suspend fun getReports(context: Context): List<MedicalReport> = withContext(Dispatchers.IO) {
         LocalStore.getReports(context)
@@ -219,7 +252,7 @@ object LocalRepository {
                 }
             }
             // Auto-add follow-up doctor visits from a discharge summary's "FOLLOW UP" section.
-            addFollowUpAppointments(context, section.followUps, reportDate)
+            addFollowUpAppointments(context, section.followUps, reportDate, patientName)
 
             autoResolvePending(context, report)
             saved.add(report)
@@ -311,7 +344,8 @@ object LocalRepository {
     private fun addFollowUpAppointments(
         context: Context,
         followUps: List<com.healthdecoder.app.ai.FollowUp>,
-        reportDate: String
+        reportDate: String,
+        patientName: String?
     ) {
         if (followUps.isEmpty()) return
         var addedAny = false
@@ -340,7 +374,8 @@ object LocalRepository {
                     isRecurring = false,
                     recurrence = "None",
                     hour = 10,
-                    minute = 0
+                    minute = 0,
+                    patientName = patientName.orEmpty()
                 )
             )
             if (added) addedAny = true
@@ -495,7 +530,7 @@ object LocalRepository {
         LocalStore.upsertReport(context, updated)
         // Analyzing a (possibly upload-only) discharge summary should also add its follow-up visits
         // and revive reminders for its medicines, just like a fresh scan does.
-        addFollowUpAppointments(context, section.followUps, updated.reportDate ?: today())
+        addFollowUpAppointments(context, section.followUps, updated.reportDate ?: today(), updated.patientName)
         for (m in updated.medications) if (m.name.isNotBlank())
             MedicineScheduleStore.clearDismissed(context, m.name, updated.patientName ?: "")
         Log.i("ScanDiag", "REPROCESSED id=$id meds=${updated.medications.size} followUps=${section.followUps.size}")
@@ -576,18 +611,24 @@ object LocalRepository {
         val patientNames = LocalStore.getReports(context)
             .mapNotNull { it.patientName?.takeIf { n -> n.isNotBlank() } }.distinct()
         var changed = false
+        val currentOwner = AppSettings.getUserEmail(context)
         for (n in patientNames) {
             if (known.add(n.trim().lowercase())) {
                 stored.add(FamilyProfile(
                     id = LocalStore.newId(), name = n,
                     relation = if (stored.isEmpty()) "Self" else "Family",
-                    avatarEmoji = familyEmojis[stored.size % familyEmojis.size]
+                    avatarEmoji = familyEmojis[stored.size % familyEmojis.size],
+                    ownerEmail = currentOwner
                 ))
                 changed = true
             }
         }
         if (changed) AppSettings.setFamilyProfiles(context, stored)
-        stored
+        // Hide profiles created while signed in as a DIFFERENT account than the current one (or
+        // any account, while signed out) — a shared device must not hand one account's family
+        // list to the next person who opens the app. Untagged (ownerEmail null) profiles predate
+        // this and stay visible to everyone, exactly as before.
+        stored.filter { it.ownerEmail == null || it.ownerEmail.equals(currentOwner, ignoreCase = true) }
     }
 
     /** Adds a new family member (a person you can scan into before any report exists). No-op on a
@@ -599,7 +640,10 @@ object LocalRepository {
         if (n.isEmpty()) return@withContext false
         val list = AppSettings.getFamilyProfilesRaw(context).toMutableList()
         if (list.any { it.name.trim().equals(n, ignoreCase = true) }) return@withContext false
-        list.add(FamilyProfile(LocalStore.newId(), n, relation.ifBlank { "Family" }, emoji.ifBlank { "👤" }, sex, dob))
+        list.add(FamilyProfile(
+            LocalStore.newId(), n, relation.ifBlank { "Family" }, emoji.ifBlank { "👤" }, sex, dob,
+            ownerEmail = AppSettings.getUserEmail(context)
+        ))
         AppSettings.setFamilyProfiles(context, list)
         true
     }
@@ -723,6 +767,14 @@ object LocalRepository {
         if (active != null) {
             reports = reports.filter { it.patientName.equals(active, ignoreCase = true) }
             pending = pending.filter { it.patientName.equals(active, ignoreCase = true) }
+        } else {
+            // "Everyone" must mean everyone visible to the CURRENT viewer, not literally every
+            // record ever stored — otherwise signing out (or switching accounts) would still
+            // surface another account's family member's reports/tests via the "Everyone"
+            // aggregate, even though that member is correctly hidden from the picker itself.
+            val visibleNames = familyMembers(context).map { it.name.trim().lowercase() }.toHashSet()
+            reports = reports.filter { it.patientName.isNullOrBlank() || visibleNames.contains(it.patientName!!.trim().lowercase()) }
+            pending = pending.filter { visibleNames.contains(it.patientName.trim().lowercase()) }
         }
         DashboardEngine.buildDashboard(reports, pending)
     }

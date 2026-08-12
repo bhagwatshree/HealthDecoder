@@ -49,7 +49,7 @@ fun LanguagePickerIcon() {
     var expanded by remember { mutableStateOf(false) }
 
     IconButton(onClick = { expanded = true }) {
-        Icon(imageVector = Icons.Default.Translate, contentDescription = "Change language")
+        Icon(imageVector = Icons.Default.Translate, contentDescription = tr("Change language"))
     }
     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
         AppSettings.SUPPORTED_LANGUAGES.forEach { lang ->

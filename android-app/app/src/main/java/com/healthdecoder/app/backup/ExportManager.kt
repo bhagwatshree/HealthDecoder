@@ -3,6 +3,7 @@ package com.healthdecoder.app.backup
 import android.content.Context
 import android.net.Uri
 import com.healthdecoder.app.local.AppSettings
+import com.healthdecoder.app.local.DemoDataSeeder
 import com.healthdecoder.app.local.LocalStore
 import com.healthdecoder.app.model.FamilyProfile
 import com.healthdecoder.app.model.MedicalReport
@@ -71,6 +72,13 @@ object ExportManager {
         patientFilter: String?,
         family: List<FamilyProfile> = emptyList()
     ): File {
+        // The "Try Demo" sample patient (see DemoDataSeeder) must never leave the device — a real
+        // backup exported for safekeeping, or handed to another family member's phone, must not
+        // carry fake reports/medicines that could be mistaken for that person's actual records.
+        // Filtered here, at the write boundary, so this holds regardless of what a caller passes.
+        val reports = reports.filterNot { it.patientName.equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true) }
+        val family = family.filterNot { it.name.trim().equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true) }
+
         val tag = (patientFilter?.replace(Regex("[^A-Za-z0-9]"), "_")?.take(20) ?: "all")
         val outFile = File(exportsDir(context), "MedicalAssist_${tag}_${stamp.format(Date())}.zip")
 
@@ -144,9 +152,17 @@ object ExportManager {
             }
         } ?: throw IllegalStateException("Couldn't open the selected file.")
 
-        val json = payloadJson ?: throw IllegalStateException("This isn't a Medical Assist export file.")
-        val payload = gson.fromJson(json, Payload::class.java)
+        val json = payloadJson ?: throw IllegalStateException("This isn't a Health Decoder export file.")
+        val rawPayload = gson.fromJson(json, Payload::class.java)
             ?: throw IllegalStateException("The export file is corrupted.")
+
+        // Second layer of the same guard as export(): even if a stray file predating that fix (or
+        // a hand-edited one) somehow contains the demo patient, refuse to import it — this device's
+        // own "Try Demo" flow is the only legitimate source of that data, never an imported file.
+        val payload = rawPayload.copy(
+            reports = rawPayload.reports.filterNot { it.patientName.equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true) },
+            family = rawPayload.family.filterNot { it.name.trim().equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true) }
+        )
 
         var added = 0
         var updated = 0

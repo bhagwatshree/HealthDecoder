@@ -182,10 +182,10 @@ fun IPConfigScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings", fontWeight = FontWeight.Bold) },
+                title = { Text(tr("Settings"), fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = tr("Back"))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -214,14 +214,12 @@ fun IPConfigScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "Preferred Language",
+                    Text(text = tr("Preferred Language"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Text(
-                        text = "Medicine explanations and the AI assistant will use this language. Medicine and test names stay in English.",
+                    Text(text = tr("Medicine explanations and the AI assistant will use this language. Medicine and test names stay in English."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -249,8 +247,7 @@ fun IPConfigScreen(
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column {
-                                        Text(
-                                            text = "Language",
+                                        Text(text = tr("Language"),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -299,14 +296,12 @@ fun IPConfigScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "Voice (Read Aloud)",
+                    Text(text = tr("Voice (Read Aloud)"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Text(
-                        text = "Which voice reads answers aloud. Sarvam & Gemini speak Indian languages well; Phone uses your device's built-in voices (may not have Marathi).",
+                    Text(text = tr("Which voice reads answers aloud. Sarvam & Gemini speak Indian languages well; Phone uses your device's built-in voices (may not have Marathi)."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -318,7 +313,7 @@ fun IPConfigScreen(
                             value = voiceEngine,
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Voice engine") },
+                            label = { Text(tr("Voice engine")) },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = voiceExpanded) },
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.menuAnchor().fillMaxWidth()
@@ -349,14 +344,12 @@ fun IPConfigScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "Medicine Reminder Style",
+                    Text(text = tr("Medicine Reminder Style"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Text(
-                        text = "Full Screen shows a large-text alarm page (even on the lock screen) so medicine names are easy to read. Medicines due at the same time always appear together in one reminder.",
+                    Text(text = tr("Full Screen shows a large-text alarm page (even on the lock screen) so medicine names are easy to read. Medicines due at the same time always appear together in one reminder."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -397,14 +390,12 @@ fun IPConfigScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "Transfer Records",
+                    Text(text = tr("Transfer Records"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Text(
-                        text = "Export a shareable file of your records (with analysis included) to send to another phone or a doctor. Importing merges it into this phone and never re-runs the AI, so it's free.",
+                    Text(text = tr("Export a shareable file of your records (with analysis included) to send to another phone or a doctor. Importing merges it into this phone and never re-runs the AI, so it's free."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -422,7 +413,7 @@ fun IPConfigScreen(
                             Icon(Icons.Default.ArrowDropDown, contentDescription = null)
                         }
                         DropdownMenu(expanded = patientMenuOpen, onDismissRequest = { patientMenuOpen = false }) {
-                            DropdownMenuItem(text = { Text("All patients") }, onClick = { exportPatient = null; patientMenuOpen = false })
+                            DropdownMenuItem(text = { Text(tr("All patients")) }, onClick = { exportPatient = null; patientMenuOpen = false })
                             patients.forEach { p ->
                                 DropdownMenuItem(text = { Text(p) }, onClick = { exportPatient = p; patientMenuOpen = false })
                             }
@@ -436,10 +427,10 @@ fun IPConfigScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Only new since last export", style = MaterialTheme.typography.bodyMedium)
+                            Text(tr("Only new since last export"), style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                if (AppSettings.getLastExportAt(context) == null) "No previous export yet — this sends everything"
-                                else "Sends just what changed since last time",
+                                if (AppSettings.getLastExportAt(context) == null) tr("No previous export yet — this sends everything")
+                                else tr("Sends just what changed since last time"),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -449,8 +440,7 @@ fun IPConfigScreen(
 
                     // Date-range window — keep/transfer just a slice (e.g. this year) for lighter
                     // analysis & trends. Leave blank for no bound. Format YYYY-MM-DD.
-                    Text(
-                        "Date range (optional)",
+                    Text(tr("Date range (optional)"),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -459,7 +449,7 @@ fun IPConfigScreen(
                         OutlinedTextField(
                             value = exportFrom,
                             onValueChange = { exportFrom = it },
-                            label = { Text("From") },
+                            label = { Text(tr("From")) },
                             placeholder = { Text("2026-01-01") },
                             singleLine = true,
                             modifier = Modifier.weight(1f),
@@ -468,7 +458,7 @@ fun IPConfigScreen(
                         OutlinedTextField(
                             value = exportTo,
                             onValueChange = { exportTo = it },
-                            label = { Text("To") },
+                            label = { Text(tr("To")) },
                             placeholder = { Text("2026-12-31") },
                             singleLine = true,
                             modifier = Modifier.weight(1f),
@@ -488,14 +478,14 @@ fun IPConfigScreen(
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             if (transferBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                            else { Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Export") }
+                            else { Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tr("Export")) }
                         }
                         OutlinedButton(
                             onClick = { portableImportLauncher.launch(arrayOf("application/zip", "*/*")) },
                             enabled = !transferBusy,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
-                        ) { Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Import") }
+                        ) { Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tr("Import")) }
                     }
                 }
             }
@@ -511,14 +501,12 @@ fun IPConfigScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "Fix / Merge Patient",
+                    Text(text = tr("Fix / Merge Patient"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Text(
-                        text = "If a name was mis-read on a scan and one person shows up twice, merge the wrong name into the correct one. Moves all their reports, trends, reminders and history together.",
+                    Text(text = tr("If a name was mis-read on a scan and one person shows up twice, merge the wrong name into the correct one. Moves all their reports, trends, reminders and history together."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -537,7 +525,7 @@ fun IPConfigScreen(
                         }
                         DropdownMenu(expanded = mergeMenuOpen, onDismissRequest = { mergeMenuOpen = false }) {
                             if (patients.isEmpty()) {
-                                DropdownMenuItem(text = { Text("No patients yet") }, onClick = { mergeMenuOpen = false })
+                                DropdownMenuItem(text = { Text(tr("No patients yet")) }, onClick = { mergeMenuOpen = false })
                             }
                             patients.forEach { p ->
                                 DropdownMenuItem(text = { Text(p) }, onClick = { mergeFrom = p; if (mergeTo.isBlank()) mergeTo = p; mergeMenuOpen = false })
@@ -548,8 +536,8 @@ fun IPConfigScreen(
                     OutlinedTextField(
                         value = mergeTo,
                         onValueChange = { mergeTo = it },
-                        label = { Text("Correct name") },
-                        placeholder = { Text("e.g. Rajesh Kumar") },
+                        label = { Text(tr("Correct name")) },
+                        placeholder = { Text(tr("e.g. Rajesh Kumar")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
@@ -567,7 +555,7 @@ fun IPConfigScreen(
                     ) {
                         Icon(Icons.Default.MergeType, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Merge")
+                        Text(tr("Merge"))
                     }
                 }
             }
@@ -582,14 +570,12 @@ fun IPConfigScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "Backup & Restore",
+                    Text(text = tr("Backup & Restore"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Text(
-                        text = "Export all your records (reports + images) as a single backup file. Choose your Google Drive or OneDrive folder in the picker to keep a cloud copy. Restore re-imports a backup file.",
+                    Text(text = tr("Export all your records (reports + images) as a single backup file. Choose your Google Drive or OneDrive folder in the picker to keep a cloud copy. Restore re-imports a backup file."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -604,24 +590,22 @@ fun IPConfigScreen(
                             },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
-                        ) { Text("Export Backup") }
+                        ) { Text(tr("Export Backup")) }
                         OutlinedButton(
                             onClick = { importLauncher.launch(arrayOf("application/zip")) },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
-                        ) { Text("Restore") }
+                        ) { Text(tr("Restore")) }
                     }
 
                     // ── Auto Cloud Backup ──────────────────────────────────
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                    Text(
-                        text = "Auto Cloud Backup",
+                    Text(text = tr("Auto Cloud Backup"),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Text(
-                        text = "Pick a folder in Google Drive, OneDrive, or Dropbox. New backups are automatically synced there by the cloud app.",
+                    Text(text = tr("Pick a folder in Google Drive, OneDrive, or Dropbox. New backups are automatically synced there by the cloud app."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -669,14 +653,14 @@ fun IPConfigScreen(
                                 enabled = !syncing && pendingSyncCount > 0,
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(12.dp)
-                            ) { Text("Sync Now") }
+                            ) { Text(tr("Sync Now")) }
                             TextButton(
                                 onClick = {
                                     SafCloudUploader.clearBackupFolder(context)
                                     cloudFolderLabel = null
                                 },
                                 modifier = Modifier.weight(1f)
-                            ) { Text("Disconnect", color = MaterialTheme.colorScheme.error) }
+                            ) { Text(tr("Disconnect"), color = MaterialTheme.colorScheme.error) }
                         }
                     } else {
                         Button(
@@ -687,7 +671,7 @@ fun IPConfigScreen(
                                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                             )
-                        ) { Text("Choose Backup Folder") }
+                        ) { Text(tr("Choose Backup Folder")) }
                     }
                 }
             }
@@ -702,14 +686,12 @@ fun IPConfigScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "Remove Duplicate Reports",
+                    Text(text = tr("Remove Duplicate Reports"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Text(
-                        text = "Finds reports that were saved more than once (same patient, date, and content) and removes the extra copies. The original of each report is always kept. New scans are checked automatically; this cleans up older duplicates.",
+                    Text(text = tr("Finds reports that were saved more than once (same patient, date, and content) and removes the extra copies. The original of each report is always kept. New scans are checked automatically; this cleans up older duplicates."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -749,14 +731,12 @@ fun IPConfigScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "Delete All Data",
+                    Text(text = tr("Delete All Data"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFC62828)
                     )
-                    Text(
-                        text = "Permanently removes every report, medicine, pending test and image. This cannot be undone.",
+                    Text(text = tr("Permanently removes every report, medicine, pending test and image. This cannot be undone."),
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFFB71C1C)
                     )
@@ -773,7 +753,7 @@ fun IPConfigScreen(
                         if (deleting) {
                             CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         } else {
-                            Text("Delete Everything", fontWeight = FontWeight.Bold)
+                            Text(tr("Delete Everything"), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -789,7 +769,7 @@ fun IPConfigScreen(
                     .height(50.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Go to Dashboard", fontWeight = FontWeight.SemiBold)
+                Text(tr("Go to Dashboard"), fontWeight = FontWeight.SemiBold)
             }
         }
 
@@ -813,9 +793,9 @@ fun IPConfigScreen(
                             dupResult = "Removed $removed duplicate report${if (removed == 1) "" else "s"}."
                             dupCandidates = emptyList()
                         }
-                    }) { Text("Remove Duplicates") }
+                    }) { Text(tr("Remove Duplicates")) }
                 },
-                dismissButton = { TextButton(onClick = { showDupDialog = false }) { Text("Cancel") } }
+                dismissButton = { TextButton(onClick = { showDupDialog = false }) { Text(tr("Cancel")) } }
             )
         }
 
@@ -823,8 +803,8 @@ fun IPConfigScreen(
             AlertDialog(
                 onDismissRequest = { showDeleteAllDialog = false },
                 icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFC62828)) },
-                title = { Text("Delete everything?") },
-                text = { Text("This permanently deletes ALL reports, medicines, pending tests and images. This cannot be undone.") },
+                title = { Text(tr("Delete everything?")) },
+                text = { Text(tr("This permanently deletes ALL reports, medicines, pending tests and images. This cannot be undone.")) },
                 confirmButton = {
                     Button(
                         onClick = {
@@ -847,10 +827,10 @@ fun IPConfigScreen(
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
-                    ) { Text("Delete Everything") }
+                    ) { Text(tr("Delete Everything")) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showDeleteAllDialog = false }) { Text("Cancel") }
+                    TextButton(onClick = { showDeleteAllDialog = false }) { Text(tr("Cancel")) }
                 }
             )
         }

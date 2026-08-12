@@ -12,7 +12,11 @@ data class FamilyProfile(
     @SerializedName("relation") val relation: String,
     @SerializedName("avatarEmoji") val avatarEmoji: String,
     @SerializedName("sex") val sex: String = "",           // "Male" | "Female" | "Other" | ""
-    @SerializedName("dateOfBirth") val dateOfBirth: String = "" // YYYY-MM-DD; age is derived from this
+    @SerializedName("dateOfBirth") val dateOfBirth: String = "", // YYYY-MM-DD; age is derived from this
+    // The account signed in when this profile was created, or null if created while signed out.
+    // Null means visible to everyone (guest or any account); a real value means visible only
+    // while THAT account is signed in — see LocalRepository.familyMembers().
+    @SerializedName("ownerEmail") val ownerEmail: String? = null
 )
 
 object MockProfiles {
@@ -351,7 +355,10 @@ data class AuthRequest(
     @SerializedName("password") val password: String
 )
 
-/** Full registration: profile fields + email/password + a Firebase phone-OTP ID token. */
+/** Full registration: profile fields + email/password, plus an OPTIONAL Firebase phone-OTP ID
+ *  token. Signup works without it (email+password only, no billed SMS); [phoneIdToken] is only
+ *  sent when phone auth is enabled (see FeatureFlags.PHONE_AUTH_ENABLED) and the user completed
+ *  the OTP step. */
 data class SignupRequest(
     @SerializedName("firstName") val firstName: String,
     @SerializedName("lastName") val lastName: String,
@@ -359,7 +366,7 @@ data class SignupRequest(
     @SerializedName("gender") val gender: String, // "male" | "female" | "other" | "prefer_not_to_say"
     @SerializedName("email") val email: String,
     @SerializedName("password") val password: String,
-    @SerializedName("phoneIdToken") val phoneIdToken: String
+    @SerializedName("phoneIdToken") val phoneIdToken: String? = null
 )
 
 /** Phone+OTP login: the phone was already OTP-verified client-side by the Firebase SDK. */

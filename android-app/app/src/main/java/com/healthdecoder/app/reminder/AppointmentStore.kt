@@ -14,7 +14,10 @@ data class AppointmentSchedule(
     val isRecurring: Boolean = false, // legacy flag
     val recurrence: String = "None", // "None", "Daily", "Weekly", "Monthly", "3 Months", "6 Months", "1 Year"
     val hour: Int,
-    val minute: Int
+    val minute: Int,
+    // Blank means "no patient recorded" (appointments saved before this field existed) — treated as
+    // visible to every family member rather than hidden, same as an untagged family profile.
+    val patientName: String = ""
 )
 
 /**
@@ -53,13 +56,18 @@ object AppointmentStore {
         saveAll(context, list)
     }
 
-    /** Adds [appointment] unless one for the same doctor on the same date already exists (so a
-     *  re-scan of the same discharge summary doesn't pile up duplicate follow-ups). Returns true if added. */
+    /** Adds [appointment] unless one for the same doctor, date AND patient already exists (so a
+     *  re-scan of the same discharge summary doesn't pile up duplicate follow-ups — while still
+     *  allowing two different family members to see the same doctor on the same date). Returns
+     *  true if added. */
     fun addIfAbsent(context: Context, appointment: AppointmentSchedule): Boolean {
         val list = loadAll(context)
         val exists = list.any {
             it.doctorName.trim().equals(appointment.doctorName.trim(), ignoreCase = true) &&
-                it.date == appointment.date
+                it.date == appointment.date &&
+                // .orEmpty(): a pre-existing appointment saved before patientName existed
+                // deserializes to a raw null here, not the Kotlin default — see TodaysMedicinesTab.
+                it.patientName.orEmpty().trim().equals(appointment.patientName.orEmpty().trim(), ignoreCase = true)
         }
         if (exists) return false
         saveAll(context, list + appointment)

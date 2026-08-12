@@ -1,19 +1,18 @@
 package com.healthdecoder.app.local
 
 import android.content.Context
-import com.healthdecoder.app.BuildKeys
 import com.healthdecoder.app.model.FamilyProfile
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
 /**
- * Stores the on-device API keys (entered by the user in Settings) so the phone can call
- * Gemini / Sarvam directly without a PC server. Reuses the existing prefs file.
+ * Local app preferences (SharedPreferences-backed). No AI provider API keys are stored here
+ * anymore — Gemini/Sarvam calls are proxied through the backend (see ai/BackendAiClient.kt),
+ * so the phone never holds a raw key at all, "bring your own key" included (that's saved
+ * server-side only, see AccountScreen's Save Key handler).
  */
 object AppSettings {
     private const val PREFS = "medical_scanner_prefs"
-    private const val KEY_GEMINI = "gemini_api_key"
-    private const val KEY_SARVAM = "sarvam_api_key"
     private const val KEY_LANGUAGE = "preferred_language"
     private const val KEY_VOICE_ENGINE = "voice_engine"
     private const val KEY_REMINDER_STYLE = "reminder_style"
@@ -92,6 +91,17 @@ object AppSettings {
 
     fun setDisclaimerAccepted(context: Context, accepted: Boolean) {
         prefs(context).edit().putBoolean(KEY_DISCLAIMER_ACCEPTED, accepted).apply()
+    }
+
+    /** First-launch onboarding carousel (see OnboardingScreen / Navigation.kt), shown once right
+     *  after the medical disclaimer is accepted, and never again. */
+    private const val KEY_ONBOARDING_SEEN = "onboarding_seen"
+
+    fun isOnboardingSeen(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_ONBOARDING_SEEN, false)
+
+    fun setOnboardingSeen(context: Context, seen: Boolean) {
+        prefs(context).edit().putBoolean(KEY_ONBOARDING_SEEN, seen).apply()
     }
 
     /** Unit system trend charts standardise every reading to. Conventional (Indian/US: mg/dL,
@@ -210,32 +220,10 @@ object AppSettings {
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    // Keys fall back to the embedded BuildKeys so a non-technical user never has to enter
-    // anything; a stored override (if ever set) wins.
-    fun getGeminiKey(context: Context): String {
-        val stored = prefs(context).getString(KEY_GEMINI, "")?.trim().orEmpty()
-        return stored.ifEmpty { BuildKeys.GEMINI_API_KEY }
-    }
-
-    fun setGeminiKey(context: Context, key: String) {
-        prefs(context).edit().putString(KEY_GEMINI, key.trim()).apply()
-    }
-
-    fun getSarvamKey(context: Context): String {
-        val stored = prefs(context).getString(KEY_SARVAM, "")?.trim().orEmpty()
-        return stored.ifEmpty { BuildKeys.SARVAM_API_KEY }
-    }
-
-    fun setSarvamKey(context: Context, key: String) {
-        prefs(context).edit().putString(KEY_SARVAM, key.trim()).apply()
-    }
-
-    fun hasGeminiKey(context: Context): Boolean = getGeminiKey(context).isNotEmpty()
-
     // ── Account / login ──────────────────────────────────────────────────────
-    // The backend never sees scanned images (all AI calls happen on-device via GeminiClient),
-    // it only issues which key to use and tracks each user's free-tier usage. See
-    // network/AccountSync.kt for how the JWT below is used to pull that assigned key.
+    // All AI calls (scan/insights/chat/tts/translate) go through the backend's /api/ai/*
+    // proxy — it resolves a pooled or BYOK Gemini/Sarvam key server-side per call, and the
+    // key never reaches the device. See ai/BackendAiClient.kt and network/AccountSync.kt.
     private const val KEY_AUTH_TOKEN = "auth_token"
     private const val KEY_USER_EMAIL = "auth_user_email"
 
@@ -280,10 +268,48 @@ object AppSettings {
         prefs(context).edit().putString(KEY_DEVICE_TOKEN, token).apply()
     }
 
-    /** Logs out. Deliberately does NOT clear the Gemini/Sarvam keys — they fall back to
-     *  BuildKeys so scanning still works offline/logged-out, just without a personal quota. */
+    /** Logs out. There's no local key state to clear anymore — AI calls always go through
+     *  the backend proxy, which falls back to the anonymous device pool once logged out.
+     *
+     *  Does clear the active patient selection: it's shown right next to the account row on
+     *  Home, so leaving a specific family member's name selected after sign-out reads as if
+     *  it's still tied to the account that just logged out — and on a shared device, the next
+     *  person to sign in would otherwise land straight on a stranger's selected patient. */
     fun logout(context: Context) {
         prefs(context).edit().remove(KEY_AUTH_TOKEN).remove(KEY_USER_EMAIL).apply()
+        setActivePatient(context, null)
+    }
+
+    /**
+     * Wipes every identifying value this class stores. Used by "Delete Account" (see
+     * AccountScreen -> LocalRepository.clearAllLocalData), where the user is promised total
+     * removal — so it is not enough to drop the medical records: anything naming a person also
+     * has to go. Easy things to miss, all cleared here: the linked mailbox address and IMAP
+     * server config, the biometric quick-login slot (which otherwise keeps a session token and
+     * email for an account that no longer exists), the export watermark keyed by email, and the
+     * per-test trend units map whose KEYS are patient names.
+     *
+     * Deliberately KEPT, because none of it identifies anyone: the anonymous device install id
+     * (the free-tier quota counter is tied to it, so clearing it would hand out a fresh quota),
+     * and plain UI preferences — theme, language, unit system, disclaimer acceptance, scan tuning.
+     *
+     * Secrets held OUTSIDE this class — the Gmail OAuth token and the IMAP password — live in
+     * SecureKeyManager and are cleared by the caller.
+     */
+    fun clearAllPersonalData(context: Context) {
+        // Read before the batched edit is applied, since the marker's key embeds the email.
+        val exportMarkerKey = KEY_LAST_EXPORT_AT + "_" + (getUserEmail(context) ?: "")
+        prefs(context).edit()
+            .remove(KEY_AUTH_TOKEN).remove(KEY_USER_EMAIL)
+            .remove(KEY_BIOMETRIC_ENABLED).remove(KEY_BIOMETRIC_TOKEN).remove(KEY_BIOMETRIC_USER_EMAIL)
+            .remove(KEY_FAMILY).remove(KEY_ACTIVE_PATIENT)
+            .remove(KEY_TREND_STANDARD_UNITS)
+            .remove(exportMarkerKey)
+            .remove(KEY_EMAIL_CONSENT).remove(KEY_LINKED_EMAIL).remove(KEY_LINKED_EMAIL_TYPE)
+            .remove(KEY_IMAP_HOST).remove(KEY_IMAP_PORT).remove(KEY_EMAIL_SEARCH_PROMPT)
+            .remove(KEY_EMAIL_SCAN_HOUR).remove(KEY_EMAIL_SCAN_MINUTE)
+            .remove(KEY_RESEARCH_DATA_CONSENT)
+            .apply()
     }
 
     fun isBiometricEnabled(context: Context): Boolean =
@@ -377,6 +403,19 @@ object AppSettings {
 
     fun setEmailConsentGranted(context: Context, granted: Boolean) {
         prefs(context).edit().putBoolean(KEY_EMAIL_CONSENT, granted).apply()
+    }
+
+    // ── Research data sharing (opt-in, off by default) ──────────────────────
+    // Records the user's preference only. No aggregation/transmission pipeline exists yet —
+    // this flag is read by nothing else today. It exists so a future opt-in-only pipeline can
+    // launch scoped to users who already said yes, instead of asking again.
+    private const val KEY_RESEARCH_DATA_CONSENT = "research_data_sharing_consent"
+
+    fun isResearchDataSharingConsented(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_RESEARCH_DATA_CONSENT, false)
+
+    fun setResearchDataSharingConsented(context: Context, granted: Boolean) {
+        prefs(context).edit().putBoolean(KEY_RESEARCH_DATA_CONSENT, granted).apply()
     }
 
     fun getLinkedEmail(context: Context): String? =

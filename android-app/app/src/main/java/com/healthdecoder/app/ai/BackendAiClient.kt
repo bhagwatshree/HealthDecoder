@@ -50,6 +50,62 @@ object BackendAiClient {
     fun generateFromImages(context: Context, prompt: String, images: List<Pair<ByteArray, String>>): String =
         generate(context, prompt, images)
 
+    /**
+     * Text-to-speech via POST /api/ai/tts — returns base64-encoded audio clips (WAV), or an
+     * empty list on ANY failure (missing auth, network error, backend miss). TTS is a nice-to-
+     * have, never worth crashing or blocking the UI over, so this deliberately never throws.
+     */
+    fun tts(context: Context, text: String, language: String, engine: String): List<String> = try {
+        val token = authToken(context)
+        val body = JsonObject().apply {
+            addProperty("text", text)
+            addProperty("language", language)
+            addProperty("engine", engine)
+        }
+        val request = Request.Builder()
+            .url("${NetworkModule.AI_PROXY_BASE_URL}api/ai/tts")
+            .addHeader("Authorization", "Bearer $token")
+            .addHeader("ngrok-skip-browser-warning", "true")
+            .post(body.toString().toRequestBody(JSON_MEDIA.toMediaType()))
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return emptyList()
+            val root = JsonParser.parseString(response.body?.string().orEmpty()).asJsonObject
+            root.getAsJsonArray("audios")?.map { it.asString } ?: emptyList()
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        emptyList()
+    }
+
+    /**
+     * Translation via POST /api/ai/translate — returns the translated text, or the ORIGINAL
+     * `text` on ANY failure, so a translation miss never blocks the caller.
+     */
+    fun translate(context: Context, text: String, targetLanguage: String): String = try {
+        val token = authToken(context)
+        val body = JsonObject().apply {
+            addProperty("text", text)
+            addProperty("targetLanguage", targetLanguage)
+        }
+        val request = Request.Builder()
+            .url("${NetworkModule.AI_PROXY_BASE_URL}api/ai/translate")
+            .addHeader("Authorization", "Bearer $token")
+            .addHeader("ngrok-skip-browser-warning", "true")
+            .post(body.toString().toRequestBody(JSON_MEDIA.toMediaType()))
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return text
+            val root = JsonParser.parseString(response.body?.string().orEmpty()).asJsonObject
+            root.get("translated_text")?.asString ?: text
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        text
+    }
+
     private fun authToken(context: Context): String =
         AppSettings.getAuthToken(context)
             ?: AppSettings.getDeviceToken(context)

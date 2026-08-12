@@ -65,8 +65,8 @@ fun MedicineInfoHost(controller: MedicineInfoController) {
             icon = { Icon(Icons.Default.Medication, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
             title = { Text(tr("Why is this medicine used?")) },
             text = {
-                Text("Get a short, easy explanation of why \"$name\" is prescribed, plus key tips. " +
-                    "The first lookup uses the internet, then it's saved so it opens instantly next time.")
+                Text("${tr("Get a short, easy explanation of why")} \"$name\" ${tr("is prescribed, plus key tips. " +
+                    "The first lookup uses the internet, then it's saved so it opens instantly next time.")}")
             },
             confirmButton = {
                 Button(onClick = { controller.showFor = name; controller.pendingConfirm = null }) {
@@ -232,7 +232,7 @@ fun MedicineInfoSheet(
                 ) {
                     Icon(Icons.Default.Search, null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Look Up \"${editableName.trim()}\"", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("${tr("Look Up")} \"${editableName.trim()}\"", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             }
 

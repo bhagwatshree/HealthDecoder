@@ -116,7 +116,7 @@ fun MedicationTrackerScreen(
                         IconButton(onClick = { exitSelection() }) {
                             Icon(imageVector = Icons.Default.Close, contentDescription = tr("Cancel selection"))
                         }
-                        Text(text = "${selected.size} selected", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text(text = "${selected.size} ${tr("selected")}", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                         OutlinedButton(
                             onClick = { showBulkFrequencyDialog = true },
                             enabled = selected.isNotEmpty(),
@@ -188,7 +188,7 @@ fun MedicationTrackerScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                 ) {
                     Text(
-                        text = errorMessage,
+                        text = tr(errorMessage),
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(16.dp)
@@ -314,7 +314,7 @@ fun MedicationTrackerScreen(
                         },
                         enabled = bulkFrequency.isNotBlank() && selected.isNotEmpty()
                     ) {
-                        Text("Apply to ${selected.size}")
+                        Text("${tr("Apply to")} ${selected.size}")
                     }
                 },
                 dismissButton = {

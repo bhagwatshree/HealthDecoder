@@ -16,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,8 +40,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
+import com.healthdecoder.app.FeatureFlags
 import com.healthdecoder.app.auth.BiometricHelper
 import com.healthdecoder.app.local.AppSettings
+import com.healthdecoder.app.local.LocalRepository
 import com.healthdecoder.app.local.LocalStore
 import com.healthdecoder.app.local.SecureKeyManager
 import com.healthdecoder.app.model.KeyAssignment
@@ -77,6 +81,43 @@ fun AccountScreen(
     var loadError by remember { mutableStateOf<String?>(null) }
     var isFingerprintEnabled by remember { mutableStateOf(AppSettings.isBiometricEnabled(context)) }
     var fingerprintError by remember { mutableStateOf<String?>(null) }
+
+    var showDeleteAccountDialog by remember { mutableStateOf(false) }
+    var isDeletingAccount by remember { mutableStateOf(false) }
+    var deleteAccountError by remember { mutableStateOf<String?>(null) }
+
+    // Hoisted here because tr() is @Composable and can't be called from the plain onClick /
+    // coroutine lambdas below where these Toasts are shown.
+    val scanningInboxToast = tr("Scanning inbox for new reports…")
+    val foundNewReportsToastPrefix = tr("Found")
+    val foundNewReportsToastSuffix = tr("new report(s) — check your notifications.")
+    val noNewReportsInLast2DaysToast = tr("No new reports found in the last 2 days.")
+    val scanFailedCheckSettingsToast = tr("Scan failed. Check your email settings and try again.")
+    val emailScanHistoryClearedToast = tr("Email scan history cleared — reports can be re-detected.")
+    val pleaseLinkGoogleAccountToast = tr("Please link your Google Account first.")
+    val emailSettingsSavedToast = tr("Email settings saved successfully.")
+    val pleaseEnterEmailAddressToast = tr("Please enter an email address.")
+
+    // DESTRUCTIVE AND IRREVERSIBLE: deletes the server account, then — only once that succeeds —
+    // wipes every local record too. On failure nothing local is touched, so the user's on-device
+    // data survives a network error or a server-side failure.
+    fun deleteAccount() {
+        isDeletingAccount = true
+        deleteAccountError = null
+        coroutineScope.launch {
+            val result = runCatching { NetworkModule.getApi(context).deleteAccount() }
+            result.onSuccess {
+                runCatching { LocalRepository.clearAllLocalData(context) }
+                AppSettings.logout(context)
+                isDeletingAccount = false
+                showDeleteAccountDialog = false
+                onLoggedOut()
+            }.onFailure { e ->
+                isDeletingAccount = false
+                deleteAccountError = e.apiErrorMessage() ?: e.message?.takeIf { it.isNotBlank() } ?: "Failed to delete account. Check your connection and try again."
+            }
+        }
+    }
 
     // Just viewing the screen must never consume a free-tier issuance — use the read-only
     // peek endpoint here. AccountSync.refreshAssignedKeys (which does consume one, and also
@@ -129,12 +170,12 @@ fun AccountScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         TopBarLogo()
-                        Text("Account", fontWeight = FontWeight.Bold)
+                        Text(tr("Account"), fontWeight = FontWeight.Bold)
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = tr("Back"))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -159,7 +200,7 @@ fun AccountScreen(
             }
 
             loadError?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                Text(tr(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             }
 
             if (!com.healthdecoder.app.local.SecureKeyManager.isStorageHardwareBacked()) {
@@ -178,10 +219,10 @@ fun AccountScreen(
                             tint = MaterialTheme.colorScheme.onErrorContainer
                         )
                         Text(
-                            "This device's secure hardware storage is unavailable, so your local " +
+                            tr("This device's secure hardware storage is unavailable, so your local " +
                                 "records key and linked-email credentials are stored without " +
                                 "hardware-backed encryption. Your data still isn't sent anywhere " +
-                                "insecurely, but this device offers weaker protection than usual.",
+                                "insecurely, but this device offers weaker protection than usual."),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -189,18 +230,21 @@ fun AccountScreen(
                 }
             }
 
-            if (account == null && !isLoading) {
+            // Gated on isLoggedIn (do we HAVE a session), not account != null (did the profile
+            // fetch succeed) — a logged-in user whose getMe() call failed on a flaky connection
+            // must not be told "you're using this without an account" and lose the Log Out button.
+            if (!AppSettings.isLoggedIn(context) && !isLoading) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("You're using HealthDecoder without an account", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(tr("You're using Health Decoder without an account"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(
-                            "Scanning, reminders, and everything else work fully on this device without signing in. " +
+                            tr("Scanning, reminders, and everything else work fully on this device without signing in. " +
                                 "Sign-in is optional (it sends an SMS code, so it isn't automatic) — use it if you want a " +
-                                "profile or a personal API key that follows you across devices.",
+                                "profile or a personal API key that follows you across devices."),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -208,7 +252,7 @@ fun AccountScreen(
                             onClick = onNavigateToLogin,
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp)
-                        ) { Text("Sign In") }
+                        ) { Text(tr("Sign In")) }
                     }
                 }
             }
@@ -229,7 +273,7 @@ fun AccountScreen(
                             Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Text(
-                            "Plan: ${acc.plan.replaceFirstChar { it.uppercase() }}",
+                            "${tr("Plan:")} ${acc.plan.replaceFirstChar { it.uppercase() }}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -259,8 +303,8 @@ fun AccountScreen(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
-                                Text("Server Settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                Text("Server address, language, voice, backups", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(tr("Server Settings"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text(tr("Server address, language, voice, backups"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                         Icon(
@@ -283,13 +327,13 @@ fun AccountScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("AI Vision Engine & API Key", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Text(tr("AI Vision Engine & API Key"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
                                     color = if (a.billedTo == "own") Color(0xFFE8EAF6) else Color(0xFFE8F5E9)
                                 ) {
                                     Text(
-                                        text = if (a.billedTo == "own") "Secondary: Custom Key" else "Primary: Shared Key Pool",
+                                        text = if (a.billedTo == "own") tr("Secondary: Custom Key") else tr("Primary: Shared Key Pool"),
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
@@ -300,12 +344,11 @@ fun AccountScreen(
 
                             when (a.billedTo) {
                                 "own" -> {
-                                    Text(
-                                        "Using your individual Gemini API key — unlimited scans, bypassing the free tier limits.",
+                                    Text(tr("Using your individual Gemini API key — unlimited scans, bypassing the free tier limits."),
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 }
-                                "premium" -> Text("Premium plan — unlimited usage.", style = MaterialTheme.typography.bodySmall)
+                                "premium" -> Text(tr("Premium plan — unlimited usage."), style = MaterialTheme.typography.bodySmall)
                                 else -> {
                                     val used = a.usageToday.coerceAtMost(a.limit)
                                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -317,8 +360,7 @@ fun AccountScreen(
                                         Text("$used / ${a.limit} free daily scans used (Shared Key Pool)", style = MaterialTheme.typography.bodySmall)
                                     }
                                     if (a.quotaExceeded) {
-                                        Text(
-                                            "Today's free pool quota is used up. Add a personal API key below for unlimited scans, or wait until tomorrow.",
+                                        Text(tr("Today's free pool quota is used up. Add a personal API key below for unlimited scans, or wait until tomorrow."),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.error
                                         )
@@ -334,13 +376,11 @@ fun AccountScreen(
                             var keyActionMessage by remember { mutableStateOf<String?>(null) }
                             var keyActionIsError by remember { mutableStateOf(false) }
 
-                            Text(
-                                "Custom API Key (Optional)",
+                            Text(tr("Custom API Key (Optional)"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
-                            Text(
-                                "By default the app uses the shared key pool — you don't need to do anything. Advanced: if you already have your own Gemini API key you can paste it below to use it instead.",
+                            Text(tr("By default the app uses the shared key pool — you don't need to do anything. Advanced: if you already have your own Gemini API key you can paste it below to use it instead."),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -348,8 +388,8 @@ fun AccountScreen(
                             OutlinedTextField(
                                 value = customKeyInput,
                                 onValueChange = { customKeyInput = it },
-                                label = { Text("Gemini API Key (AIzaSy...)") },
-                                placeholder = { Text("Leave blank to use Primary Shared Key Pool") },
+                                label = { Text(tr("Gemini API Key (AIzaSy...)")) },
+                                placeholder = { Text(tr("Leave blank to use Primary Shared Key Pool")) },
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.fillMaxWidth()
@@ -357,7 +397,7 @@ fun AccountScreen(
 
                             keyActionMessage?.let { msg ->
                                 Text(
-                                    msg,
+                                    tr(msg),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (keyActionIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.SemiBold
@@ -385,7 +425,6 @@ fun AccountScreen(
                                             }
                                             isSavingKey = false
                                             res.onSuccess {
-                                                AppSettings.setGeminiKey(context, customKeyInput.trim())
                                                 AccountSync.refreshAssignedKeys(context)
                                                 keyActionMessage = "Personal API Key saved! Switched to Individual Key mode."
                                                 keyActionIsError = false
@@ -401,10 +440,11 @@ fun AccountScreen(
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(10.dp)
                                 ) {
-                                    Text("Save Key")
+                                    Text(tr("Save Key"))
                                 }
 
-                                if (a.billedTo == "own" || AppSettings.getGeminiKey(context).isNotBlank()) {
+                                // Gate on a.billedTo alone — the client no longer holds any key locally to check.
+                                if (a.billedTo == "own") {
                                     OutlinedButton(
                                         onClick = {
                                             isSavingKey = true
@@ -417,16 +457,13 @@ fun AccountScreen(
                                                 }
                                                 isSavingKey = false
                                                 res.onSuccess {
-                                                    AppSettings.setGeminiKey(context, "")
                                                     AccountSync.refreshAssignedKeys(context)
                                                     keyActionMessage = "Reverted to Primary Shared Key Pool."
                                                     keyActionIsError = false
                                                     load()
-                                                }.onFailure {
-                                                    AppSettings.setGeminiKey(context, "")
-                                                    keyActionMessage = "Reverted to Primary Shared Key Pool locally."
-                                                    keyActionIsError = false
-                                                    load()
+                                                }.onFailure { e ->
+                                                    keyActionMessage = e.apiErrorMessage() ?: "Failed to revert to shared pool."
+                                                    keyActionIsError = true
                                                 }
                                             }
                                         },
@@ -434,7 +471,7 @@ fun AccountScreen(
                                         modifier = Modifier.weight(1f),
                                         shape = RoundedCornerShape(10.dp)
                                     ) {
-                                        Text("Revert to Pool")
+                                        Text(tr("Revert to Pool"))
                                     }
                                 }
                             }
@@ -455,7 +492,7 @@ fun AccountScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("App Theme", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(tr("App Theme"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(12.dp))
                         var currentThemeMode by remember { mutableStateOf(AppSettings.getThemeMode(context)) }
                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -466,7 +503,7 @@ fun AccountScreen(
                                     AppSettings.setThemeMode(context, AppSettings.THEME_LIGHT)
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3)
-                            ) { Text("Light") }
+                            ) { Text(tr("Light")) }
                             SegmentedButton(
                                 selected = currentThemeMode == AppSettings.THEME_DARK,
                                 onClick = {
@@ -474,7 +511,7 @@ fun AccountScreen(
                                     AppSettings.setThemeMode(context, AppSettings.THEME_DARK)
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3)
-                            ) { Text("Dark") }
+                            ) { Text(tr("Dark")) }
                             SegmentedButton(
                                 selected = currentThemeMode == AppSettings.THEME_SYSTEM,
                                 onClick = {
@@ -482,7 +519,7 @@ fun AccountScreen(
                                     AppSettings.setThemeMode(context, AppSettings.THEME_SYSTEM)
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3)
-                            ) { Text("System") }
+                            ) { Text(tr("System")) }
                         }
                     }
                 }
@@ -493,11 +530,11 @@ fun AccountScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Lab Units", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(tr("Lab Units"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            "The unit every trend chart standardises readings to. Reports in a different " +
-                                "unit are converted automatically; each report still shows its original value.",
+                            tr("The unit every trend chart standardises readings to. Reports in a different " +
+                                "unit are converted automatically; each report still shows its original value."),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -511,7 +548,7 @@ fun AccountScreen(
                                     AppSettings.setUnitSystem(context, AppSettings.UNIT_SYSTEM_CONVENTIONAL)
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
-                            ) { Text("Indian (mg/dL)") }
+                            ) { Text(tr("Indian (mg/dL)")) }
                             SegmentedButton(
                                 selected = currentUnitSystem == AppSettings.UNIT_SYSTEM_SI,
                                 onClick = {
@@ -519,12 +556,148 @@ fun AccountScreen(
                                     AppSettings.setUnitSystem(context, AppSettings.UNIT_SYSTEM_SI)
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
-                            ) { Text("International (SI)") }
+                            ) { Text(tr("International (SI)")) }
                         }
                     }
                 }
 
+                // Demo data — lets a brand-new user (most likely a Play Store tester who has never
+                // scanned a real document) see Records/Trends/Reminders/Doctor Brief populated
+                // without scanning anything. Local-only, so it belongs alongside the other
+                // local-only cards above (Server Settings, App Theme, Lab Units) rather than
+                // being gated on login. Same entry point as the onboarding carousel's "Try Demo".
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        var demoDataPresent by remember { mutableStateOf<Boolean?>(null) }
+                        var isTogglingDemo by remember { mutableStateOf(false) }
+                        LaunchedEffect(Unit) {
+                            demoDataPresent = com.healthdecoder.app.local.DemoDataSeeder.isDemoDataPresent(context)
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Science,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                if (demoDataPresent == true) "Demo Data Active" else "Try Demo Data",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Text(
+                            if (demoDataPresent == true)
+                                "The sample patient \"${com.healthdecoder.app.local.DemoDataSeeder.DEMO_PATIENT_NAME}\" is visible in your family list, with example reports, reminders and an appointment."
+                            else
+                                "Adds a sample patient with example reports, reminders and an appointment, so you can explore the app before scanning anything real.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (demoDataPresent == true) {
+                            OutlinedButton(
+                                onClick = {
+                                    isTogglingDemo = true
+                                    coroutineScope.launch {
+                                        runCatching { com.healthdecoder.app.local.DemoDataSeeder.removeDemoData(context) }
+                                        demoDataPresent = com.healthdecoder.app.local.DemoDataSeeder.isDemoDataPresent(context)
+                                        isTogglingDemo = false
+                                    }
+                                },
+                                enabled = !isTogglingDemo,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                if (isTogglingDemo) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Text(tr("Remove Demo Data"))
+                                }
+                            }
+                        } else {
+                            Button(
+                                onClick = {
+                                    isTogglingDemo = true
+                                    coroutineScope.launch {
+                                        runCatching { com.healthdecoder.app.local.DemoDataSeeder.seedDemoData(context) }
+                                        demoDataPresent = com.healthdecoder.app.local.DemoDataSeeder.isDemoDataPresent(context)
+                                        isTogglingDemo = false
+                                    }
+                                },
+                                enabled = !isTogglingDemo,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                if (isTogglingDemo) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                                } else {
+                                    Text(tr("Add Demo Data"))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Icon(
+                                    imageVector = Icons.Default.Science,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(tr("Help Fund This App"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            }
+                            var researchConsent by remember { mutableStateOf(AppSettings.isResearchDataSharingConsented(context)) }
+                            Switch(
+                                checked = researchConsent,
+                                onCheckedChange = { checked ->
+                                    researchConsent = checked
+                                    AppSettings.setResearchDataSharingConsented(context, checked)
+                                }
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            tr("Why: Health Decoder stays free by keeping costs low, not by selling your records. " +
+                                "If you opt in here, only your age and sex — never your name, reports, or exact location — " +
+                                "would be shared in aggregate with medical research institutes, to help fund keeping the app " +
+                                "free for every family instead of running ads or charging a subscription."),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            tr("This program hasn't launched yet — turning this on today only saves your preference. " +
+                                "Nothing is sent anywhere until a real data-sharing pipeline exists, and you can change " +
+                                "your answer here at any time."),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
                 if (BiometricHelper.isBiometricsAvailable(context)) {
+                    val enableFingerprintTitle = tr("Enable Fingerprint Login")
+                    val enableFingerprintSubtitle = tr("Confirm fingerprint to register")
+                    val fingerprintReloginError = tr("Error: Please log in again to configure fingerprint.")
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
@@ -544,8 +717,8 @@ fun AccountScreen(
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column {
-                                    Text("Fingerprint Login", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                    Text("Sign in quickly using fingerprint", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(tr("Fingerprint Login"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text(tr("Sign in quickly using fingerprint"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                             Switch(
@@ -556,8 +729,8 @@ fun AccountScreen(
                                         if (activity != null) {
                                             BiometricHelper.showBiometricPrompt(
                                                 activity = activity,
-                                                title = "Enable Fingerprint Login",
-                                                subtitle = "Confirm fingerprint to register",
+                                                title = enableFingerprintTitle,
+                                                subtitle = enableFingerprintSubtitle,
                                                 onResult = { result ->
                                                     if (result.isSuccess) {
                                                         val currentToken = AppSettings.getAuthToken(context)
@@ -568,7 +741,7 @@ fun AccountScreen(
                                                             AppSettings.setBiometricUserEmail(context, currentEmail)
                                                             isFingerprintEnabled = true
                                                         } else {
-                                                            fingerprintError = "Error: Please log in again to configure fingerprint."
+                                                            fingerprintError = fingerprintReloginError
                                                         }
                                                     } else {
                                                         isFingerprintEnabled = false
@@ -613,7 +786,7 @@ fun AccountScreen(
                                 modifier = Modifier.size(24.dp)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text("Local Database Encryption", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(tr("Local Database Encryption"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         }
                         Box(
                             modifier = Modifier
@@ -621,8 +794,7 @@ fun AccountScreen(
                                 .background(Color(0xFFE8F5E9))
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Text(
-                                text = "AES-SQLCipher",
+                            Text(text = tr("AES-SQLCipher"),
                                 color = Color(0xFF2E7D32),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
@@ -644,7 +816,7 @@ fun AccountScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Change Password", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(tr("Change Password"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             IconButton(onClick = { showChangePasswordSection = !showChangePasswordSection }) {
                                 Icon(
                                     imageVector = if (showChangePasswordSection) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -669,7 +841,7 @@ fun AccountScreen(
                             OutlinedTextField(
                                 value = currentPassword,
                                 onValueChange = { currentPassword = it },
-                                label = { Text("Current Password") },
+                                label = { Text(tr("Current Password")) },
                                 singleLine = true,
                                 visualTransformation = if (currentPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                                 trailingIcon = {
@@ -686,7 +858,7 @@ fun AccountScreen(
                             OutlinedTextField(
                                 value = newPassword,
                                 onValueChange = { newPassword = it },
-                                label = { Text("New Password (min 6 chars)") },
+                                label = { Text(tr("New Password (min 6 chars)")) },
                                 singleLine = true,
                                 visualTransformation = if (newPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                                 trailingIcon = {
@@ -703,7 +875,7 @@ fun AccountScreen(
                             OutlinedTextField(
                                 value = confirmPassword,
                                 onValueChange = { confirmPassword = it },
-                                label = { Text("Confirm New Password") },
+                                label = { Text(tr("Confirm New Password")) },
                                 singleLine = true,
                                 visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                                 trailingIcon = {
@@ -718,10 +890,10 @@ fun AccountScreen(
                             )
 
                             passwordUpdateError?.let {
-                                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                Text(tr(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                             }
                             passwordUpdateSuccess?.let {
-                                Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                Text(tr(it), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                             }
 
                             Button(
@@ -772,14 +944,17 @@ fun AccountScreen(
                                 if (isUpdatingPassword) {
                                     CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                                 } else {
-                                    Text("Update Password")
+                                    Text(tr("Update Password"))
                                 }
                             }
                         }
                     }
                 }
 
-                // Email Integration Card
+                // Email Integration Card — hidden while GMAIL_SYNC_ENABLED is off: this was
+                // built and tested against one specific Gmail account, and its Gmail API
+                // cost/quota behavior for arbitrary public users hasn't been verified.
+                if (FeatureFlags.GMAIL_SYNC_ENABLED) {
                 var showEmailIntegration by remember { mutableStateOf(false) }
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -796,7 +971,7 @@ fun AccountScreen(
                                 Icon(Icons.Default.Email, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column {
-                                    Text("Email Report Scanner", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text(tr("Email Report Scanner"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                     val linked = AppSettings.getLinkedEmail(context)
                                     Text(
                                         text = if (linked != null) "Linked to $linked" else "Not connected",
@@ -832,8 +1007,8 @@ fun AccountScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("Auto-scan Inbox daily", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                                    Text("Checks for medical report attachments once a day", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(tr("Auto-scan Inbox daily"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                    Text(tr("Checks for medical report attachments once a day"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 Switch(
                                     checked = emailConsent,
@@ -854,8 +1029,7 @@ fun AccountScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    "Scan time",
+                                Text(tr("Scan time"),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = if (emailConsent) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -879,25 +1053,24 @@ fun AccountScreen(
                                             AppSettings.setEmailScanTime(context, scanHour, scanMinute)
                                             rescheduleDailyScan()
                                             showScanTimePicker = false
-                                        }) { Text("OK") }
+                                        }) { Text(tr("OK")) }
                                     },
                                     dismissButton = {
-                                        TextButton(onClick = { showScanTimePicker = false }) { Text("Cancel") }
+                                        TextButton(onClick = { showScanTimePicker = false }) { Text(tr("Cancel")) }
                                     }
                                 )
                             }
 
-                            Text("Hospital Search Prompt (Optional)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text(tr("Hospital Search Prompt (Optional)"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                             OutlinedTextField(
                                 value = searchPromptInput,
                                 onValueChange = { searchPromptInput = it },
-                                label = { Text("e.g. Apollo, Metropolis, Fortis") },
-                                placeholder = { Text("Leave blank to search all reports") },
+                                label = { Text(tr("e.g. Apollo, Metropolis, Fortis")) },
+                                placeholder = { Text(tr("Leave blank to search all reports")) },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(10.dp)
                             )
-                            Text(
-                                "Translates this intent using AI to target specific lab emails.",
+                            Text(tr("Translates this intent using AI to target specific lab emails."),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -919,15 +1092,15 @@ fun AccountScreen(
                                         androidx.work.ExistingWorkPolicy.REPLACE,
                                         request
                                     )
-                                    android.widget.Toast.makeText(context, "Scanning inbox for new reports…", android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(context, scanningInboxToast, android.widget.Toast.LENGTH_SHORT).show()
                                     coroutineScope.launch {
                                         val info = workManager.getWorkInfoByIdFlow(request.id).first { it != null && it.state.isFinished }
                                         val message = when (info?.state) {
                                             androidx.work.WorkInfo.State.SUCCEEDED -> {
                                                 val count = info.outputData.getInt(com.healthdecoder.app.local.EmailScanWorker.KEY_FOUND_COUNT, 0)
-                                                if (count > 0) "Found $count new report(s) — check your notifications." else "No new reports found in the last 2 days."
+                                                if (count > 0) "$foundNewReportsToastPrefix $count $foundNewReportsToastSuffix" else noNewReportsInLast2DaysToast
                                             }
-                                            else -> "Scan failed. Check your email settings and try again."
+                                            else -> scanFailedCheckSettingsToast
                                         }
                                         android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
                                     }
@@ -935,7 +1108,7 @@ fun AccountScreen(
                                 enabled = !AppSettings.getLinkedEmail(context).isNullOrBlank(),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("Scan Now (last 2 days)")
+                                Text(tr("Scan Now (last 2 days)"))
                             }
 
                             TextButton(
@@ -943,14 +1116,14 @@ fun AccountScreen(
                                     coroutineScope.launch(Dispatchers.IO) {
                                         LocalStore.getDatabase(context).processedEmailDao().deleteAll()
                                         withContext(Dispatchers.Main) {
-                                            android.widget.Toast.makeText(context, "Email scan history cleared — reports can be re-detected.", android.widget.Toast.LENGTH_LONG).show()
+                                            android.widget.Toast.makeText(context, emailScanHistoryClearedToast, android.widget.Toast.LENGTH_LONG).show()
                                         }
                                     }
                                 },
                                 enabled = !AppSettings.getLinkedEmail(context).isNullOrBlank(),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("Clear Email Scan History", color = MaterialTheme.colorScheme.error)
+                                Text(tr("Clear Email Scan History"), color = MaterialTheme.colorScheme.error)
                             }
 
                             Spacer(modifier = Modifier.height(8.dp))
@@ -962,18 +1135,18 @@ fun AccountScreen(
                             var imapPasswordInput by remember { mutableStateOf(SecureKeyManager.getImapPassword(context) ?: "") }
                             var oauthTokenInput by remember { mutableStateOf(SecureKeyManager.getEmailToken(context) ?: "") }
 
-                            Text("Email Provider", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text(tr("Email Provider"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                                 SegmentedButton(
                                     selected = emailType == "gmail",
                                     onClick = { emailType = "gmail" },
                                     shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
-                                ) { Text("Gmail (OAuth)") }
+                                ) { Text(tr("Gmail (OAuth)")) }
                                 SegmentedButton(
                                     selected = emailType == "imap",
                                     onClick = { emailType = "imap" },
                                     shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
-                                ) { Text("Other (IMAP)") }
+                                ) { Text(tr("Other (IMAP)")) }
                             }
 
                             if (emailType == "gmail") {
@@ -1014,7 +1187,7 @@ fun AccountScreen(
                                 OutlinedTextField(
                                     value = userEmailInput,
                                     onValueChange = { userEmailInput = it },
-                                    label = { Text("Email Address") },
+                                    label = { Text(tr("Email Address")) },
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(10.dp),
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
@@ -1022,7 +1195,7 @@ fun AccountScreen(
                                 OutlinedTextField(
                                     value = imapHostInput,
                                     onValueChange = { imapHostInput = it },
-                                    label = { Text("IMAP Host") },
+                                    label = { Text(tr("IMAP Host")) },
                                     placeholder = { Text("imap.mail.yahoo.com") },
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(10.dp)
@@ -1030,7 +1203,7 @@ fun AccountScreen(
                                 OutlinedTextField(
                                     value = imapPortInput,
                                     onValueChange = { imapPortInput = it },
-                                    label = { Text("IMAP Port") },
+                                    label = { Text(tr("IMAP Port")) },
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(10.dp),
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
@@ -1038,14 +1211,13 @@ fun AccountScreen(
                                 OutlinedTextField(
                                     value = imapPasswordInput,
                                     onValueChange = { imapPasswordInput = it },
-                                    label = { Text("App Password / Password") },
-                                    placeholder = { Text("Secure App Password") },
+                                    label = { Text(tr("App Password / Password")) },
+                                    placeholder = { Text(tr("Secure App Password")) },
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(10.dp),
                                     visualTransformation = PasswordVisualTransformation()
                                 )
-                                Text(
-                                    "Note: Gmail, Yahoo, and Outlook require you to generate an 'App Password' from your account security settings to log in via IMAP.",
+                                Text(tr("Note: Gmail, Yahoo, and Outlook require you to generate an 'App Password' from your account security settings to log in via IMAP."),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -1057,7 +1229,7 @@ fun AccountScreen(
                                     if (emailType == "gmail") {
                                         val hasLinkedGmail = !AppSettings.getLinkedEmail(context).isNullOrBlank() && AppSettings.getLinkedEmailType(context) == "gmail"
                                         if (!hasLinkedGmail) {
-                                            android.widget.Toast.makeText(context, "Please link your Google Account first.", android.widget.Toast.LENGTH_SHORT).show()
+                                            android.widget.Toast.makeText(context, pleaseLinkGoogleAccountToast, android.widget.Toast.LENGTH_SHORT).show()
                                             return@Button
                                         }
                                         AppSettings.setEmailSearchPrompt(context, searchPromptInput)
@@ -1068,7 +1240,7 @@ fun AccountScreen(
                                             com.healthdecoder.app.reminder.EmailScanReminderManager.cancel(context)
                                         }
 
-                                        android.widget.Toast.makeText(context, "Email settings saved successfully.", android.widget.Toast.LENGTH_SHORT).show()
+                                        android.widget.Toast.makeText(context, emailSettingsSavedToast, android.widget.Toast.LENGTH_SHORT).show()
                                         showEmailIntegration = false
                                     } else {
                                         if (userEmailInput.isNotBlank()) {
@@ -1085,26 +1257,28 @@ fun AccountScreen(
                                                 com.healthdecoder.app.reminder.EmailScanReminderManager.cancel(context)
                                             }
 
-                                            android.widget.Toast.makeText(context, "Email settings saved successfully.", android.widget.Toast.LENGTH_SHORT).show()
+                                            android.widget.Toast.makeText(context, emailSettingsSavedToast, android.widget.Toast.LENGTH_SHORT).show()
                                             showEmailIntegration = false
                                         } else {
-                                            android.widget.Toast.makeText(context, "Please enter an email address.", android.widget.Toast.LENGTH_SHORT).show()
+                                            android.widget.Toast.makeText(context, pleaseEnterEmailAddressToast, android.widget.Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Text("Save Settings")
+                                Text(tr("Save Settings"))
                             }
                         }
 
                     }
                 }
+                }
 
-                // Only meaningful while actually logged in (see the early-closed account?.let
-                // above, which now only wraps the profile card) — a guest has no session to log out of.
-                if (account != null) {
+                // isLoggedIn (session exists), not account != null (profile fetch succeeded) —
+                // otherwise a failed getMe() on a logged-in user hides Log Out entirely, leaving
+                // no way to sign out short of clearing app data.
+                if (AppSettings.isLoggedIn(context)) {
                     OutlinedButton(
                         onClick = {
                             AppSettings.logout(context)
@@ -1113,8 +1287,60 @@ fun AccountScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC62828))
-                    ) { Text("Log Out") }
+                    ) { Text(tr("Log Out")) }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = { deleteAccountError = null; showDeleteAccountDialog = true },
+                        enabled = !isDeletingAccount,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(imageVector = Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(tr("Delete Account"))
+                    }
+
+                    deleteAccountError?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(tr(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
         }
+    }
+
+    if (showDeleteAccountDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!isDeletingAccount) showDeleteAccountDialog = false },
+            title = { Text(tr("Delete account permanently?"), fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    tr("This permanently deletes your Health Decoder account AND all medical " +
+                        "records stored on this device — reports, reminders, appointments, and " +
+                        "family profiles. This cannot be undone."),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { deleteAccount() },
+                    enabled = !isDeletingAccount,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    if (isDeletingAccount) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.onError, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text(tr("Delete Permanently"), color = MaterialTheme.colorScheme.onError)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteAccountDialog = false }, enabled = !isDeletingAccount) {
+                    Text(tr("Cancel"))
+                }
+            }
+        )
     }
 }

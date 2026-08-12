@@ -128,8 +128,9 @@ object OcrEngine {
     ): MultiScanExtraction? = try {
         val prompt = buildPrompt(referenceText, scanType, reportCategory, images.size, part, totalParts)
         // Scan calls go through our backend proxy (BackendAiClient), NOT GeminiClient directly —
-        // the Gemini key never touches the device. Other AI features (chat, medicine lookup,
-        // identify, TTS) still use GeminiClient/local BuildKeys for now; migrating first.
+        // the Gemini key never touches the device. Chat, medicine lookup/identify, and detailed
+        // analysis are migrated too (see MedicalEngine). TTS (SpeechEngine) and translation
+        // (LanguageUtil) still call Sarvam directly — the backend has no Sarvam proxy yet.
         val raw = BackendAiClient.generateFromImages(context, prompt, images)
         parse(GeminiClient.stripJsonFences(raw))
     } catch (e: Exception) {
@@ -374,7 +375,7 @@ Return ONLY raw JSON. No markdown code fences, no extra text.
             Output: 
         """.trimIndent()
         return try {
-            val response = GeminiClient.generateText(context, prompt)
+            val response = BackendAiClient.generateText(context, prompt)
             GeminiClient.stripJsonFences(response).trim().removeSurrounding("\"").trim()
         } catch (e: Exception) {
             e.printStackTrace()

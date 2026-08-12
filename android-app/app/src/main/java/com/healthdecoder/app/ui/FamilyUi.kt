@@ -77,7 +77,7 @@ fun FamilyEditDialog(existing: FamilyProfile?, onDismiss: () -> Unit, onSaved: (
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 // Avatar picker
-                Text("Avatar", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Text(tr("Avatar"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                     avatarChoices.forEach { e ->
                         val sel = e == emoji
@@ -93,14 +93,14 @@ fun FamilyEditDialog(existing: FamilyProfile?, onDismiss: () -> Unit, onSaved: (
 
                 OutlinedTextField(
                     value = name, onValueChange = { name = it },
-                    label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth()
+                    label = { Text(tr("Name")) }, singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = relation, onValueChange = { relation = it },
-                    label = { Text("Relation (e.g. Father, Self)") }, singleLine = true, modifier = Modifier.fillMaxWidth()
+                    label = { Text(tr("Relation (e.g. Father, Self)")) }, singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
 
-                Text("Sex", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Text(tr("Sex"), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     sexChoices.forEach { s ->
                         FilterChip(selected = sex == s, onClick = { sex = if (sex == s) "" else s }, label = { Text(s) })
@@ -109,7 +109,7 @@ fun FamilyEditDialog(existing: FamilyProfile?, onDismiss: () -> Unit, onSaved: (
 
                 OutlinedTextField(
                     value = dob, onValueChange = { dob = it },
-                    label = { Text("Birthdate (YYYY-MM-DD)") },
+                    label = { Text(tr("Birthdate (YYYY-MM-DD)")) },
                     placeholder = { Text("1968-04-15") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -136,7 +136,7 @@ fun FamilyEditDialog(existing: FamilyProfile?, onDismiss: () -> Unit, onSaved: (
                 }
             ) { Text(if (existing == null) "Add" else "Save") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel")) } }
     )
 }
 
@@ -155,7 +155,7 @@ fun FamilyManagerDialog(onDismiss: () -> Unit, onChanged: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Family / Patients", fontWeight = FontWeight.Bold) },
+        title = { Text(tr("Family / Patients"), fontWeight = FontWeight.Bold) },
         text = {
             LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(members, key = { it.id }) { m ->
@@ -171,7 +171,7 @@ fun FamilyManagerDialog(onDismiss: () -> Unit, onChanged: () -> Unit) {
                                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
-                        IconButton(onClick = { editing = m }) { Icon(Icons.Default.Edit, contentDescription = "Edit") }
+                        IconButton(onClick = { editing = m }) { Icon(Icons.Default.Edit, contentDescription = tr("Edit")) }
                         IconButton(onClick = {
                             scope.launch {
                                 if (LocalRepository.reportCountFor(context, m.name) > 0) {
@@ -181,17 +181,17 @@ fun FamilyManagerDialog(onDismiss: () -> Unit, onChanged: () -> Unit) {
                                     LocalRepository.removeFamilyMember(context, m.id); refresh++; onChanged()
                                 }
                             }
-                        }) { Icon(Icons.Default.Delete, contentDescription = "Remove", tint = MaterialTheme.colorScheme.error) }
+                        }) { Icon(Icons.Default.Delete, contentDescription = tr("Remove"), tint = MaterialTheme.colorScheme.error) }
                     }
                 }
             }
         },
         confirmButton = {
             Button(onClick = { adding = true }) {
-                Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Add")
+                Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(6.dp)); Text(tr("Add"))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Done") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Done")) } }
     )
 
     if (adding) FamilyEditDialog(existing = null, onDismiss = { adding = false }, onSaved = { adding = false; refresh++; onChanged() })
@@ -229,7 +229,7 @@ fun ScanPatientPicker(value: String, onValueChange: (String) -> Unit, modifier: 
                 Icon(Icons.Default.ArrowDropDown, contentDescription = null)
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(text = { Text("Auto-detect from report") }, onClick = { manualEntry = false; onValueChange(""); menuOpen = false })
+                DropdownMenuItem(text = { Text(tr("Auto-detect from report")) }, onClick = { manualEntry = false; onValueChange(""); menuOpen = false })
                 members.forEach { m ->
                     DropdownMenuItem(
                         text = { Text("${m.avatarEmoji}  ${m.name}" + familySubtitle(m).let { if (it.isNotBlank()) "  ·  $it" else "" }) },
@@ -237,7 +237,7 @@ fun ScanPatientPicker(value: String, onValueChange: (String) -> Unit, modifier: 
                     )
                 }
                 DropdownMenuItem(
-                    text = { Text("➕  New person…") },
+                    text = { Text(tr("➕  New person…")) },
                     onClick = { manualEntry = true; onValueChange(""); menuOpen = false }
                 )
             }
@@ -245,7 +245,7 @@ fun ScanPatientPicker(value: String, onValueChange: (String) -> Unit, modifier: 
         if (manualEntry) {
             OutlinedTextField(
                 value = value, onValueChange = onValueChange,
-                label = { Text("New patient name") }, singleLine = true,
+                label = { Text(tr("New patient name")) }, singleLine = true,
                 modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)
             )
         }

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.healthdecoder.app.FeatureFlags
 import com.healthdecoder.app.auth.PhoneAuthHelper
 import com.healthdecoder.app.local.AppSettings
 import com.healthdecoder.app.model.SignupRequest
@@ -51,10 +52,13 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 }
 
 /**
- * Registration: name/surname/DOB/gender + email/password + phone number, with the phone
- * verified by OTP (Firebase Phone Auth) before the account is created. Email and phone each
- * get a UNIQUE constraint on the same user row server-side (see db_init.sql), so every account
- * has exactly one of each — no email shared across two phone numbers or vice versa.
+ * Registration: name/surname/DOB/gender + email/password, plus — only when
+ * [FeatureFlags.PHONE_AUTH_ENABLED] is on — a phone number verified by OTP (Firebase Phone
+ * Auth) before the account is created. Every OTP is a billed SMS, so with the flag off (the
+ * shipped default) signup is free: email + password only, no phone field, no "Send OTP" step.
+ * Email and phone each get a UNIQUE constraint on the same user row server-side (see
+ * db_init.sql); when phone isn't collected, the backend synthesises a placeholder MSISDN so
+ * that constraint still holds (see server.js signup).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,6 +91,7 @@ fun RegisterScreen(
     var otpSent by remember { mutableStateOf(false) }
     var isSendingOtp by remember { mutableStateOf(false) }
     var isVerifying by remember { mutableStateOf(false) }
+    var isSubmitting by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var consentChecked by remember { mutableStateOf(false) }
 
@@ -96,7 +101,7 @@ fun RegisterScreen(
         if (genderIndex == -1) return "Select a gender."
         if (email.trim().isEmpty() || !email.contains("@")) return "Enter a valid email."
         if (password.length < 6) return "Password must be at least 6 characters."
-        if (phoneDigits.length != 10) return "Enter a valid 10-digit mobile number."
+        if (FeatureFlags.PHONE_AUTH_ENABLED && phoneDigits.length != 10) return "Enter a valid 10-digit mobile number."
         return null
     }
 
@@ -120,6 +125,44 @@ fun RegisterScreen(
             }
             isVerifying = false
             PhoneAuthHelper.signOut()
+            result.onSuccess { auth ->
+                AppSettings.setAuthToken(context, auth.token)
+                AppSettings.setUserEmail(context, auth.user.email)
+                runCatching { AccountSync.refreshAssignedKeys(context) }
+                onRegistered()
+            }.onFailure { e ->
+                errorMessage = e.message?.takeIf { it.isNotBlank() } ?: "Something went wrong. Check your connection and try again."
+            }
+        }
+    }
+
+    /** Email+password signup, no phone/OTP involved — used when PHONE_AUTH_ENABLED is off. */
+    fun signupDirect() {
+        val validationError = validateForm()
+        if (validationError != null) {
+            errorMessage = validationError
+            return
+        }
+        errorMessage = null
+        isSubmitting = true
+        coroutineScope.launch {
+            val cal = Calendar.getInstance().apply { timeInMillis = dobMillis!! }
+            val dob = "%04d-%02d-%02d".format(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
+            val result = runCatching {
+                val api = NetworkModule.getApi(context)
+                api.signup(
+                    SignupRequest(
+                        firstName = firstName.trim(),
+                        lastName = lastName.trim(),
+                        dateOfBirth = dob,
+                        gender = GENDER_OPTIONS[genderIndex].second,
+                        email = email.trim(),
+                        password = password,
+                        phoneIdToken = null
+                    )
+                )
+            }
+            isSubmitting = false
             result.onSuccess { auth ->
                 AppSettings.setAuthToken(context, auth.token)
                 AppSettings.setUserEmail(context, auth.user.email)
@@ -304,16 +347,18 @@ fun RegisterScreen(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = phoneDigits,
-                    onValueChange = { phoneDigits = it.filter { c -> c.isDigit() }.take(10) },
-                    label = { Text(tr("Mobile number")) },
-                    singleLine = true,
-                    leadingIcon = { Text(tr("+91"), modifier = Modifier.padding(start = 12.dp)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                if (FeatureFlags.PHONE_AUTH_ENABLED) {
+                    OutlinedTextField(
+                        value = phoneDigits,
+                        onValueChange = { phoneDigits = it.filter { c -> c.isDigit() }.take(10) },
+                        label = { Text(tr("Mobile number")) },
+                        singleLine = true,
+                        leadingIcon = { Text(tr("+91"), modifier = Modifier.padding(start = 12.dp)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -327,22 +372,22 @@ fun RegisterScreen(
                 }
 
                 errorMessage?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Text(tr(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
                 Button(
-                    onClick = { sendOtp() },
-                    enabled = !isSendingOtp && consentChecked,
+                    onClick = { if (FeatureFlags.PHONE_AUTH_ENABLED) sendOtp() else signupDirect() },
+                    enabled = !isSendingOtp && !isSubmitting && consentChecked,
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    if (isSendingOtp) {
+                    if (isSendingOtp || isSubmitting) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     } else {
                         Icon(imageVector = Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(tr("Send OTP"), fontWeight = FontWeight.SemiBold)
+                        Text(if (FeatureFlags.PHONE_AUTH_ENABLED) tr("Send OTP") else tr("Create Account"), fontWeight = FontWeight.SemiBold)
                     }
                 }
                 TextButton(
@@ -369,7 +414,7 @@ fun RegisterScreen(
                 )
 
                 errorMessage?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Text(tr(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
 
                 Button(

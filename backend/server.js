@@ -10,6 +10,7 @@ import { trackFirebaseVerify, trackGemini, runWithUsageContext } from './usageTr
 import { GoogleGenAI } from '@google/genai';
 import jwt from 'jsonwebtoken';
 import { searchCommercial, startUhiSearch, processUhiWebhook } from './discovery.js';
+import { generateSpeech, translateText } from './ocr.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -93,10 +94,11 @@ app.get('/api/translations', async (req, res) => {
 });
 
 // ─── Auth & per-user free tier ────────────────────────────────────────────────
-// The Android app calls Gemini/Sarvam directly from the phone (not proxied through this
-// server) — these routes exist so a logged-in user's phone can ask "which key should I use
-// right now", with the server tracking free-tier usage and handing back either a personal
-// key (if the user added one) or a key from the pooled house rotation. See keyPool.js.
+// Provider keys NEVER leave this server. The app calls Gemini/Sarvam only through the
+// /api/ai/* proxy routes below, which resolve a key server-side per request (see keyPool.js).
+// These auth routes therefore report usage/quota ONLY — they deliberately strip geminiKey and
+// sarvamKey from every response, because an app that ships or receives a raw provider key is
+// both a Play Store review risk and a key we could never rotate out of installed builds.
 
 const VALID_GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'];
 
@@ -116,23 +118,32 @@ app.post('/api/auth/signup', async (req, res) => {
     if (!email || !String(email).trim() || !password || String(password).length < 6) {
       return res.status(400).json({ error: 'A valid email and a password of at least 6 characters are required.' });
     }
-    if (!phoneIdToken) {
-      return res.status(400).json({ error: 'Phone verification is required.' });
-    }
-    if (!isPhoneAuthConfigured()) {
-      return res.status(501).json({ error: 'Phone verification is not configured on this server yet.' });
-    }
-
-    let msisdn;
-    try {
-      msisdn = await verifyPhoneIdToken(String(phoneIdToken));
-      trackFirebaseVerify(null, true);
-    } catch (error) {
-      trackFirebaseVerify(null, false);
-      return res.status(401).json({ error: 'Phone verification failed. Please request a new OTP and try again.' });
-    }
 
     const normalizedEmail = String(email).trim().toLowerCase();
+
+    // Phone verification is optional: signup must work with just email+password (every OTP is
+    // a billed SMS, so we don't want to force one on every new user). If a phoneIdToken IS
+    // supplied — e.g. a future "verify your phone too" upsell — we still verify it and use the
+    // real E.164 number. Otherwise we synthesise a placeholder MSISDN, the same trick
+    // /api/auth/google-signin already uses for its own passwordless-of-phone signups, so the
+    // `msisdn` column (UNIQUE NOT NULL, see db_init.sql) is always satisfiable. The `email_`
+    // prefix keeps this scheme from ever colliding with the `google_` one.
+    let msisdn;
+    if (phoneIdToken) {
+      if (!isPhoneAuthConfigured()) {
+        return res.status(501).json({ error: 'Phone verification is not configured on this server yet.' });
+      }
+      try {
+        msisdn = await verifyPhoneIdToken(String(phoneIdToken));
+        trackFirebaseVerify(null, true);
+      } catch (error) {
+        trackFirebaseVerify(null, false);
+        return res.status(401).json({ error: 'Phone verification failed. Please request a new OTP and try again.' });
+      }
+    } else {
+      const emailHash = crypto.createHash('md5').update(normalizedEmail).digest('hex').substring(0, 10);
+      msisdn = `email_${emailHash}`;
+    }
 
     // Email and MSISDN each get their own uniqueness check so we can return which one collided
     // — both are UNIQUE at the DB level too (see db_init.sql) as the source of truth.
@@ -588,7 +599,19 @@ app.get('/api/auth/google/token', requireAuth, async (req, res) => {
 app.get('/api/auth/keys', requireAuth, async (req, res) => {
   try {
     const resolved = await resolveKeysForUser(req.user);
-    res.json(resolved);
+    // Never forward geminiKey/sarvamKey to the client — the app no longer calls Gemini/Sarvam
+    // directly, everything goes through the server-side /api/ai/* proxy routes, so the phone
+    // has no legitimate use for the raw key and shipping it would defeat the whole point of
+    // the proxy (Play Store review flags embedded/leaked provider keys).
+    res.json({
+      plan: resolved.plan,
+      billedTo: resolved.billedTo,
+      usageToday: resolved.usageToday,
+      limit: resolved.limit,
+      quotaExceeded: resolved.quotaExceeded,
+      hasOwnGeminiKey: !!req.user.own_gemini_key,
+      hasOwnSarvamKey: !!req.user.own_sarvam_key,
+    });
   } catch (error) {
     console.error('Error resolving keys for user:', error);
     res.status(500).json({ error: 'Failed to resolve API keys' });
@@ -600,7 +623,16 @@ app.get('/api/auth/keys', requireAuth, async (req, res) => {
 app.get('/api/auth/usage', requireAuth, async (req, res) => {
   try {
     const usage = await peekAssignmentForUser(req.user);
-    res.json(usage);
+    // Same rule as /api/auth/keys: only non-secret fields leave the server.
+    res.json({
+      plan: usage.plan,
+      billedTo: usage.billedTo,
+      usageToday: usage.usageToday,
+      limit: usage.limit,
+      quotaExceeded: usage.quotaExceeded,
+      hasOwnGeminiKey: !!req.user.own_gemini_key,
+      hasOwnSarvamKey: !!req.user.own_sarvam_key,
+    });
   } catch (error) {
     console.error('Error reading usage for user:', error);
     res.status(500).json({ error: 'Failed to read usage' });
@@ -628,6 +660,34 @@ app.post('/api/user/sarvam-key', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error saving Sarvam key:', error);
     res.status(500).json({ error: 'Failed to save Sarvam API key' });
+  }
+});
+
+// DESTRUCTIVE AND IRREVERSIBLE: permanently deletes the caller's account and everything tied
+// to it. Required for Play Store compliance (a working in-app account-deletion path).
+//
+// Tables that reference users(id) (see db_init.sql): api_usage_events.user_id and
+// uhi_search_sessions.user_id are both `ON DELETE SET NULL`, so the DB itself detaches those
+// rows (kept only as anonymized usage/analytics history, no longer identifying this user) the
+// moment the users row is gone — no explicit dependent-row cleanup is needed for them. No other
+// table has a foreign key into users. Still wrapped in a transaction so a mid-flight failure
+// can never leave the account half-deleted.
+app.delete('/api/user/account', requireAuth, async (req, res) => {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query('DELETE FROM users WHERE id = $1', [req.user.id]);
+    await client.query('COMMIT');
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Account not found.' });
+    }
+    res.json({ message: 'Account deleted.' });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Account deletion failed:', error);
+    res.status(500).json({ error: 'Failed to delete account.' });
+  } finally {
+    client.release();
   }
 });
 
@@ -698,6 +758,49 @@ app.post('/api/ai/generate', requireDeviceOrUser, async (req, res) => {
   } catch (error) {
     console.error('AI proxy error:', error);
     res.status(502).json({ error: 'The analysis service is temporarily unavailable. Please try again shortly.' });
+  }
+});
+
+const MAX_TTS_TEXT_LENGTH = 5000;
+
+// Text-to-speech proxy — the phone used to call Sarvam/Gemini TTS directly with an embedded
+// key; now it just sends the text and gets back audio clips, same as /api/ai/generate. A TTS
+// miss (bad language, upstream down, no key configured) is NOT an error from the client's
+// point of view — it responds 200 with an empty audios array so the UI can just skip playback.
+app.post('/api/ai/tts', requireDeviceOrUser, async (req, res) => {
+  try {
+    const { text, language, engine } = req.body || {};
+    if (typeof text !== 'string' || !text.trim()) {
+      return res.status(400).json({ error: 'Text is required.' });
+    }
+    // Truncate rather than reject. The old on-device path silently capped at 8 chunks of 450
+    // chars (~3600) and still spoke the beginning, so rejecting a long Doctor Brief outright
+    // would regress it from "reads the first part" to total silence — a worse outcome than
+    // the cap it replaced.
+    const safeText = text.length > MAX_TTS_TEXT_LENGTH ? text.slice(0, MAX_TTS_TEXT_LENGTH) : text;
+
+    const result = await generateSpeech(safeText, language || 'English', engine || 'sarvam');
+    res.json({ audios: Array.isArray(result?.audios) ? result.audios : [] });
+  } catch (error) {
+    console.error('TTS proxy error:', error);
+    res.json({ audios: [] });
+  }
+});
+
+// Translation proxy — same idea, previously the phone called Sarvam directly. On any failure
+// this responds with the ORIGINAL text (not an error), since untranslated text is still
+// usable and better than blocking the caller.
+app.post('/api/ai/translate', requireDeviceOrUser, async (req, res) => {
+  const { text, targetLanguage } = req.body || {};
+  if (typeof text !== 'string') {
+    return res.status(400).json({ error: 'Text is required.' });
+  }
+  try {
+    const translated = await translateText(text, targetLanguage || 'English');
+    res.json({ translated_text: translated });
+  } catch (error) {
+    console.error('Translate proxy error:', error);
+    res.json({ translated_text: text });
   }
 });
 

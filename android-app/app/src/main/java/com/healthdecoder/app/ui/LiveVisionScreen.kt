@@ -117,8 +117,7 @@ fun LiveVisionScreen(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.padding(end = 16.dp)
                     ) {
-                        Text(
-                            text = "● LIVE",
+                        Text(text = tr("● LIVE"),
                             color = Color.White,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,

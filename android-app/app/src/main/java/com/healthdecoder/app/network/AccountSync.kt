@@ -1,37 +1,20 @@
 package com.healthdecoder.app.network
 
 import android.content.Context
-import com.healthdecoder.app.local.AppSettings
 import com.healthdecoder.app.model.KeyAssignment
 
 /**
- * Bridges the backend's per-user key issuance (GET /api/auth/keys) into the existing local
- * key storage in AppSettings, which GeminiClient/SpeechEngine already read from. This is the
- * "automatic key config" step: once logged in, the phone is handed either the user's own
- * saved key or their assigned house free-tier key, and it's written into the same override
- * slot a manually-pasted key would use — no separate code path needed in the AI callers.
+ * Reads the backend's per-user plan/usage snapshot (GET /api/auth/keys). The backend no longer
+ * hands the actual Gemini/Sarvam key to the client — every AI call is proxied server-side (see
+ * BackendAiClient) — so this is now a plain fetch, kept around because callers still use the
+ * returned plan/usage/quota fields to drive the Account screen and quota-exceeded messaging.
  */
 object AccountSync {
 
-    /** Fetches the assigned key(s) and applies them locally. Returns the assignment so the
-     *  caller can show usage/quota info, or null if the request failed (e.g. offline) —
-     *  in which case the previously-synced key (or the BuildKeys fallback) keeps working. */
-    suspend fun refreshAssignedKeys(context: Context): KeyAssignment? {
-        val assignment = runCatching { NetworkModule.getApi(context).getAssignedKeys() }.getOrNull()
-            ?: return null
-
-        if (!assignment.geminiKey.isNullOrBlank()) {
-            AppSettings.setGeminiKey(context, assignment.geminiKey)
-        } else if (assignment.quotaExceeded) {
-            // Don't overwrite a working key with nothing — leave the last-known-good key in
-            // place so the phone keeps using it until the user adds their own key or the
-            // free quota resets. The caller is expected to surface assignment.quotaExceeded.
-        }
-        if (!assignment.sarvamKey.isNullOrBlank()) {
-            AppSettings.setSarvamKey(context, assignment.sarvamKey)
-        }
-        return assignment
-    }
+    /** Fetches the current plan/usage snapshot, or null if the request failed (e.g. offline).
+     *  Does not persist anything locally — there's no key left to store on the device. */
+    suspend fun refreshAssignedKeys(context: Context): KeyAssignment? =
+        runCatching { NetworkModule.getApi(context).getAssignedKeys() }.getOrNull()
 
     /** Read-only usage/quota snapshot for display (e.g. the Account screen) — unlike
      *  refreshAssignedKeys, this never consumes a free-tier issuance, so it's safe to call
