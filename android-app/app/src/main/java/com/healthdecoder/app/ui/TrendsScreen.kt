@@ -42,6 +42,8 @@ import com.healthdecoder.app.ai.DashboardEngine
 import com.healthdecoder.app.local.LocalRepository
 import com.healthdecoder.app.model.ParameterTrend
 import com.healthdecoder.app.model.TrendDataPoint
+import com.healthdecoder.app.ui.components.AppBottomNavBar
+import com.healthdecoder.app.ui.components.BottomNavTab
 import com.healthdecoder.app.util.TestReference
 import kotlinx.coroutines.launch
 
@@ -89,7 +91,8 @@ private fun isoToMillis(iso: String): Long? = try {
 fun TrendsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToReport: (String, String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onNavigateToTab: (BottomNavTab) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -173,6 +176,9 @@ fun TrendsScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp))
             )
+        },
+        bottomBar = {
+            AppBottomNavBar(currentTab = BottomNavTab.Trends, onNavigate = onNavigateToTab)
         }
     ) { innerPadding ->
         Column(

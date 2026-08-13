@@ -7,9 +7,6 @@ import kotlinx.serialization.Serializable
 data object Main : NavKey
 
 @Serializable
-data object IPConfig : NavKey
-
-@Serializable
 data class Scan(val initialImagePath: String? = null) : NavKey
 
 @Serializable

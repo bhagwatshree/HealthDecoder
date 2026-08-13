@@ -44,6 +44,8 @@ import com.healthdecoder.app.local.AppSettings
 import com.healthdecoder.app.local.LocalRepository
 import com.healthdecoder.app.model.ChatMessage
 import com.healthdecoder.app.model.ChatRequest
+import com.healthdecoder.app.ui.components.AppBottomNavBar
+import com.healthdecoder.app.ui.components.BottomNavTab
 import com.healthdecoder.app.util.AudioPlayer
 import com.healthdecoder.app.util.LanguageUtil
 import kotlinx.coroutines.Dispatchers
@@ -67,7 +69,8 @@ fun ChatScreen(
     // Which screen the user opened Chat from (e.g. "Records", "Medication Tracker"). Shown
     // in the top bar and folded into the question sent to the AI so answers stay scoped to
     // what's on screen, without needing a separate backend field.
-    contextHint: String? = null
+    contextHint: String? = null,
+    onNavigateToTab: (BottomNavTab) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -329,16 +332,19 @@ fun ChatScreen(
             )
         },
         bottomBar = {
-            ChatInputBar(
-                input = input,
-                attachedImagePath = attachedImagePath,
-                onInputChange = { input = it },
-                onSend = { sendQuestion(input) },
-                onVoice = { startVoiceInput() },
-                onAttach = { imagePicker.launch(arrayOf("*/*")) },
-                onRemoveAttachment = { attachedImagePath = null },
-                enabled = !isLoading
-            )
+            Column {
+                ChatInputBar(
+                    input = input,
+                    attachedImagePath = attachedImagePath,
+                    onInputChange = { input = it },
+                    onSend = { sendQuestion(input) },
+                    onVoice = { startVoiceInput() },
+                    onAttach = { imagePicker.launch(arrayOf("*/*")) },
+                    onRemoveAttachment = { attachedImagePath = null },
+                    enabled = !isLoading
+                )
+                AppBottomNavBar(currentTab = BottomNavTab.Chat, onNavigate = onNavigateToTab)
+            }
         }
     ) { innerPadding ->
         Column(

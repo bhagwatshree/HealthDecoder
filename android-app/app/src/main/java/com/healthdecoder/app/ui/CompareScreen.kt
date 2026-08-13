@@ -35,6 +35,8 @@ import com.healthdecoder.app.model.CompareResponse
 import com.healthdecoder.app.model.ComparisonResult
 import com.healthdecoder.app.model.ScannedReportData
 import com.healthdecoder.app.local.LocalRepository
+import com.healthdecoder.app.ui.components.AppBottomNavBar
+import com.healthdecoder.app.ui.components.BottomNavTab
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -48,7 +50,8 @@ import java.io.File
 @Composable
 fun CompareScreen(
     onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onNavigateToTab: (BottomNavTab) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -105,6 +108,9 @@ fun CompareScreen(
                     containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
                 )
             )
+        },
+        bottomBar = {
+            AppBottomNavBar(currentTab = BottomNavTab.Compare, onNavigate = onNavigateToTab)
         }
     ) { innerPadding ->
         Box(
