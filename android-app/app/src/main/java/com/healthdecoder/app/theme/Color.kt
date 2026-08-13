@@ -3,12 +3,12 @@ package com.healthdecoder.app.theme
 import androidx.compose.ui.graphics.Color
 
 // ── Light theme tokens ──
-val MedicalTeal = Color(0xFF0D7377)        // Primary — deep clinical teal
-val MedicalNavy = Color(0xFF1B3A4B)        // Secondary — trustworthy navy
+val MedicalTeal = Color(0xFF1565C0)        // Primary — deep clinical blue
+val MedicalNavy = Color(0xFF0D47A1)        // Secondary — trustworthy navy blue
 val MedicalAmber = Color(0xFFE8A838)       // Tertiary — warm accent for actions
 val MedicalBackground = Color(0xFFF8F9FA)  // Background — warm off-white
 val MedicalSurface = Color(0xFFFFFFFF)     // Surface — clean white
-val MedicalSurfaceVariant = Color(0xFFECF5F5) // Surface variant — light teal tint
+val MedicalSurfaceVariant = Color(0xFFE3F2FD) // Surface variant — light blue tint
 val MedicalOnPrimary = Color(0xFFFFFFFF)
 val MedicalOnSecondary = Color(0xFFFFFFFF)
 val MedicalOnBackground = Color(0xFF1A1C1E)
@@ -18,7 +18,7 @@ val MedicalOutline = Color(0xFF74777F)
 val MedicalOutlineVariant = Color(0xFFC4C7CF)
 
 // ── Dark theme tokens ──
-val MedicalTealLight = Color(0xFF4DB6AC)   // Primary (dark) — lighter teal
+val MedicalTealLight = Color(0xFF64B5F6)   // Primary (dark) — lighter blue
 val MedicalNavyLight = Color(0xFF7FB3D3)   // Secondary (dark) — soft blue
 val MedicalAmberLight = Color(0xFFFFD180)  // Tertiary (dark) — warm amber
 val MedicalDarkBackground = Color(0xFF111418)

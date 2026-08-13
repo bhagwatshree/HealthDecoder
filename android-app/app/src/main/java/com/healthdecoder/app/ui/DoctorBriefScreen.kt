@@ -39,6 +39,8 @@ import com.healthdecoder.app.model.Medication
 import com.healthdecoder.app.reminder.AppointmentSchedule
 import com.healthdecoder.app.reminder.AppointmentStore
 import com.healthdecoder.app.reminder.doctorLabel
+import com.healthdecoder.app.ui.components.AppBottomNavBar
+import com.healthdecoder.app.ui.components.BottomNavTab
 import com.healthdecoder.app.ui.tr
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -97,7 +99,8 @@ private fun DoctorBriefData.toPlainText(): String = buildString {
 fun DoctorBriefScreen(
     patientName: String,
     onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onNavigateToTab: (BottomNavTab) -> Unit = {}
 ) {
     val context = LocalContext.current
     var appointment by remember { mutableStateOf<AppointmentSchedule?>(null) }
@@ -215,6 +218,9 @@ fun DoctorBriefScreen(
                     containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
                 )
             )
+        },
+        bottomBar = {
+            AppBottomNavBar(currentTab = BottomNavTab.Brief, onNavigate = onNavigateToTab)
         }
     ) { paddingValues ->
         Column(

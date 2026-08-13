@@ -60,6 +60,18 @@ object BackupManager {
     @Synchronized
     fun restoreBackup(context: Context, backupZip: File): Boolean {
         if (!backupZip.exists()) return false
+
+        // Validate this is actually a whole-device Backup snapshot before wiping anything.
+        // "export.json" at the zip root is the *Transfer Records* portable-export format (a
+        // different feature, easy to pick from the wrong button since Restore now accepts any
+        // file type) — extracting it here would wipe real on-device data and replace it with
+        // files Room never reads (medical_records.db never gets written), silently "succeeding"
+        // while restoring nothing. Bail out before touching existing data if it's not a real backup.
+        val looksLikeBackup = ZipInputStream(FileInputStream(backupZip).buffered()).use { zin ->
+            generateSequence { zin.nextEntry }.any { it.name == "medical_records.db" }
+        }
+        if (!looksLikeBackup) return false
+
         LocalStore.closeDatabase() // release the SQLite file before replacing it
         val recordsDir = LocalStore.recordsDir(context)
         // Clear current records (but keep the folder itself).

@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
@@ -34,7 +35,6 @@ import com.healthdecoder.app.ui.ChatScreen
 import com.healthdecoder.app.ui.CompareScreen
 import com.healthdecoder.app.ui.DetailedAnalysisScreen
 import com.healthdecoder.app.ui.HomeScreen
-import com.healthdecoder.app.ui.IPConfigScreen
 import com.healthdecoder.app.ui.LoginScreen
 import com.healthdecoder.app.ui.MedicationTrackerScreen
 import com.healthdecoder.app.ui.PendingTestsScreen
@@ -48,6 +48,7 @@ import com.healthdecoder.app.ui.DoctorBriefScreen
 import com.healthdecoder.app.ui.TrendsScreen
 import com.healthdecoder.app.ui.DiscoveryScreen
 import com.healthdecoder.app.ui.OnboardingScreen
+import com.healthdecoder.app.ui.components.BottomNavTab
 import kotlinx.coroutines.launch
 
 private data class DisclaimerTranslation(
@@ -143,6 +144,23 @@ fun MainNavigation() {
   }
   val backStack = rememberNavBackStack(startKey)
   val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+
+  // Shared by every bottom-nav-bearing screen (Home, Chat, Trends, Compare, Brief, Settings).
+  // Home is always kept as the root of the stack so "back" from any tab returns to Home first
+  // rather than exiting the app immediately or leaving an empty (crashing) back stack.
+  val navigateToTab: (BottomNavTab) -> Unit = { tab ->
+    val target: NavKey = when (tab) {
+      BottomNavTab.Home -> Main
+      BottomNavTab.Chat -> Chat()
+      BottomNavTab.Trends -> Trends
+      BottomNavTab.Compare -> Compare
+      BottomNavTab.Brief -> DoctorBrief(AppSettings.getActivePatient(context) ?: "")
+      BottomNavTab.Settings -> Account
+    }
+    backStack.clear()
+    if (target != Main) backStack.add(Main)
+    backStack.add(target)
+  }
 
   // A stored token can be stale (e.g. the account was deleted server-side). Validate it once
   // per launch; on 401 wipe the session and force a fresh login. Network failures are ignored
@@ -402,21 +420,17 @@ fun MainNavigation() {
             onLoggedOut = {
               backStack.clear()
               // No automatic redirect to Login when phone OTP is off — go back to Home instead.
-              // Signing in is still reachable on purpose: the guest card's "Sign In" button.
+              // Signing in is still reachable on purpose: Home's persistent sign-in banner.
               backStack.add(if (FeatureFlags.PHONE_AUTH_ENABLED) Login else Main)
             },
-            onNavigateToLogin = { backStack.add(Login) },
-            onNavigateToSettings = { backStack.add(IPConfig) },
-            modifier = Modifier.safeDrawingPadding()
+            modifier = Modifier.safeDrawingPadding(),
+            onNavigateToTab = navigateToTab
           )
         }
         entry<Main> {
           HomeScreen(
             onNavigateToScan = { backStack.add(Scan()) },
             onNavigateToDetail = { reportId -> backStack.add(ReportDetail(reportId)) },
-            onNavigateToCompare = { backStack.add(Compare) },
-            onNavigateToChat = { backStack.add(Chat()) },
-            onNavigateToTrends = { backStack.add(Trends) },
             onNavigateToAccount = { backStack.add(Account) },
             onNavigateToLogin = { backStack.add(Login) },
             onNavigateToRecords = { backStack.add(Records) },
@@ -426,7 +440,7 @@ fun MainNavigation() {
             onNavigateToPendingTests = { backStack.add(PendingTests) },
             onNavigateToDiscovery = { category -> backStack.add(Discovery(category = category)) },
             onNavigateToLiveVision = { backStack.add(LiveVision) },
-            onNavigateToDoctorBrief = { patientName -> backStack.add(DoctorBrief(patientName)) },
+            onNavigateToTab = navigateToTab,
             onRefresh = {
               coroutineScope.launch {
                 runCatching { NetworkModule.getApi(context).getMe() }
@@ -482,19 +496,15 @@ fun MainNavigation() {
           TrendsScreen(
             onNavigateBack = { backStack.removeLastOrNull() },
             onNavigateToReport = { reportId, param -> backStack.add(ReportDetail(reportId, param)) },
-            modifier = Modifier.safeDrawingPadding()
-          )
-        }
-        entry<IPConfig> {
-          IPConfigScreen(
-            onNavigateBack = { backStack.removeLastOrNull() },
-            modifier = Modifier.safeDrawingPadding()
+            modifier = Modifier.safeDrawingPadding(),
+            onNavigateToTab = navigateToTab
           )
         }
         entry<Compare> {
           CompareScreen(
             onNavigateBack = { backStack.removeLastOrNull() },
-            modifier = Modifier.safeDrawingPadding()
+            modifier = Modifier.safeDrawingPadding(),
+            onNavigateToTab = navigateToTab
           )
         }
         entry<Chat> { key ->
@@ -505,7 +515,8 @@ fun MainNavigation() {
                 else backStack.add(Scan())
             },
             modifier = Modifier.safeDrawingPadding(),
-            contextHint = key.contextHint
+            contextHint = key.contextHint,
+            onNavigateToTab = navigateToTab
           )
         }
         entry<Scan> { key ->
@@ -553,7 +564,8 @@ fun MainNavigation() {
           DoctorBriefScreen(
             patientName = key.patientName,
             onNavigateBack = { backStack.removeLastOrNull() },
-            modifier = Modifier.safeDrawingPadding()
+            modifier = Modifier.safeDrawingPadding(),
+            onNavigateToTab = navigateToTab
           )
         }
       },

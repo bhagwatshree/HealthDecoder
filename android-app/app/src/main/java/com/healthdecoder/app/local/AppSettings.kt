@@ -104,6 +104,10 @@ object AppSettings {
         prefs(context).edit().putBoolean(KEY_ONBOARDING_SEEN, seen).apply()
     }
 
+    /** One-time tooltip on first Home visit pointing at the account icon, for a user who hasn't
+     *  signed in yet (sign-in is optional, so there's otherwise no prominent affordance for it).
+     *  Marked seen the moment it's shown — see HomeScreen — so it never reappears, even if the
+     *  user backgrounds the app without dismissing it. */
     /** Unit system trend charts standardise every reading to. Conventional (Indian/US: mg/dL,
      *  g/dL, ng/mL …) is the default since that's what Indian labs mostly print; SI (mmol/L,
      *  µmol/L, g/L …) is the international/research convention. This single value is the ONLY

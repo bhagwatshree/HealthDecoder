@@ -632,13 +632,12 @@ fun ScanScreen(
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                         .then(
                             if (pages.isEmpty() && !importingFiles) Modifier.clickable {
-                                fileLauncher.launch(arrayOf(
-                                    "image/*",
-                                    "application/pdf",
-                                    "application/msword",
-                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                    "text/plain"
-                                ))
+                                // Same Drive/cloud-provider MIME-reporting gotcha as backup restore
+                                // (see IPConfigScreen's importLauncher): a strict allowlist here
+                                // greys out or hides files whose provider doesn't report one of
+                                // these exact types. "*/*" is safe — importSelectedFiles already
+                                // rejects anything FileImportUtil can't actually read.
+                                fileLauncher.launch(arrayOf("*/*"))
                             } else Modifier
                         ),
                     contentAlignment = Alignment.Center
@@ -1013,15 +1012,7 @@ fun ScanScreen(
                         Text(if (pages.isEmpty()) tr("Camera") else tr("Add Page"), fontWeight = FontWeight.Bold)
                     }
                     OutlinedButton(
-                        onClick = {
-                            fileLauncher.launch(arrayOf(
-                                "image/*",
-                                "application/pdf",
-                                "application/msword",
-                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                "text/plain"
-                            ))
-                        },
+                        onClick = { fileLauncher.launch(arrayOf("*/*")) },
                         modifier = Modifier.weight(1f).height(54.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
