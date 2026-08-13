@@ -38,6 +38,7 @@ captures/
 # --- AWS SAM ---
 backend/.aws-sam/
 samconfig.toml
+backend/github-secrets.txt
 
 # --- Local debug captures ---
 scratch_*.txt

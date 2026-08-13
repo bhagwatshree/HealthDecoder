@@ -280,6 +280,31 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   res.json(publicUser(req.user));
 });
 
+app.put('/api/auth/me', requireAuth, async (req, res) => {
+  try {
+    const { firstName, lastName, dateOfBirth, gender } = req.body || {};
+    if (!firstName || !String(firstName).trim() || !lastName || !String(lastName).trim()) {
+      return res.status(400).json({ error: 'First and last name are required.' });
+    }
+    if (dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(String(dateOfBirth))) {
+      return res.status(400).json({ error: 'Date of birth must be in YYYY-MM-DD format.' });
+    }
+    if (gender && !VALID_GENDERS.includes(String(gender))) {
+      return res.status(400).json({ error: 'Invalid gender value.' });
+    }
+
+    const result = await db.query(
+      `UPDATE users SET first_name = $1, last_name = $2, date_of_birth = COALESCE($3, date_of_birth),
+       gender = COALESCE($4, gender) WHERE id = $5 RETURNING *`,
+      [String(firstName).trim(), String(lastName).trim(), dateOfBirth || null, gender || null, req.user.id]
+    );
+    res.json(publicUser(result.rows[0]));
+  } catch (error) {
+    console.error('Update profile failed:', error);
+    res.status(500).json({ error: 'Failed to update profile.' });
+  }
+});
+
 app.post('/api/auth/reset-password-otp', async (req, res) => {
   try {
     const { phoneIdToken, newPassword } = req.body || {};
