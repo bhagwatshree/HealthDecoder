@@ -156,12 +156,21 @@ object ExportManager {
         val rawPayload = gson.fromJson(json, Payload::class.java)
             ?: throw IllegalStateException("The export file is corrupted.")
 
+        // Gson populates fields via reflection, bypassing Kotlin's null-safety entirely — a JSON
+        // missing "reports" (an older export format, a hand-edited file, or any other field-name
+        // mismatch) silently leaves these Kotlin-"non-nullable" properties actually null at
+        // runtime, which used to crash immediately below with a bare NPE on the very next
+        // iteration ("Attempt to invoke interface method ... iterator() on a null object
+        // reference") instead of a message that says what's actually wrong.
+        val safeReports = rawPayload.reports ?: emptyList()
+        val safeFamily = rawPayload.family ?: emptyList()
+
         // Second layer of the same guard as export(): even if a stray file predating that fix (or
         // a hand-edited one) somehow contains the demo patient, refuse to import it — this device's
         // own "Try Demo" flow is the only legitimate source of that data, never an imported file.
         val payload = rawPayload.copy(
-            reports = rawPayload.reports.filterNot { it.patientName.equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true) },
-            family = rawPayload.family.filterNot { it.name.trim().equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true) }
+            reports = safeReports.filterNot { it.patientName.equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true) },
+            family = safeFamily.filterNot { it.name.trim().equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true) }
         )
 
         var added = 0

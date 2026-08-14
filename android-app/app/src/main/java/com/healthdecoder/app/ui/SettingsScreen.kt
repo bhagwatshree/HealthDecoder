@@ -28,10 +28,12 @@ import androidx.compose.ui.unit.sp
 import com.healthdecoder.app.FeatureFlags
 import com.healthdecoder.app.backup.BackupManager
 import com.healthdecoder.app.backup.BackupSync
+import com.healthdecoder.app.backup.RestoreScheduler
 import com.healthdecoder.app.backup.SafCloudUploader
 import com.healthdecoder.app.local.AppSettings
 import com.healthdecoder.app.local.LocalRepository
 import com.healthdecoder.app.local.LocalStore
+import com.healthdecoder.app.local.MaintenanceScheduler
 import com.healthdecoder.app.local.SecureKeyManager
 import com.healthdecoder.app.model.MedicalReport
 import com.healthdecoder.app.network.NetworkModule
@@ -119,13 +121,10 @@ fun SettingsScreen(
     var restorePasswordError by remember { mutableStateOf<String?>(null) }
     var restoreBusy by remember { mutableStateOf(false) }
     var degradedCount by remember { mutableStateOf(0) }
-    var fixDegradedBusy by remember { mutableStateOf(false) }
-    var fixDegradedProgress by remember { mutableStateOf(0 to 0) } // done, total
-    var fixDegradedResult by remember { mutableStateOf<String?>(null) }
     var atRiskCount by remember { mutableStateOf(0) }
-    var recoverBusy by remember { mutableStateOf(false) }
-    var recoverProgress by remember { mutableStateOf(0 to 0) } // done, total
-    var recoverResult by remember { mutableStateOf<String?>(null) }
+    // fixDegradedBusy/Progress/Result and recoverBusy/Progress/Result now live in
+    // MaintenanceScheduler, not here — see its doc comment for why (surviving navigation away
+    // from this screen mid-run, both the coroutine itself and the progress state it reports).
 
     // Hoisted here because tr() is @Composable and can't be called from the plain onClick /
     // coroutine lambdas below where these Toasts are shown.
@@ -178,34 +177,11 @@ fun SettingsScreen(
         }
     }
 
-    // Shared by both the no-password path below and the password dialog's confirm button, so the
-    // outcome-to-message mapping, the post-success restart, and the actual restoreBackup() call
-    // only exist in one place — the dialog's confirm handler must not call restoreBackup() itself
-    // and then call this too, or a successful restore would run (and copy files) twice.
-    suspend fun performRestore(tmp: File, password: String?): BackupManager.RestoreOutcome {
-        val outcome = withContext(Dispatchers.IO) { BackupManager.restoreBackup(context, tmp, password) }
-        if (outcome != BackupManager.RestoreOutcome.PASSWORD_REQUIRED && outcome != BackupManager.RestoreOutcome.WRONG_PASSWORD) {
-            tmp.delete()
-        }
-        val result = when (outcome) {
-            BackupManager.RestoreOutcome.SUCCESS -> "Backup restored — reloading…"
-            BackupManager.RestoreOutcome.NOT_A_BACKUP ->
-                "Restore failed — this doesn't look like a Backup & Restore file. If it came from \"Share / Merge Records\", use the Import button in that section instead."
-            BackupManager.RestoreOutcome.INCOMPATIBLE_KEY ->
-                "Restore failed — this backup can't be opened on this device (likely made on a different phone, or before a reinstall). Your existing data on this device was NOT changed."
-            BackupManager.RestoreOutcome.READ_ERROR -> "Restore failed — couldn't read the selected file."
-            BackupManager.RestoreOutcome.PASSWORD_REQUIRED, BackupManager.RestoreOutcome.WRONG_PASSWORD -> null // caller handles these, no toast
-        }
-        if (result != null) {
-            backupResult = result
-            android.widget.Toast.makeText(context, result, android.widget.Toast.LENGTH_LONG).show()
-        }
-        if (outcome == BackupManager.RestoreOutcome.SUCCESS) {
-            delay(800) // let the toast register before the app restarts
-            restartApp(context)
-        }
-        return outcome
-    }
+    // The actual restore now runs in RestoreScheduler — a scope that outlives this screen, so
+    // navigating to another tab mid-restore no longer cancels it (rememberCoroutineScope()'s
+    // scope dies the moment this composable leaves composition; a real restore can take 20-30+
+    // seconds, easily longer than someone waits before tapping elsewhere). See RestoreScheduler
+    // for the outcome-to-message mapping and post-success restart, now centralized there.
 
     // Restore from a backup zip the user picks. Filtering OpenDocument to "application/zip" broke
     // restoring from Google Drive: Drive's DocumentsProvider often reports synced/uploaded files as
@@ -214,6 +190,11 @@ fun SettingsScreen(
     // and reports "not a valid backup file" if it isn't one.
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) coroutineScope.launch {
+            // Reading a backup off a cloud-synced folder, then staging + verifying it against
+            // SQLCipher, can easily take 20-30+ seconds with zero UI feedback otherwise — that
+            // read as "nothing happening" (it wasn't stuck, there was just no visible sign it
+            // was working at all).
+            restoreBusy = true
             val tmp = withContext(Dispatchers.IO) {
                 runCatching {
                     val f = File.createTempFile("restore_", ".zip", context.cacheDir)
@@ -224,17 +205,21 @@ fun SettingsScreen(
                 }.getOrNull()
             }
             if (tmp == null) {
+                restoreBusy = false
                 val msg = "Restore failed — couldn't read the selected file."
                 backupResult = msg
                 android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
                 return@launch
             }
+            restoreBusy = false // hand off to RestoreScheduler.isBusy from here, either path
             if (withContext(Dispatchers.IO) { BackupManager.requiresPassword(tmp) }) {
                 restorePasswordInput = ""
                 restorePasswordError = null
                 pendingRestoreFile = tmp
             } else {
-                performRestore(tmp, null)
+                // Runs in RestoreScheduler's own top-level scope, NOT this composable's — so it
+                // survives navigating to another screen while it's in progress.
+                RestoreScheduler.start(context, tmp, null)
             }
         }
     }
@@ -504,7 +489,8 @@ fun SettingsScreen(
                             else { Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tr("Export")) }
                         }
                         OutlinedButton(onClick = { portableImportLauncher.launch(arrayOf("*/*")) }, enabled = !transferBusy, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
-                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tr("Import"))
+                            if (transferBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            else { Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tr("Import")) }
                         }
                     }
                 }
@@ -577,42 +563,29 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
-                        if (fixDegradedBusy) {
+                        if (MaintenanceScheduler.fixDegradedBusy) {
                             Text(
-                                tr("Re-analyzing ${fixDegradedProgress.first} of ${fixDegradedProgress.second}…"),
+                                tr("Re-analyzing ${MaintenanceScheduler.fixDegradedProgress.first} of ${MaintenanceScheduler.fixDegradedProgress.second}…"),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
                         }
-                        fixDegradedResult?.let {
+                        MaintenanceScheduler.fixDegradedResult?.let {
                             Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
                         }
                         Button(
                             onClick = {
-                                fixDegradedBusy = true
-                                fixDegradedResult = null
-                                coroutineScope.launch {
-                                    val result = LocalRepository.fixDegradedReports(context) { done, total ->
-                                        fixDegradedProgress = done to total
-                                    }
+                                // Runs in a scope that outlives this screen — see MaintenanceScheduler.
+                                MaintenanceScheduler.runFixDegraded(context) {
                                     degradedCount = LocalRepository.findDegradedReports(context).size
-                                    fixDegradedResult = buildString {
-                                        append("Fixed ${result.fixed} report(s).")
-                                        if (result.remaining > 0) {
-                                            append(" ${result.remaining} still need re-analysis")
-                                            if (result.stoppedReason != null) append(" — ${result.stoppedReason}")
-                                            append(".")
-                                        }
-                                    }
-                                    fixDegradedBusy = false
                                 }
                             },
-                            enabled = !fixDegradedBusy,
+                            enabled = !MaintenanceScheduler.fixDegradedBusy,
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                         ) {
-                            if (fixDegradedBusy) {
+                            if (MaintenanceScheduler.fixDegradedBusy) {
                                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onError)
                             } else {
                                 Text(tr("Re-analyze All ($degradedCount)"), color = MaterialTheme.colorScheme.onError)
@@ -643,38 +616,29 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
-                        if (recoverBusy) {
+                        if (MaintenanceScheduler.recoverBusy) {
                             Text(
-                                tr("Checking ${recoverProgress.first} of ${recoverProgress.second}…"),
+                                tr("Checking ${MaintenanceScheduler.recoverProgress.first} of ${MaintenanceScheduler.recoverProgress.second}…"),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
                         }
-                        recoverResult?.let {
+                        MaintenanceScheduler.recoverResult?.let {
                             Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
                         }
                         Button(
                             onClick = {
-                                recoverBusy = true
-                                recoverResult = null
-                                coroutineScope.launch {
-                                    val result = LocalRepository.recoverMissingPanels(context) { done, total ->
-                                        recoverProgress = done to total
-                                    }
+                                // Runs in a scope that outlives this screen — see MaintenanceScheduler.
+                                MaintenanceScheduler.runRecoverMissingPanels(context) {
                                     atRiskCount = LocalRepository.findAtRiskBundles(context).size
-                                    recoverResult = buildString {
-                                        append("Checked ${result.bundlesChecked} document(s), recovered ${result.panelsRecovered} missing panel(s).")
-                                        if (result.stoppedReason != null) append(" Stopped early — ${result.stoppedReason}")
-                                    }
-                                    recoverBusy = false
                                 }
                             },
-                            enabled = !recoverBusy,
+                            enabled = !MaintenanceScheduler.recoverBusy,
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                         ) {
-                            if (recoverBusy) {
+                            if (MaintenanceScheduler.recoverBusy) {
                                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onError)
                             } else {
                                 Text(tr("Check Now ($atRiskCount)"), color = MaterialTheme.colorScheme.onError)
@@ -756,9 +720,22 @@ fun SettingsScreen(
                         ) { Text(tr("Export Backup")) }
                         OutlinedButton(
                             onClick = { importLauncher.launch(arrayOf("*/*")) },
+                            enabled = !restoreBusy && !RestoreScheduler.isBusy,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
-                        ) { Text(tr("Restore")) }
+                        ) {
+                            if (restoreBusy || RestoreScheduler.isBusy) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(6.dp))
+                                Text(tr("Restoring…"))
+                            } else {
+                                Text(tr("Restore"))
+                            }
+                        }
+                    }
+                    // Survives navigating away mid-restore — see RestoreScheduler doc comment.
+                    RestoreScheduler.resultMessage?.let {
+                        Text(tr(it), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     }
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -1376,7 +1353,7 @@ fun SettingsScreen(
 
     pendingRestoreFile?.let { tmp ->
         AlertDialog(
-            onDismissRequest = { if (!restoreBusy) { tmp.delete(); pendingRestoreFile = null } },
+            onDismissRequest = { if (!RestoreScheduler.isBusy) { tmp.delete(); pendingRestoreFile = null } },
             title = { Text(tr("Enter Backup Password"), fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1387,7 +1364,7 @@ fun SettingsScreen(
                         label = { Text(tr("Password")) },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
-                        enabled = !restoreBusy,
+                        enabled = !RestoreScheduler.isBusy,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1396,12 +1373,11 @@ fun SettingsScreen(
             },
             confirmButton = {
                 Button(
-                    enabled = !restoreBusy && restorePasswordInput.isNotBlank(),
+                    enabled = !RestoreScheduler.isBusy && restorePasswordInput.isNotBlank(),
                     onClick = {
-                        coroutineScope.launch {
-                            restoreBusy = true
-                            val outcome = performRestore(tmp, restorePasswordInput)
-                            restoreBusy = false
+                        // Runs in RestoreScheduler's own scope — survives navigating away from
+                        // this dialog/screen while it's in progress, same as the no-password path.
+                        RestoreScheduler.start(context, tmp, restorePasswordInput) { outcome ->
                             if (outcome == BackupManager.RestoreOutcome.WRONG_PASSWORD) {
                                 restorePasswordError = "Incorrect password — try again."
                             } else {
@@ -1410,12 +1386,12 @@ fun SettingsScreen(
                         }
                     }
                 ) {
-                    if (restoreBusy) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                    if (RestoreScheduler.isBusy) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                     else Text(tr("Restore"))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { tmp.delete(); pendingRestoreFile = null }, enabled = !restoreBusy) { Text(tr("Cancel")) }
+                TextButton(onClick = { tmp.delete(); pendingRestoreFile = null }, enabled = !RestoreScheduler.isBusy) { Text(tr("Cancel")) }
             }
         )
     }

@@ -74,14 +74,14 @@ object BackupManager {
         cipher.doFinal(ciphertext)
     }.getOrNull()
 
-    /** Cheap check — only scans entry names, doesn't extract anything — so the UI can decide
-     *  whether to prompt for a password before actually attempting [restoreBackup]. */
+    /** Cheap check — random-access lookup by name via the zip's central directory (see
+     *  restoreBackup's matching comment), not a sequential scan through every entry — so the UI
+     *  can decide whether to prompt for a password before actually attempting [restoreBackup]
+     *  without paying for a full pass over a potentially large, photo-heavy backup first. */
     fun requiresPassword(backupZip: File): Boolean {
         if (!backupZip.exists()) return false
         return runCatching {
-            ZipInputStream(FileInputStream(backupZip).buffered()).use { zin ->
-                generateSequence { zin.nextEntry }.any { it.name == DB_KEY_ENC_ENTRY_NAME }
-            }
+            java.util.zip.ZipFile(backupZip).use { zf -> zf.getEntry(DB_KEY_ENC_ENTRY_NAME) != null }
         }.getOrDefault(false)
     }
 
@@ -161,19 +161,23 @@ object BackupManager {
         // type) — extracting it here would produce files Room never reads (medical_records.db
         // never gets written). Same pass also pulls out the bundled DB passphrase, raw or
         // password-encrypted (see createLocalBackup) — absent on backups made before that fix.
-        var looksLikeBackup = false
+        //
+        // java.util.zip.ZipFile (random access via the zip's central directory), NOT
+        // ZipInputStream (sequential) — this only reads the tiny key entries directly by name;
+        // ZipInputStream would have to decompress its way through every image/source entry just
+        // to reach them, which on a real multi-photo backup was most of why this whole check —
+        // done BEFORE the real extraction pass even starts — took as long as it did.
         var dbPassphrase: ByteArray? = null
         var encryptedKeyBlob: ByteArray? = null
-        ZipInputStream(FileInputStream(backupZip).buffered()).use { zin ->
-            var entry: ZipEntry? = zin.nextEntry
-            while (entry != null) {
-                when (entry.name) {
-                    "medical_records.db" -> looksLikeBackup = true
-                    DB_KEY_ENTRY_NAME -> dbPassphrase = zin.readBytes()
-                    DB_KEY_ENC_ENTRY_NAME -> encryptedKeyBlob = zin.readBytes()
-                }
-                entry = zin.nextEntry
+        val looksLikeBackup = try {
+            java.util.zip.ZipFile(backupZip).use { zf ->
+                val hasDb = zf.getEntry("medical_records.db") != null
+                zf.getEntry(DB_KEY_ENTRY_NAME)?.let { dbPassphrase = zf.getInputStream(it).use { s -> s.readBytes() } }
+                zf.getEntry(DB_KEY_ENC_ENTRY_NAME)?.let { encryptedKeyBlob = zf.getInputStream(it).use { s -> s.readBytes() } }
+                hasDb
             }
+        } catch (e: Exception) {
+            return RestoreOutcome.READ_ERROR
         }
         if (!looksLikeBackup) return RestoreOutcome.NOT_A_BACKUP
 
@@ -242,8 +246,17 @@ object BackupManager {
             LocalStore.closeDatabase() // release the SQLite file before replacing it
             val recordsDir = LocalStore.recordsDir(context)
             recordsDir.listFiles()?.forEach { it.deleteRecursively() }
+            // rename(), not copyRecursively(): staging and recordsDir are both already on the
+            // same internal storage volume (cacheDir/filesDir), so this is an instant directory-
+            // entry update instead of writing every byte a second time — the extraction pass
+            // above already wrote them once. Falls back to an actual copy only if some device
+            // genuinely can't rename across these two dirs (not expected, but rename() failing
+            // silently returns false rather than throwing, so this is a real path to guard).
             stagingDir.listFiles()?.forEach { src ->
-                src.copyRecursively(File(recordsDir, src.name), overwrite = true)
+                val dest = File(recordsDir, src.name)
+                if (!src.renameTo(dest)) {
+                    src.copyRecursively(dest, overwrite = true)
+                }
             }
 
             // Must happen before anything reopens the database — restartApp() in SettingsScreen
