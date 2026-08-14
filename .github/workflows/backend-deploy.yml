@@ -29,6 +29,9 @@ jobs:
           node-version: '20'
       - run: npm ci
       - uses: aws-actions/setup-sam@v2
+      # SAM's esbuild bundler looks for `esbuild` on PATH, not in node_modules — without this
+      # it fails with "Cannot find esbuild" even though npm ci just installed it locally.
+      - run: echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
       - run: sam build
 
   # Only on a real push to master (not PRs) — deploys the already-validated build, then a
@@ -51,6 +54,8 @@ jobs:
           node-version: '20'
       - run: npm ci
       - uses: aws-actions/setup-sam@v2
+      # Same PATH fix as the build job above — see comment there.
+      - run: echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::405114130882:role/github-actions-medical-scanner-deploy
