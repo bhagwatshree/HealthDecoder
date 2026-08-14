@@ -8,6 +8,8 @@ import { decrypt } from './auth.js';
 // keep any single free user from starving the others sharing their pool key.
 export const FREE_TIER_DAILY_LIMIT = parseInt(process.env.FREE_TIER_DAILY_LIMIT || '50', 10);
 
+// Comma-separated in GEMINI_API_KEYS — scales automatically with however many keys are
+// listed there (no code change needed to add/remove pool capacity, just update the secret).
 function loadGeminiKeyPool() {
   const raw = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '';
   return raw.split(',').map(k => k.trim()).filter(Boolean);
