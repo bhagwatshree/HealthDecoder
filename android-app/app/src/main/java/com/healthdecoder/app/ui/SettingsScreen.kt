@@ -106,6 +106,12 @@ fun SettingsScreen(
     var protectBackupWithPassword by remember { mutableStateOf(false) }
     var backupPasswordInput by remember { mutableStateOf("") }
     var backupPasswordConfirmInput by remember { mutableStateOf("") }
+    // Separate from the manual-export password above — this one applies to the AUTOMATIC
+    // backups LocalRepository.afterWrite() creates after every write and syncs to the cloud
+    // folder below. Opt-in, defaults to off (unprotected), same as before this existed.
+    var hasAutoBackupPassword by remember { mutableStateOf(false) }
+    var autoBackupPasswordInput by remember { mutableStateOf("") }
+    var autoBackupPasswordSaveMsg by remember { mutableStateOf<String?>(null) }
     // Set only when a picked file needs a password before restoreBackup() can even attempt it —
     // drives the password-prompt dialog below. Cleared (and the temp file deleted) on cancel.
     var pendingRestoreFile by remember { mutableStateOf<File?>(null) }
@@ -135,6 +141,7 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) { patients = LocalRepository.listPatients(context) }
     LaunchedEffect(Unit) { degradedCount = LocalRepository.findDegradedReports(context).size }
+    LaunchedEffect(Unit) { hasAutoBackupPassword = SecureKeyManager.getBackupPassword(context) != null }
     LaunchedEffect(Unit) { atRiskCount = LocalRepository.findAtRiskBundles(context).size }
 
     // SAF folder picker: user picks a cloud-synced folder (Drive / OneDrive / Dropbox / local)
@@ -757,6 +764,71 @@ fun SettingsScreen(
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     Text(text = tr("Auto Cloud Backup"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     Text(text = tr("Pick a folder in Google Drive, OneDrive, or Dropbox. New backups are automatically synced there by the cloud app."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                    // These automatic backups are the ones that actually leave the device via
+                    // cloud sync — the password toggle above only covers a manual Export tap,
+                    // so without this, auto-synced backups stay unprotected even for a user who
+                    // always protects their manual exports.
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            hasAutoBackupPassword = !hasAutoBackupPassword
+                            if (!hasAutoBackupPassword) {
+                                SecureKeyManager.setBackupPassword(context, null)
+                                autoBackupPasswordInput = ""
+                                autoBackupPasswordSaveMsg = null
+                            }
+                        },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(tr("Also protect automatic backups with a password"), style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                tr("Off by default — these sync to your cloud folder above without a password unless you set one here"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(checked = hasAutoBackupPassword, onCheckedChange = { checked ->
+                            hasAutoBackupPassword = checked
+                            if (!checked) {
+                                SecureKeyManager.setBackupPassword(context, null)
+                                autoBackupPasswordInput = ""
+                                autoBackupPasswordSaveMsg = null
+                            }
+                        })
+                    }
+                    if (hasAutoBackupPassword) {
+                        OutlinedTextField(
+                            value = autoBackupPasswordInput,
+                            onValueChange = { autoBackupPasswordInput = it; autoBackupPasswordSaveMsg = null },
+                            label = { Text(tr("Auto-backup password")) },
+                            placeholder = { Text(tr("Leave blank to keep the current one")) },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    SecureKeyManager.setBackupPassword(context, autoBackupPasswordInput)
+                                    autoBackupPasswordSaveMsg = "Saved — new automatic backups will use this password."
+                                    autoBackupPasswordInput = ""
+                                },
+                                enabled = autoBackupPasswordInput.isNotBlank(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) { Text(tr("Save")) }
+                            autoBackupPasswordSaveMsg?.let {
+                                Text(tr(it), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        Text(
+                            tr("There's no way to reset this if you forget it — write it down somewhere safe."),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
 
                     if (cloudFolderLabel != null) {
                         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

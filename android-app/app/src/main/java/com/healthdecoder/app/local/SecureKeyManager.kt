@@ -109,4 +109,19 @@ object SecureKeyManager {
     fun setImapPassword(context: Context, pass: String?) {
         getSecurePrefs(context).edit().putString("email_imap_password", pass).apply()
     }
+
+    /**
+     * Password applied to backups LocalRepository.afterWrite() creates automatically after
+     * every write (and syncs to whatever cloud folder the user picked in Settings) — separate
+     * from the one-shot password on the manual "Export Backup" button. Null/unset (the default)
+     * means those automatic backups stay unprotected, exactly like before this existed; a user
+     * who opts in here gets the same protection on the backups actually leaving the device via
+     * cloud sync, not just the ones they explicitly export by hand.
+     */
+    fun getBackupPassword(context: Context): String? =
+        getSecurePrefs(context).getString("auto_backup_password", null)
+
+    fun setBackupPassword(context: Context, password: String?) {
+        getSecurePrefs(context).edit().putString("auto_backup_password", password).apply()
+    }
 }

@@ -64,10 +64,14 @@ fun GetFreeApiKeyButton(modifier: Modifier = Modifier, onKeyDetected: (String) -
 
     OutlinedButton(
         onClick = {
-            awaitingReturn = true
-            runCatching {
+            // Only arm the clipboard check if the browser actually opened — otherwise a failed
+            // launch (no browser installed, blocked by a work profile, etc.) would leave this
+            // waiting for the NEXT app resume for any unrelated reason and read whatever
+            // happens to be on the clipboard then, not necessarily anything from this flow.
+            val opened = runCatching {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/apikey")))
-            }
+            }.isSuccess
+            awaitingReturn = opened
         },
         modifier = modifier
     ) {

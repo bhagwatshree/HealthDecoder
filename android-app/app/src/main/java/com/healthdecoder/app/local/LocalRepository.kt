@@ -48,7 +48,11 @@ object LocalRepository {
     private fun nowIso() = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
 
     private fun afterWrite(context: Context) {
-        runCatching { BackupManager.createLocalBackup(context) }
+        // Uses the persisted auto-backup password (opt-in, see SecureKeyManager) if the user
+        // has set one — otherwise unprotected, exactly as before. These backups are the ones
+        // that actually leave the device via BackupSync's cloud upload, so a password set only
+        // on the manual Export button wouldn't otherwise cover them.
+        runCatching { BackupManager.createLocalBackup(context, SecureKeyManager.getBackupPassword(context)) }
         runCatching { BackupSync.syncPending(context) }
     }
 
