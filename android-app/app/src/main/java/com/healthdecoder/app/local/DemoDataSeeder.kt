@@ -24,7 +24,7 @@ import java.util.Locale
  * test, a medicine reminder and a doctor appointment — so a brand-new install (a Play Store
  * tester, most likely) can see what a populated Records/Trends/Reminders/Doctor Brief actually
  * looks like without scanning a real document. See OnboardingScreen ("Try Demo") and
- * AccountScreen ("Try Demo Data" card) for the two entry points.
+ * SettingsScreen ("Try Demo Data" card) for the two entry points.
  *
  * Everything here rides through the exact same write paths a real scan uses (LocalRepository /
  * LocalStore / MedicineScheduleStore / AppointmentStore) so it stays consistent with encryption,

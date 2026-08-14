@@ -1333,13 +1333,18 @@ fun ClinicalInsightsPanel(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                val categoryLabel = when (inference.reportCategory.lowercase()) {
-                                    "blood_test" -> tr("Blood Test")
-                                    "sonography" -> tr("Sonography")
-                                    "2d_echo" -> tr("2D Echo")
-                                    "xray" -> tr("X-Ray")
-                                    "prescription" -> tr("Prescription")
-                                    else -> tr("Medical Scan")
+                                // Keep this at "what kind of document is it" granularity (Discharge
+                                // Summary, Prescription, Medical Report) — not the specific panel
+                                // name a multi-section scan extracted (e.g. "Haemogram (CBC)",
+                                // "Doppler"), which reads as clutter when several such cards are
+                                // all really about the same single visit/document.
+                                val type = inference.reportType.lowercase()
+                                val categoryLabel = when {
+                                    type.contains("discharge") ->
+                                        if (inference.hasMedications) tr("Discharge Summary + Prescription") else tr("Discharge Summary")
+                                    inference.reportCategory.equals("prescription", ignoreCase = true) || type.contains("prescription") ->
+                                        tr("Prescription")
+                                    else -> tr("Medical Report")
                                 }
                                 Text(
                                     text = "${inference.patientName} • $categoryLabel",

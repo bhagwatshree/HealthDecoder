@@ -50,6 +50,10 @@ object UnitConverter {
             .replace('⁹', '9')
             .replace('×', 'x')
             .replace(" ", "")
+            // Indian lab reports commonly print "Lt" for "Liter" (e.g. "mmol/Lt", "mEq/Lt") —
+            // without this, "mmol/lt" and "mmol/l" are treated as two different, unconvertible
+            // units even though they're the exact same unit spelled differently.
+            .replace(Regex("/lt$"), "/l")
         return when (cleaned) {
             "mg%", "mg/100ml", "mgs/dl", "mgs%", "mgpercent" -> "mg/dl"
             "gm%", "gm/dl", "gms/dl", "g%" -> "g/dl"
@@ -100,6 +104,18 @@ object UnitConverter {
         "hba1c" to Spec("%", "%", mapOf("%" to 1.0)),
         "oxygen (spo2)" to Spec("%", "%", mapOf("%" to 1.0)),
         "ejection fraction" to Spec("%", "%", mapOf("%" to 1.0)),
+        // Electrolytes — monovalent ions (Na+, K+, Cl-, HCO3-): mEq/L and mmol/L are numerically
+        // IDENTICAL (valence 1), so both map to the same base with multiplier 1.0 — no guessing.
+        "sodium" to Spec("mmol/l", "mmol/l", mapOf("mmol/l" to 1.0, "meq/l" to 1.0)),
+        "potassium" to Spec("mmol/l", "mmol/l", mapOf("mmol/l" to 1.0, "meq/l" to 1.0)),
+        "chloride" to Spec("mmol/l", "mmol/l", mapOf("mmol/l" to 1.0, "meq/l" to 1.0)),
+        "bicarbonate" to Spec("mmol/l", "mmol/l", mapOf("mmol/l" to 1.0, "meq/l" to 1.0)),
+        // Minerals — divalent ions (Ca2+, Mg2+): mEq/L = 2 x mmol/L, so NOT 1:1 with mmol/L.
+        // mg/dL is the conventional Indian-report unit; standard molar-mass conversions below.
+        "calcium" to Spec("mg/dl", "mmol/l", mapOf("mg/dl" to 1.0, "mmol/l" to 4.008, "meq/l" to 2.004)),
+        "magnesium" to Spec("mg/dl", "mmol/l", mapOf("mg/dl" to 1.0, "mmol/l" to 2.431, "meq/l" to 1.2153)),
+        // Phosphorus is monatomic (no mEq/L convention in practice) — just mg/dL <-> mmol/L.
+        "phosphorus" to Spec("mg/dl", "mmol/l", mapOf("mg/dl" to 1.0, "mmol/l" to 3.097)),
     )
 
     // Human-facing spelling for each canonical (lowercased) unit — the internal keys are

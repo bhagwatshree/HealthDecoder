@@ -163,6 +163,8 @@ data class TestInference(
     @SerializedName("patientName") val patientName: String,
     @SerializedName("reportDate") val reportDate: String,
     @SerializedName("reportCategory") val reportCategory: String,
+    @SerializedName("reportType") val reportType: String = "",
+    @SerializedName("hasMedications") val hasMedications: Boolean = false,
     @SerializedName("summary") val summary: String,
     @SerializedName("status") val status: String
 )
@@ -428,6 +430,14 @@ data class ResetPasswordRequest(
 data class ChangePasswordRequest(
     @SerializedName("currentPassword") val currentPassword: String,
     @SerializedName("newPassword") val newPassword: String
+)
+
+/** PUT /api/auth/me — editable identity fields only; email/phone stay read-only (used for login). */
+data class UpdateProfileRequest(
+    @SerializedName("firstName") val firstName: String,
+    @SerializedName("lastName") val lastName: String,
+    @SerializedName("dateOfBirth") val dateOfBirth: String? = null,
+    @SerializedName("gender") val gender: String? = null
 )
 
 data class SimpleResponse(

@@ -193,14 +193,20 @@ object DashboardEngine {
     fun buildDashboard(reports: List<MedicalReport>, pendingTests: List<PendingTest>): DashboardData {
         val medicationHistory = buildMedicationHistory(reports)
 
+        // Most recent first — the printed reportDate is what the card SHOWS, so it must also be
+        // what the card is SORTED by, or a card can display one date while another (older,
+        // sorted-in wrong) shows above it, which reads as the wrong report entirely.
         val testInferences = reports
             .filter { it.comparisonResult?.hasComparison == true }
+            .sortedByDescending { it.reportDate ?: it.createdAt }
             .map {
                 TestInference(
                     reportId = it.id,
                     patientName = it.patientName ?: "Unknown Patient",
                     reportDate = it.reportDate ?: "",
                     reportCategory = it.reportCategory ?: "",
+                    reportType = it.reportType ?: "",
+                    hasMedications = it.medications.any { m -> !m.name.isNullOrBlank() },
                     summary = it.comparisonResult?.comparisonSummary ?: "",
                     status = it.comparisonResult?.status ?: ""
                 )

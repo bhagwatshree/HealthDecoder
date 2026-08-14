@@ -17,7 +17,7 @@ object SecureKeyManager {
 
     // Set the moment either Keystore-backed path below throws and falls back to plain
     // SharedPreferences (e.g. a corrupted/modified Keystore on some custom ROMs) — surfaced
-    // by AccountScreen.kt as a warning instead of silently downgrading with no indication.
+    // by SettingsScreen.kt as a warning instead of silently downgrading with no indication.
     @Volatile
     private var usedInsecureFallback = false
 
@@ -60,6 +60,23 @@ object SecureKeyManager {
             }
             Base64.decode(passStr, Base64.NO_WRAP)
         }
+    }
+
+    /**
+     * Overwrites the persisted database passphrase — used only when restoring a backup created
+     * on a different install (see BackupManager.restoreBackup). A fresh install always generates
+     * its own random passphrase on first use, which can't decrypt a medical_records.db encrypted
+     * under a different device's passphrase; this replaces it with the one the backup was made
+     * with, so the restored database is actually readable instead of silently recreated empty.
+     */
+    fun setDatabasePassphrase(context: Context, passphrase: ByteArray) {
+        // commit(), not apply(): the caller (BackupManager.restoreBackup) force-kills the process
+        // via Runtime.exit() moments later to reload from the restored files. apply()'s write is
+        // async — if the process dies before it lands, the whole point of this call is lost and
+        // the restored database becomes unreadable exactly like the bug this exists to fix.
+        getSecurePrefs(context).edit()
+            .putString(KEY_DB_PASSWORD, Base64.encodeToString(passphrase, Base64.NO_WRAP))
+            .commit()
     }
 
     private fun getSecurePrefs(context: Context): android.content.SharedPreferences {

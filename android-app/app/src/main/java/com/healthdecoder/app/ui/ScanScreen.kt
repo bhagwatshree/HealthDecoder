@@ -135,7 +135,7 @@ fun ScanScreen(
     val uploadedOpenLaterText = tr("Uploaded. Open it later to analyze when you're ready.")
 
     // ON_RESUME (not LaunchedEffect(Unit)) so this re-checks every time the screen comes back
-    // into view — e.g. after "Scan Now" finds something while the user was on AccountScreen —
+    // into view — e.g. after "Scan Now" finds something while the user was on SettingsScreen —
     // not just the first time ScanScreen is composed.
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
         coroutineScope.launch {

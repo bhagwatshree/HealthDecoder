@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -17,17 +18,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.healthdecoder.app.ai.HealthTip
+import com.healthdecoder.app.ai.PersonalizedTips
+import com.healthdecoder.app.local.LocalRepository
 import kotlinx.coroutines.delay
-
-private data class HealthTip(val headline: String, val detail: String)
 
 // Local, hardcoded rotation — no ad SDK, no network call. Every string is wrapped in tr() where
 // it's rendered so this rotates through the app's existing translation pipeline like everything
-// else, without needing its own localized copies here.
+// else, without needing its own localized copies here. Personalized tips (see
+// [PersonalizedTips]) are prepended ahead of these when the patient has recent abnormal results.
 private val HEALTH_TIPS = listOf(
     HealthTip(
         "Hydrate before a blood draw",
@@ -71,20 +75,33 @@ private val HEALTH_TIPS = listOf(
     ),
 )
 
-private const val ROTATE_INTERVAL_MS = 15_000L
+private const val ROTATE_INTERVAL_MS = 5 * 60_000L
 
 /**
  * Renamed from the earlier draft's "SPONSORED HEALTH INSIGHT" — that wording implies paid
  * content, which would contradict the app's Play Console "Ads: No" declaration. This card is
  * local, rotating content only: no ad SDK, no advertising ID, no third-party call.
+ *
+ * Personalized tips are derived on-device (see [PersonalizedTips], rule-based, no AI call) from
+ * the signed-in patient's own recent abnormal results and shown first in the rotation, ahead of
+ * the general list — e.g. a recent low Sodium surfaces a natural rehydration/electrolyte tip
+ * instead of a generic one. Falls back to the general list alone when there's no report data or
+ * nothing currently abnormal.
  */
 @Composable
 fun HealthTipCard(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var personalized by remember { mutableStateOf<List<HealthTip>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        personalized = PersonalizedTips.tipsFor(context, LocalRepository.getReports(context))
+    }
+    val allTips = personalized + HEALTH_TIPS
+
     var index by remember { mutableIntStateOf(0) }
-    LaunchedEffectRotate(tipCount = HEALTH_TIPS.size, onTick = { index = (index + 1) % HEALTH_TIPS.size })
+    LaunchedEffectRotate(tipCount = allTips.size, onTick = { index = (index + 1) % allTips.size })
 
     var showDetail by remember { mutableStateOf(false) }
-    val tip = HEALTH_TIPS[index]
+    val tip = allTips[(index % allTips.size).coerceAtLeast(0)]
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -99,7 +116,8 @@ fun HealthTipCard(modifier: Modifier = Modifier) {
                     contentAlignment = Alignment.Center
                 ) { Icon(Icons.Default.Lightbulb, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(16.dp)) }
                 Text(
-                    tr("HEALTH TIP"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold,
+                    if (tip.source != null) tr("PERSONALIZED FOR YOU") else tr("HEALTH TIP"),
+                    fontSize = 12.sp, fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 0.8.sp, color = MaterialTheme.colorScheme.tertiary
                 )
             }
@@ -118,7 +136,26 @@ fun HealthTipCard(modifier: Modifier = Modifier) {
         AlertDialog(
             onDismissRequest = { showDetail = false },
             title = { Text(tr(tip.headline), fontWeight = FontWeight.Bold) },
-            text = { Text(tr(tip.detail)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(tr(tip.detail))
+                    // Traceability for a personalized tip: exactly which result it came from,
+                    // plus a plain lifestyle-only disclaimer — neither is shown for the general
+                    // (non-personalized) rotation, which isn't tied to the patient's own data.
+                    tip.source?.let { source ->
+                        Text(
+                            tr(source),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            tr("General lifestyle suggestion, not medical advice — talk to your doctor before making changes based on a lab result."),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            },
             confirmButton = { TextButton(onClick = { showDetail = false }) { Text(tr("Got it")) } }
         )
     }

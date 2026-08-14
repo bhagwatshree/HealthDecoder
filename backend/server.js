@@ -93,6 +93,24 @@ app.get('/api/translations', async (req, res) => {
   }
 });
 
+// ─── Personalized health tips ──────────────────────────────────────────────────
+// Natural lifestyle tips (diet, hydration, sleep, movement — never medication-specific) keyed
+// by canonical test name + High/Low status. Same pattern as /api/translations above: the DB is
+// the source of truth, so adding a tip for a newly-covered test reaches every install without
+// an app release. The app fetches this once and caches on-device, falling back to its bundled
+// seed for any test not yet covered here.
+app.get('/api/health-tips', async (req, res) => {
+  try {
+    const result = await db.query(
+      'SELECT canonical_param, status, headline, detail FROM health_tips'
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching health tips:', error);
+    res.status(500).json({ error: 'Failed to fetch health tips.' });
+  }
+});
+
 // ─── Auth & per-user free tier ────────────────────────────────────────────────
 // Provider keys NEVER leave this server. The app calls Gemini/Sarvam only through the
 // /api/ai/* proxy routes below, which resolve a key server-side per request (see keyPool.js).

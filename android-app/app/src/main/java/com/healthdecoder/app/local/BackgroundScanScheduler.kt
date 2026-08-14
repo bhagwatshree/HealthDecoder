@@ -109,6 +109,11 @@ object BackgroundScanScheduler {
                 updateJobProgress(scanJob.id, ScanJobStatus.ERROR, 1.0f, error = err, duplicateReportId = dup.existing.id)
             } catch (oom: OutOfMemoryError) {
                 updateJobProgress(scanJob.id, ScanJobStatus.ERROR, 1.0f, error = "Too many pages. Please scan fewer documents.")
+            } catch (ai: com.healthdecoder.app.ai.BackendAiClient.BackendAiException) {
+                // Surface the backend's actual reason (daily quota reached, server down, etc.)
+                // instead of a generic message — this used to be swallowed into a silent
+                // localFallback() save with a wrong date/category (see OcrEngine.scanChunk).
+                updateJobProgress(scanJob.id, ScanJobStatus.ERROR, 1.0f, error = ai.message ?: "Analysis failed. Please try again.")
             } catch (e: Exception) {
                 e.printStackTrace()
                 updateJobProgress(scanJob.id, ScanJobStatus.ERROR, 1.0f, error = "Scan failed. Please check internet connection.")

@@ -204,11 +204,14 @@ fun RecordsScreen(
                         val textMatch = report.id in ftsMatchIds
                         patientMatch || commentsMatch || typeMatch || medMatch || textMatch
                     }
-                        // Order by when it was scanned (newest first), not by the printed report date —
-                        // a mis-read date on a document shouldn't bury a report you just added.
+                        // Order by the document's own date (newest first) — that's the order a
+                        // patient/doctor actually reads records in, especially when catching up
+                        // on old paperwork scanned in a different order than it happened. Falls
+                        // back to scan time only when a report has no resolved date at all, so
+                        // it still surfaces somewhere sensible instead of sorting to the bottom.
                         .sortedWith(
-                            compareByDescending<com.healthdecoder.app.model.MedicalReport> { it.createdAt }
-                                .thenByDescending { it.reportDate ?: "" }
+                            compareByDescending<com.healthdecoder.app.model.MedicalReport> { it.reportDate?.takeIf { d -> d.isNotBlank() } ?: it.createdAt }
+                                .thenByDescending { it.createdAt }
                         )
 
                     if (filteredReports.isEmpty()) {

@@ -61,7 +61,7 @@ object LocalRepository {
 
     /**
      * Wipes EVERYTHING this app stores about the user on this device — used by "Delete Account"
-     * (AccountScreen), which pairs this with deleting the server account. Broader than
+     * (ProfileScreen), which pairs this with deleting the server account. Broader than
      * [clearAllData]: that only covers `recordsDir` (the encrypted SQLite DB — reports, pending
      * tests, medication logs — plus images/sources/detailed-analysis files); family profiles and
      * medicine/appointment reminders live in separate SharedPreferences and are cleared here too,
@@ -496,7 +496,7 @@ object LocalRepository {
      * incomplete (e.g. the AI API was briefly unavailable), and analyzing an "upload only" report
      * on demand — either way it marks the report [MedicalReport.analyzed] = true.
      */
-    suspend fun reprocessReport(context: Context, id: String): MedicalReport? = withContext(Dispatchers.IO) {
+    suspend fun reprocessReport(context: Context, id: String, allowAi: Boolean = true): MedicalReport? = withContext(Dispatchers.IO) {
         val existing = LocalStore.getReport(context, id) ?: return@withContext null
         val pages = existing.imagePaths.mapNotNull { path ->
             val file = File(path)
@@ -511,21 +511,40 @@ object LocalRepository {
         val sections = extraction.reports.ifEmpty { listOf(extraction.merged()) }
         val section = sections.firstOrNull { DateResolver.resolve(it, category) == existing.reportDate } ?: sections.first()
 
+        // A report saved by OcrEngine's localFallback() never had its document actually read —
+        // its date/type/category were guessed from which scan tab was open, not the content, and
+        // its comments are just that placeholder. Now that a real analysis succeeded, all of
+        // those are safe (and necessary) to overwrite instead of preserving the guesses.
+        val wasDegraded = existing.comments?.trim() == OcrEngine.DEGRADED_MARKER
+        val sectionType = section.reportName?.takeIf { it.isNotBlank() }
+            ?: section.reportType
+            ?: existing.reportType
+            ?: "Other"
+        val correctedCategory = if (wasDegraded) classifyCategory(sectionType, section.reportType, category, scanType) else category
+        val correctedDate = if (wasDegraded) (DateResolver.resolve(section, correctedCategory) ?: existing.reportDate) else existing.reportDate
+
         // Parameters/medications aren't user-editable today, so overwriting them is safe;
-        // comments/raw text ARE user-editable, so only fill those in if still blank.
+        // comments/raw text ARE user-editable, so only fill those in if still blank (a degraded
+        // report's placeholder comment doesn't count as real user content, so it's replaced too).
         var updated = existing.copy(
             testResults = section.testResults ?: existing.testResults,
             medications = dedupeMedications(section.medications.ifEmpty { existing.medications }),
-            comments = existing.comments?.takeIf { it.isNotBlank() } ?: section.comments,
+            comments = if (wasDegraded) section.comments else (existing.comments?.takeIf { it.isNotBlank() } ?: section.comments),
             extractedText = existing.extractedText?.takeIf { it.isNotBlank() } ?: section.rawText,
             // An upload-only report becomes a full, analyzed report once this succeeds. For a
             // report the AI detected a type/date for, adopt those too if the upload had placeholders.
             analyzed = true,
-            reportType = if (existing.reportType == "Uploaded") (section.reportName?.takeIf { it.isNotBlank() } ?: section.reportType ?: existing.reportType) else existing.reportType
+            reportType = if (wasDegraded || existing.reportType == "Uploaded") sectionType else existing.reportType,
+            reportCategory = correctedCategory,
+            reportDate = correctedDate
         )
-        val previous = findPrevious(context, updated.patientName, category, updated.reportDate ?: today(), excludeId = id)
-        val comparison = MedicalEngine.compareReports(context, updated, previous)
-        val insights = MedicalEngine.healthInsights(context, updated)
+        // Comparison/insights are enrichment, not correctness — each is a separate AI call, so a
+        // bulk fix-up (see fixDegradedReports) skips them to spend the day's quota on actually
+        // re-reading documents instead of burning 2/3 of it on summaries. They fill in later, the
+        // next time this report is normally opened/edited.
+        val previous = findPrevious(context, updated.patientName, correctedCategory, updated.reportDate ?: today(), excludeId = id)
+        val comparison = MedicalEngine.compareReports(context, updated, previous, allowAi = allowAi)
+        val insights = MedicalEngine.healthInsights(context, updated, allowAi = allowAi)
         updated = updated.copy(comparisonResult = comparison, healthInsights = insights)
         LocalStore.upsertReport(context, updated)
         // Analyzing a (possibly upload-only) discharge summary should also add its follow-up visits
@@ -537,6 +556,175 @@ object LocalRepository {
         detailedCacheFile(context, id).delete() // invalidate cached detailed analysis
         afterWrite(context)
         updated
+    }
+
+    /** Reports saved by OcrEngine's localFallback() — never actually analyzed, so their date/type/
+     *  category are guesses rather than read from the document. Surfaced so the user can fix all of
+     *  them in one action instead of finding and re-opening each one individually. */
+    suspend fun findDegradedReports(context: Context): List<MedicalReport> = withContext(Dispatchers.IO) {
+        LocalStore.getReports(context).filter { it.comments?.trim() == OcrEngine.DEGRADED_MARKER }
+    }
+
+    /** Result of [fixDegradedReports]: how many were corrected, and how many are still stuck
+     *  because the AI backend rejected the retry too (e.g. the daily quota is still exhausted) —
+     *  those keep their placeholder comment so a later retry finds them again. */
+    data class FixDegradedResult(val fixed: Int, val remaining: Int, val stoppedReason: String? = null)
+
+    /**
+     * Re-analyzes every report still carrying the localFallback placeholder, using each report's
+     * already-stored images — no need to re-pick files from where they were originally scanned.
+     * Stops the moment the backend rejects a retry (rather than burning through the rest with
+     * guaranteed failures), since that almost always means the same quota/outage is still in
+     * effect for all the others too; whatever's left over stays flagged for the next attempt.
+     */
+    suspend fun fixDegradedReports(
+        context: Context,
+        onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
+    ): FixDegradedResult = withContext(Dispatchers.IO) {
+        val targets = findDegradedReports(context)
+        var fixed = 0
+        var stoppedReason: String? = null
+        for ((index, report) in targets.withIndex()) {
+            onProgress(index, targets.size)
+            try {
+                reprocessReport(context, report.id, allowAi = false)
+                fixed++
+            } catch (e: com.healthdecoder.app.ai.BackendAiClient.BackendAiException) {
+                stoppedReason = e.message
+                break
+            }
+        }
+        onProgress(targets.size, targets.size)
+        FixDegradedResult(fixed = fixed, remaining = targets.size - fixed, stoppedReason = stoppedReason)
+    }
+
+    // A multi-panel document (e.g. one 7-page lab report bundling CBC + PT/INR + electrolytes)
+    // used to be split into AI requests of this many pages before today's fix raised the chunk
+    // size — a bundle scanned with MORE pages than this was liable to have its tail chunk
+    // (e.g. just the last page) silently fail to parse and vanish with no trace, dropping that
+    // panel's data entirely. Bundles at or under this size were always sent in one request and
+    // are not at risk from this specific bug.
+    private const val OLD_CHUNK_BOUNDARY = 6
+
+    /** Every report saved from the same original scan shares the same stored page images —
+     *  that's the only reliable way left to tell which saved reports came from the same
+     *  document, since the split panels don't otherwise reference each other. */
+    private fun bundleKeyOf(r: MedicalReport): String = r.imagePaths.joinToString("|")
+
+    /**
+     * Finds scan bundles whose original page count exceeded the old chunk boundary — each such
+     * bundle is a candidate for having silently lost a panel (see [OLD_CHUNK_BOUNDARY]). Grouped
+     * by shared stored files so [recoverMissingPanels] can re-derive panels for the whole bundle
+     * at once rather than per already-saved report.
+     */
+    suspend fun findAtRiskBundles(context: Context): List<List<MedicalReport>> = withContext(Dispatchers.IO) {
+        val checked = AppSettings.getCheckedRecoveryBundles(context)
+        LocalStore.getReports(context)
+            .filter { it.imagePaths.size > OLD_CHUNK_BOUNDARY && it.imagePaths.all { p -> File(p).exists() } }
+            .groupBy { bundleKeyOf(it) }
+            .filterKeys { it !in checked }
+            .values.toList()
+    }
+
+    /** Result of [recoverMissingPanels]: how many bundles were checked, how many previously-
+     *  missing panels were found and saved, and why it stopped early if it did. */
+    data class RecoveryResult(val bundlesChecked: Int, val panelsRecovered: Int, val stoppedReason: String? = null)
+
+    /**
+     * Re-reads each at-risk bundle's ORIGINAL stored pages (now processed with the larger,
+     * fixed chunk size — see [AppSettings.getScanChunkPages]) and saves any panel that isn't
+     * already present as its own report, using the same content-based duplicate check
+     * [saveScan] uses — so panels that already succeeded the first time are correctly
+     * recognized and skipped, and only genuinely-missing ones (e.g. a dropped electrolytes
+     * panel) get added. Does NOT use [saveScan] itself: its Stage-1 exact-file-hash duplicate
+     * check would reject the whole resubmission on the very first hash match, before the AI
+     * ever got a chance to re-derive the missing panel.
+     */
+    suspend fun recoverMissingPanels(
+        context: Context,
+        onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
+    ): RecoveryResult = withContext(Dispatchers.IO) {
+        val bundles = findAtRiskBundles(context)
+        var recovered = 0
+        var stoppedReason: String? = null
+        for ((index, bundle) in bundles.withIndex()) {
+            onProgress(index, bundles.size)
+            val rep = bundle.first()
+            val bundleKey = bundleKeyOf(rep)
+            // What this bundle ALREADY has, so a fresh (non-deterministic) re-extraction of an
+            // already-successful panel isn't mistaken for a new one — comparing against the
+            // AI's own wording of the SAME panel (fuzzy text similarity) is exactly what broke
+            // here: two independent extractions of the same CBC panel don't come back byte-for-
+            // byte identical, so a whole-document Jaccard-similarity duplicate check can miss
+            // the match and save it again. Comparing against what TYPE of panel this bundle
+            // already contains is a much more reliable signal for this specific case.
+            val existingTypes = bundle.map { (it.reportType ?: "").trim().lowercase() }.filter { it.isNotBlank() }
+            val patientName = rep.patientName ?: "Unknown Patient"
+            val pages = rep.imagePaths.mapNotNull { path ->
+                val file = File(path)
+                if (!file.exists()) return@mapNotNull null
+                file.readBytes() to mimeForPath(path)
+            }
+            if (pages.isEmpty()) continue
+            val category = rep.reportCategory ?: "other"
+            val scanType = if (category == "prescription") "prescription" else "report"
+            try {
+                val extraction = OcrEngine.scan(context, pages, "", scanType, category)
+                for (section in extraction.reports.ifEmpty { listOf(extraction.merged()) }) {
+                    val reportDate = DateResolver.resolve(section, category) ?: continue
+                    val sectionType = section.reportName?.takeIf { it.isNotBlank() } ?: section.reportType ?: continue
+                    val sectionCategory = classifyCategory(sectionType, section.reportType, category, scanType)
+                    val sectionText = section.rawText?.takeIf { it.isNotBlank() } ?: extraction.rawText ?: ""
+                    val newType = sectionType.trim().lowercase()
+                    val alreadyHave = existingTypes.any { it == newType || it.contains(newType) || newType.contains(it) }
+                    if (alreadyHave) continue
+
+                    var recoveredReport = MedicalReport(
+                        id = LocalStore.newId(),
+                        patientName = patientName,
+                        reportDate = reportDate,
+                        reportType = sectionType,
+                        extractedText = sectionText,
+                        comments = section.comments ?: "",
+                        medications = dedupeMedications(section.medications),
+                        imagePath = rep.imagePath,
+                        imagePaths = rep.imagePaths,
+                        sourceFiles = rep.sourceFiles,
+                        createdAt = nowIso(),
+                        testResults = section.testResults ?: TestResults(),
+                        reportCategory = sectionCategory,
+                        pageHashes = rep.pageHashes
+                    )
+                    val previous = findPrevious(context, recoveredReport.patientName, sectionCategory, reportDate, excludeId = recoveredReport.id)
+                    // allowAi = false: this is a bulk background recovery pass, possibly across
+                    // many bundles — spend the AI budget on re-deriving the missing DATA, not on
+                    // fresh comparison/insight summaries the user hasn't asked to see yet.
+                    val comparison = MedicalEngine.compareReports(context, recoveredReport, previous, allowAi = false)
+                    val insights = MedicalEngine.healthInsights(context, recoveredReport, allowAi = false)
+                    recoveredReport = recoveredReport.copy(comparisonResult = comparison, healthInsights = insights)
+                    LocalStore.upsertReport(context, recoveredReport)
+                    addFollowUpAppointments(context, section.followUps, reportDate, recoveredReport.patientName)
+                    recovered++
+                    Log.i("ScanDiag", "RECOVERED panel type=$sectionType category=$sectionCategory date=$reportDate " +
+                        "patient=${recoveredReport.patientName} bundleOf=${rep.id}")
+                }
+                // Fully processed (even if it added nothing) — never re-flag or re-spend AI
+                // calls on this exact bundle again.
+                AppSettings.markRecoveryBundleChecked(context, bundleKey)
+            } catch (e: com.healthdecoder.app.ai.BackendAiClient.BackendAiException) {
+                // Left UNCHECKED on purpose: a quota/outage failure isn't a verdict on this
+                // bundle, so it should be retried once the backend is available again.
+                stoppedReason = e.message
+                break
+            }
+        }
+        onProgress(bundles.size, bundles.size)
+        // Independent-extraction re-runs can occasionally still slip a near-identical panel
+        // past the type-match check above (e.g. two differently-worded names for the same
+        // panel) — sweep for and remove any resulting duplicates rather than leaving them.
+        val duplicatesRemoved = deleteDuplicateReports(context)
+        afterWrite(context)
+        RecoveryResult(bundlesChecked = bundles.size, panelsRecovered = (recovered - duplicatesRemoved).coerceAtLeast(0), stoppedReason = stoppedReason)
     }
 
     private fun mimeForPath(path: String): String = when {
