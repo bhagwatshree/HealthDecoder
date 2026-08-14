@@ -17,7 +17,7 @@ import com.google.firebase.auth.GoogleAuthProvider
  * Auth to mint a Firebase ID token our backend can verify — see /api/auth/google-signin.
  *
  * This only proves identity. It intentionally does *not* request Gmail access — that remains a
- * separate, deliberately browser-based flow (AccountScreen's "Link Google Account" for email
+ * separate, deliberately browser-based flow (SettingsScreen's "Link Google Account" for email
  * scanning), since offline Gmail scope requires an explicit consent screen either way.
  */
 object GoogleSignInHelper {

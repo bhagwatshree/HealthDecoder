@@ -69,6 +69,12 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: node scripts/gen-samconfig.js
       - run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
+      - name: Run DB migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        # migrate.js is idempotent (CREATE TABLE IF NOT EXISTS / ON CONFLICT DO NOTHING
+        # throughout) — safe to run on every deploy, not just ones that touch schema.
+        run: node migrate.js
 
   smoke-test:
     needs: deploy

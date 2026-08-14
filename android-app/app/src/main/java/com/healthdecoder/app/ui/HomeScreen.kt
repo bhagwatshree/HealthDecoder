@@ -56,7 +56,7 @@ private data class HomeAction(
 fun HomeScreen(
     onNavigateToScan: () -> Unit,
     onNavigateToDetail: (String) -> Unit,
-    onNavigateToAccount: () -> Unit,
+    onNavigateToProfile: () -> Unit,
     onNavigateToLogin: () -> Unit = {},
     onNavigateToRecords: () -> Unit,
     onNavigateToMedicationTracker: () -> Unit,
@@ -134,8 +134,8 @@ fun HomeScreen(
                     },
                     actions = {
                         LanguagePickerIcon()
-                        IconButton(onClick = onNavigateToAccount, modifier = Modifier.size(40.dp)) {
-                            Icon(imageVector = Icons.Default.AccountCircle, contentDescription = tr("Account"))
+                        IconButton(onClick = onNavigateToProfile, modifier = Modifier.size(40.dp)) {
+                            Icon(imageVector = Icons.Default.AccountCircle, contentDescription = tr("Profile"))
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(

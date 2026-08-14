@@ -30,8 +30,16 @@ data object Login : NavKey
 @Serializable
 data class Register(val msisdn: String? = null) : NavKey
 
+// App-behavior + data-management screen (renamed from Account) — reached via the bottom nav's
+// Settings tab. Identity/account-holder concerns live on Profile instead.
 @Serializable
-data object Account : NavKey
+data object Settings : NavKey
+
+// Identity/account screen — the signed-in user's own details, family members they manage, BYOK
+// key, password, fingerprint, logout/delete account. Reached via Home's top-bar profile icon,
+// not a bottom-nav tab.
+@Serializable
+data object Profile : NavKey
 
 @Serializable
 data object Records : NavKey

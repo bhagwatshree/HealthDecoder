@@ -94,6 +94,9 @@ fun RegisterScreen(
     var isSubmitting by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var consentChecked by remember { mutableStateOf(false) }
+    // Optional at signup today (see class doc) — collected here and attached to the account
+    // right after it's created, same call ProfileScreen's "Custom API Key" section uses.
+    var apiKeyInput by remember { mutableStateOf("") }
 
     fun validateForm(): String? {
         if (firstName.trim().isEmpty() || lastName.trim().isEmpty()) return "Enter your first and last name."
@@ -103,6 +106,17 @@ fun RegisterScreen(
         if (password.length < 6) return "Password must be at least 6 characters."
         if (FeatureFlags.PHONE_AUTH_ENABLED && phoneDigits.length != 10) return "Enter a valid 10-digit mobile number."
         return null
+    }
+
+    /** Attaches the optional API key collected on this form to the just-created account —
+     *  fire-and-forget: signup itself already succeeded, so a key-save hiccup shouldn't block
+     *  or fail the whole flow. Same call ProfileScreen's "Custom API Key" section uses. */
+    suspend fun attachApiKeyIfProvided() {
+        val key = apiKeyInput.trim()
+        if (key.isBlank()) return
+        runCatching {
+            NetworkModule.getApi(context).setGeminiKeyOnAccount(com.healthdecoder.app.model.ApiKeyRequest(key))
+        }
     }
 
     fun signupWithIdToken(idToken: String) {
@@ -128,6 +142,7 @@ fun RegisterScreen(
             result.onSuccess { auth ->
                 AppSettings.setAuthToken(context, auth.token)
                 AppSettings.setUserEmail(context, auth.user.email)
+                attachApiKeyIfProvided()
                 runCatching { AccountSync.refreshAssignedKeys(context) }
                 onRegistered()
             }.onFailure { e ->
@@ -166,6 +181,7 @@ fun RegisterScreen(
             result.onSuccess { auth ->
                 AppSettings.setAuthToken(context, auth.token)
                 AppSettings.setUserEmail(context, auth.user.email)
+                attachApiKeyIfProvided()
                 runCatching { AccountSync.refreshAssignedKeys(context) }
                 onRegistered()
             }.onFailure { e ->
@@ -359,6 +375,25 @@ fun RegisterScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
+
+                // Optional today — see the class doc comment above. Same "open AI Studio, then
+                // auto-fill from clipboard on return" flow as ProfileScreen's API key section.
+                Text(tr("Free Gemini API Key (Optional)"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    tr("Skip this and the app uses a shared free pool by default. Adding your own key up front means you're never limited by that pool's daily cap."),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                GetFreeApiKeyButton(onKeyDetected = { key -> apiKeyInput = key })
+                OutlinedTextField(
+                    value = apiKeyInput,
+                    onValueChange = { apiKeyInput = it },
+                    label = { Text(tr("Gemini API Key (AIzaSy...)")) },
+                    placeholder = { Text(tr("Optional — leave blank to use the shared pool")) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

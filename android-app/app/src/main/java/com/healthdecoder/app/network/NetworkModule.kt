@@ -159,6 +159,11 @@ interface MedicalScannerApi {
     @GET("api/auth/me")
     suspend fun getMe(): UserAccount
 
+    /** Updates the signed-in user's own name/DOB/gender. Email/phone aren't editable here —
+     *  they're the login identity, not a display detail (see ProfileScreen's edit form). */
+    @PUT("api/auth/me")
+    suspend fun updateProfile(@Body request: com.healthdecoder.app.model.UpdateProfileRequest): UserAccount
+
     /** Asks the backend which Gemini/Sarvam key this account should use right now, and
      *  accounts for today's free-tier usage. Call once per session, not once per scan —
      *  this consumes one of today's free issuances. For just displaying usage (e.g. the
@@ -182,7 +187,7 @@ interface MedicalScannerApi {
     @POST("api/auth/change-password")
     suspend fun changePassword(@Body request: ChangePasswordRequest): SimpleResponse
 
-    /** Permanently deletes the signed-in user's server account. Irreversible — see AccountScreen
+    /** Permanently deletes the signed-in user's server account. Irreversible — see ProfileScreen
      *  for the confirmation dialog and the local-data wipe that accompanies it. */
     @DELETE("api/user/account")
     suspend fun deleteAccount(): SimpleResponse
@@ -196,6 +201,10 @@ interface MedicalScannerApi {
 
     @GET("api/translations")
     suspend fun getLanguageTranslations(@Query("language") language: String): Map<String, String>
+
+    // ── Personalized health tips (DB is the source of truth) ───────────────────────────
+    @GET("api/health-tips")
+    suspend fun getHealthTips(): List<com.healthdecoder.app.local.RemoteHealthTip>
 
     // ── Healthcare & Lab Test Discovery ──────────────────────────────────────
     @POST("api/discovery/search")

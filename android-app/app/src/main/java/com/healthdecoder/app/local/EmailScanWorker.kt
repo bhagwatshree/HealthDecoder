@@ -122,7 +122,7 @@ class EmailScanWorker(
     }
 
     /** "Other (IMAP)" path: a plain IMAP mailbox with a host/port/app-password the user entered
-     *  directly (see AccountScreen) — not Gmail, so none of the OAuth scope concerns apply. */
+     *  directly (see SettingsScreen) — not Gmail, so none of the OAuth scope concerns apply. */
     private fun scanImap(email: String, dao: ProcessedEmailDao, lookbackDays: Int): Int {
         val password = SecureKeyManager.getImapPassword(context) ?: return 0
         val host = AppSettings.getImapHost(context)

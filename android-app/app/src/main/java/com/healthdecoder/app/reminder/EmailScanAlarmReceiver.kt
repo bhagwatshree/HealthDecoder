@@ -24,7 +24,7 @@ class EmailScanAlarmReceiver : BroadcastReceiver() {
 
         // The actual scan is network I/O, so hand it to WorkManager rather than doing it here —
         // BroadcastReceiver.onReceive must return quickly. The scheduled scan only needs to
-        // cover the day that just ended; "Scan Now" in AccountScreen covers 2 days instead.
+        // cover the day that just ended; "Scan Now" in SettingsScreen covers 2 days instead.
         val request = OneTimeWorkRequestBuilder<EmailScanWorker>()
             .setInputData(Data.Builder().putInt(EmailScanWorker.KEY_LOOKBACK_DAYS, 1).build())
             .build()

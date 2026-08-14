@@ -87,6 +87,12 @@ object OcrEngine {
 
     private val gson: Gson = GsonBuilder().setLenient().create()
 
+    /** Marks a report saved via [localFallback] — the AI never actually read the document, so
+     *  its reportDate/reportType/category weren't derived from real content and are suspect.
+     *  [LocalRepository.reprocessReport] looks for this exact string to know it's safe (and
+     *  necessary) to overwrite those fields once a real analysis succeeds. */
+    const val DEGRADED_MARKER = "Parsed on-device from OCR text (AI unavailable)."
+
     /**
      * Scans one or more page images. The pages may contain several distinct reports;
      * each comes back as its own entry with its own name and correctly chosen date.
@@ -107,14 +113,28 @@ object OcrEngine {
         val chunks = if (images.isEmpty()) listOf(emptyList()) else images.chunked(chunkSize)
 
         val results = mutableListOf<MultiScanExtraction>()
+        var failedChunks = 0
         for ((index, chunk) in chunks.withIndex()) {
             // The device-OCR hint text belongs to the first page; only give it to chunk 1.
             val ref = if (index == 0) localOcrText else ""
-            scanChunk(context, chunk, ref, scanType, reportCategory, index + 1, chunks.size)
-                ?.let { results.add(it) }
+            val result = scanChunk(context, chunk, ref, scanType, reportCategory, index + 1, chunks.size)
+            if (result != null) results.add(result) else failedChunks++
         }
         if (results.isEmpty()) return localFallback(localOcrText, scanType)
-        return mergeChunks(results)
+        val merged = mergeChunks(results)
+        // A partial failure used to vanish with no trace — some pages' data (e.g. the very
+        // last page of a multi-page report) silently missing from the saved report with
+        // nothing to indicate why. Now it's visible on the report itself instead of only in
+        // logs, so it doesn't look like the document was fully, correctly read when it wasn't.
+        if (failedChunks == 0) return merged
+        val warning = "⚠ $failedChunks of ${chunks.size} page-batch${if (chunks.size > 1) "es" else ""} " +
+            "failed to analyze — some pages of this document may be missing from the extracted data. Consider re-scanning."
+        return merged.copy(
+            reports = merged.reports.mapIndexed { i, section ->
+                if (i == 0) section.copy(comments = listOfNotNull(warning, section.comments?.takeIf { it.isNotBlank() }).joinToString("\n"))
+                else section
+            }
+        )
     }
 
     private fun scanChunk(
@@ -133,6 +153,12 @@ object OcrEngine {
         // (LanguageUtil) still call Sarvam directly — the backend has no Sarvam proxy yet.
         val raw = BackendAiClient.generateFromImages(context, prompt, images)
         parse(GeminiClient.stripJsonFences(raw))
+    } catch (e: BackendAiClient.BackendAiException) {
+        // A known, deterministic failure (daily quota exhausted, server down) — never worth
+        // silently degrading to localFallback(), which can't read the document at all and
+        // would file it under the wrong category with today's date instead of its real one.
+        // Let the caller (BackgroundScanScheduler) surface the real reason to the user.
+        throw e
     } catch (e: Exception) {
         e.printStackTrace()
         null
@@ -335,7 +361,7 @@ Return ONLY raw JSON. No markdown code fences, no extra text.
             patientName = name,
             reportDate = null,
             reportType = type,
-            comments = "Parsed on-device from OCR text (AI unavailable).",
+            comments = DEGRADED_MARKER,
             medications = emptyList(),
             recommendedTests = emptyList(),
             testResults = TestResults(),

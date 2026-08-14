@@ -30,7 +30,8 @@ import com.healthdecoder.app.local.SecureKeyManager
 import com.healthdecoder.app.network.NetworkModule
 
 import com.healthdecoder.app.network.httpCode
-import com.healthdecoder.app.ui.AccountScreen
+import com.healthdecoder.app.ui.ProfileScreen
+import com.healthdecoder.app.ui.SettingsScreen
 import com.healthdecoder.app.ui.ChatScreen
 import com.healthdecoder.app.ui.CompareScreen
 import com.healthdecoder.app.ui.DetailedAnalysisScreen
@@ -155,7 +156,7 @@ fun MainNavigation() {
       BottomNavTab.Trends -> Trends
       BottomNavTab.Compare -> Compare
       BottomNavTab.Brief -> DoctorBrief(AppSettings.getActivePatient(context) ?: "")
-      BottomNavTab.Settings -> Account
+      BottomNavTab.Settings -> Settings
     }
     backStack.clear()
     if (target != Main) backStack.add(Main)
@@ -294,7 +295,7 @@ fun MainNavigation() {
 
         // medicalscanner:// isn't exclusive to this app — any other app on the device can fire
         // this same intent. Only trust it if it carries the single-use nonce this app itself
-        // generated moments before launching the OAuth flow (AccountScreen.kt "Link Google
+        // generated moments before launching the OAuth flow (SettingsScreen.kt "Link Google
         // Account"). A non-matching/missing nonce leaves the real pending one untouched (so a
         // legitimate flow still in flight isn't broken by a stray or malicious duplicate intent).
         val pendingNonce = AppSettings.peekPendingOAuthNonce(context)
@@ -377,6 +378,12 @@ fun MainNavigation() {
     com.healthdecoder.app.local.RemoteUiTranslations.fetchAllIfNeverFetched(context)
   }
 
+  // Same one-time-per-install pull as translations above, for the personalized health tips
+  // bank — see RemoteHealthTips.
+  LaunchedEffect(Unit) {
+    com.healthdecoder.app.local.RemoteHealthTips.fetchIfNeverFetched(context)
+  }
+
   // Onboarding is a full screen, not a dialog, so it replaces the nav content entirely (rather
   // than overlaying it like the disclaimer AlertDialog above) — but only once the disclaimer is
   // out of the way, so a user who hasn't accepted it yet still sees that dialog first.
@@ -414,8 +421,15 @@ fun MainNavigation() {
             modifier = Modifier.safeDrawingPadding()
           )
         }
-        entry<Account> {
-          AccountScreen(
+        entry<Settings> {
+          SettingsScreen(
+            onNavigateBack = { backStack.removeLastOrNull() },
+            modifier = Modifier.safeDrawingPadding(),
+            onNavigateToTab = navigateToTab
+          )
+        }
+        entry<Profile> {
+          ProfileScreen(
             onNavigateBack = { backStack.removeLastOrNull() },
             onLoggedOut = {
               backStack.clear()
@@ -423,15 +437,15 @@ fun MainNavigation() {
               // Signing in is still reachable on purpose: Home's persistent sign-in banner.
               backStack.add(if (FeatureFlags.PHONE_AUTH_ENABLED) Login else Main)
             },
-            modifier = Modifier.safeDrawingPadding(),
-            onNavigateToTab = navigateToTab
+            onNavigateToLogin = { backStack.add(Login) },
+            modifier = Modifier.safeDrawingPadding()
           )
         }
         entry<Main> {
           HomeScreen(
             onNavigateToScan = { backStack.add(Scan()) },
             onNavigateToDetail = { reportId -> backStack.add(ReportDetail(reportId)) },
-            onNavigateToAccount = { backStack.add(Account) },
+            onNavigateToProfile = { backStack.add(Profile) },
             onNavigateToLogin = { backStack.add(Login) },
             onNavigateToRecords = { backStack.add(Records) },
             onNavigateToMedicationTracker = { backStack.add(MedicationTracker) },

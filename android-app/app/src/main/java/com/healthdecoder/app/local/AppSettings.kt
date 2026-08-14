@@ -9,7 +9,7 @@ import com.google.gson.reflect.TypeToken
  * Local app preferences (SharedPreferences-backed). No AI provider API keys are stored here
  * anymore — Gemini/Sarvam calls are proxied through the backend (see ai/BackendAiClient.kt),
  * so the phone never holds a raw key at all, "bring your own key" included (that's saved
- * server-side only, see AccountScreen's Save Key handler).
+ * server-side only, see ProfileScreen's Save Key handler).
  */
 object AppSettings {
     private const val PREFS = "medical_scanner_prefs"
@@ -159,11 +159,19 @@ object AppSettings {
     // Large multi-document scans are sent to the AI in chunks of this many pages per
     // request; one giant request exceeds free-tier request/response limits and fails.
     // Raise via setScanChunkPages() if a paid API tier with bigger limits is used.
+    //
+    // MUST stay comfortably above how many pages a single cohesive multi-panel lab report
+    // can run (Indian diagnostic labs commonly bundle CBC + PT/INR + urine + biochemistry +
+    // electrolytes into ONE 7-10 page PDF for one blood draw) — a report that lands exactly
+    // on the chunk boundary gets split into two AI requests, and the isolated tail chunk
+    // (e.g. just the last page) can silently fail to parse and vanish with no error shown,
+    // dropping that page's data (a real incident: a 7-page report's electrolytes panel,
+    // alone in page 7 of a 6-page chunk split, never made it into the saved report at all).
     private const val KEY_SCAN_CHUNK_PAGES = "scan_chunk_pages"
     private const val KEY_SCAN_MAX_PAGES = "scan_max_pages"
 
     fun getScanChunkPages(context: Context): Int =
-        prefs(context).getInt(KEY_SCAN_CHUNK_PAGES, 6).coerceIn(1, 30)
+        prefs(context).getInt(KEY_SCAN_CHUNK_PAGES, 12).coerceIn(1, 30)
 
     fun setScanChunkPages(context: Context, pages: Int) {
         prefs(context).edit().putInt(KEY_SCAN_CHUNK_PAGES, pages).apply()
@@ -175,6 +183,20 @@ object AppSettings {
 
     fun setScanMaxPages(context: Context, pages: Int) {
         prefs(context).edit().putInt(KEY_SCAN_MAX_PAGES, pages).apply()
+    }
+
+    // Scan bundles [LocalRepository.recoverMissingPanels] has already fully checked (not
+    // necessarily found anything in, just checked) — without this, the same at-risk bundle
+    // (flagged purely by its ORIGINAL page count, which never changes) would be re-flagged and
+    // re-processed forever, even after it's already been recovered or confirmed complete.
+    private const val KEY_CHECKED_RECOVERY_BUNDLES = "checked_recovery_bundles"
+
+    fun getCheckedRecoveryBundles(context: Context): Set<String> =
+        prefs(context).getStringSet(KEY_CHECKED_RECOVERY_BUNDLES, emptySet()) ?: emptySet()
+
+    fun markRecoveryBundleChecked(context: Context, bundleKey: String) {
+        val current = getCheckedRecoveryBundles(context)
+        prefs(context).edit().putStringSet(KEY_CHECKED_RECOVERY_BUNDLES, current + bundleKey).apply()
     }
 
     // Minimum spacing between Gemini requests. The free tier allows ~20 requests/minute;
@@ -286,7 +308,7 @@ object AppSettings {
 
     /**
      * Wipes every identifying value this class stores. Used by "Delete Account" (see
-     * AccountScreen -> LocalRepository.clearAllLocalData), where the user is promised total
+     * ProfileScreen -> LocalRepository.clearAllLocalData), where the user is promised total
      * removal — so it is not enough to drop the medical records: anything naming a person also
      * has to go. Easy things to miss, all cleared here: the linked mailbox address and IMAP
      * server config, the biometric quick-login slot (which otherwise keeps a session token and
