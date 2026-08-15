@@ -241,7 +241,10 @@ fun SettingsScreen(
                     context.startActivity(android.content.Intent.createChooser(send, "Share export"))
                     "Export ready — choose where to send it."
                 }
-            }.getOrElse { "Export failed: ${it.message}" }
+            }.getOrElse { e ->
+                e.printStackTrace()
+                "Export failed. Please try again."
+            }
             transferBusy = false
         }
     }
@@ -258,7 +261,10 @@ fun SettingsScreen(
                         append(" report(s)")
                         if (res.patients.isNotEmpty()) append(" • ${res.patients.joinToString()}")
                     }
-                }.getOrElse { "Import failed: ${it.message}" }
+                }.getOrElse { e ->
+                    e.printStackTrace()
+                    "Import failed. Please check the file and try again."
+                }
             }
             patients = LocalRepository.listPatients(context)
             transferBusy = false
