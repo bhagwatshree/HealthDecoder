@@ -265,6 +265,10 @@ app.post('/api/auth/google-signin', async (req, res) => {
       trackFirebaseVerify(null, true);
     } catch (error) {
       trackFirebaseVerify(null, false);
+      // The client only ever sees a generic 401 (never leak verifyIdToken's raw error to
+      // untrusted callers), so this is the only place the actual cause — wrong Firebase
+      // project, malformed service account key, expired/tampered token — is visible at all.
+      console.error('Google sign-in verification failed:', error);
       return res.status(401).json({ error: 'Google sign-in verification failed. Please try again.' });
     }
 
