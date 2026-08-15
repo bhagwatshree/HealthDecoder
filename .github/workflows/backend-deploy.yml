@@ -72,6 +72,7 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          FREE_TIER_DAILY_LIMIT: ${{ secrets.FREE_TIER_DAILY_LIMIT }}
         run: node scripts/gen-samconfig.js
       - run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
       - name: Run DB migrations

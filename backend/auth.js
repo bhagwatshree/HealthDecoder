@@ -31,6 +31,11 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
   try {
     // Accept either raw JSON or base64-encoded JSON — base64 survives being passed
     // through `sam deploy --parameter-overrides`, which mangles quotes and spaces.
+    // Keep the stored secret trimmed to the 4 fields cert() actually needs (type,
+    // project_id, private_key, client_email) — Lambda enforces a 4KB *combined* limit
+    // across all env vars, and the full downloaded JSON's extra fields (private_key_id,
+    // client_id, auth_uri/token_uri/cert URLs, universe_domain) aren't used here but
+    // are large enough after base64 inflation to blow that budget on their own.
     let rawServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON.trim();
     if (!rawServiceAccount.startsWith('{')) {
       rawServiceAccount = Buffer.from(rawServiceAccount, 'base64').toString('utf8');
