@@ -92,7 +92,25 @@ object DateResolver {
      * Returns null when unparsable or outside the plausible range (future dates and
      * dates more than 60 years old are rejected — usually OCR misreads).
      */
-    fun normalize(raw: String?): String? {
+    fun normalize(raw: String?): String? = parseFirstPlausible(raw, ::isPlausible)
+
+    /**
+     * Same parsing as [normalize] but for a medicine's start/end date, which is legitimately in
+     * the future (a course starting next month, an end date months out) — [normalize]'s "not in
+     * the future" sanity check exists for REPORT dates and must stay that way for [resolve].
+     * Still rejects implausible OCR garbage (more than ~5 years out either direction).
+     */
+    fun normalizeMedicineDate(raw: String?): String? = parseFirstPlausible(raw, ::isPlausibleMedicineDate)
+
+    /**
+     * Tries every known date format against [raw] in order, same as the original single-pass
+     * parser: a pattern that parses but yields an implausible date (e.g. a 2-digit year matched
+     * by a 4-digit-year pattern, reading "26" as year 26 AD) is skipped in favor of the NEXT
+     * pattern, rather than failing outright — some formats are ambiguous and only a later
+     * pattern in the list correctly disambiguates them. Returns the first parse whose date passes
+     * [isPlausible].
+     */
+    private fun parseFirstPlausible(raw: String?, isPlausible: (Calendar) -> Boolean): String? {
         val text = raw?.trim()?.takeIf { it.isNotBlank() } ?: return null
         // Strip a time portion ("12/03/2026 10:45 AM" → "12/03/2026").
         val dateOnly = text.replace(Regex("[T ]\\d{1,2}:\\d{2}.*$"), "").trim()
@@ -101,9 +119,7 @@ object DateResolver {
             val fmt = SimpleDateFormat(pattern, Locale.ENGLISH).apply { isLenient = false }
             val parsed = try { fmt.parse(dateOnly) } catch (e: Exception) { null } ?: continue
             val cal = Calendar.getInstance().apply { time = parsed }
-            // Two-digit years: SimpleDateFormat maps into 20xx already; sanity-check range.
-            val iso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(parsed)
-            if (isPlausible(cal)) return iso
+            if (isPlausible(cal)) return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(parsed)
         }
         return null
     }
@@ -112,5 +128,11 @@ object DateResolver {
         val tomorrow = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }
         val oldest = Calendar.getInstance().apply { add(Calendar.YEAR, -60) }
         return cal.before(tomorrow) && cal.after(oldest)
+    }
+
+    private fun isPlausibleMedicineDate(cal: Calendar): Boolean {
+        val earliest = Calendar.getInstance().apply { add(Calendar.YEAR, -5) }
+        val latest = Calendar.getInstance().apply { add(Calendar.YEAR, 5) }
+        return cal.after(earliest) && cal.before(latest)
     }
 }

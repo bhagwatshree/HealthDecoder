@@ -1,6 +1,9 @@
 package com.healthdecoder.app.ai
 
 import com.healthdecoder.app.model.*
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * On-device port of the backend's /api/dashboard and /api/health-summary aggregation:
@@ -187,7 +190,8 @@ object DashboardEngine {
         val isOptional: Boolean, val weeklySchedule: List<String>, val notes: String, val date: String,
         // When the report was SCANNED (createdAt). Printed report dates are often mis-read, so
         // medication currency (which prescription is "latest") follows scan time, not [date].
-        val scanTime: String
+        val scanTime: String,
+        val startDate: String?, val endDate: String?, val intervalDays: Int?
     )
 
     fun buildDashboard(reports: List<MedicalReport>, pendingTests: List<PendingTest>): DashboardData {
@@ -222,6 +226,7 @@ object DashboardEngine {
     }
 
     private fun buildMedicationHistory(reports: List<MedicalReport>): List<MedicationHistory> {
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         // Ordered by SCAN time (oldest first) so we can detect dosage changes over time. Printed
         // report dates are frequently mis-read on discharge summaries, which used to reorder
         // prescriptions and wrongly discontinue medicines — scan order is what the user controls.
@@ -249,16 +254,22 @@ object DashboardEngine {
                 if (m.name.isNullOrBlank()) continue
                 val key = MedName.canonicalKey(m.name)
                 val clean = MedName.cleanDisplay(m.name.trim())
-                // Prefer the richest label for display: one that carries a strength (a digit), else the longest.
+                // Prefer the richest label for display: one that carries a strength (a digit) over
+                // one that doesn't. When BOTH carry a digit, the latest-scanned one wins (this
+                // loop runs oldest->newest) rather than the longer string — an older discharge
+                // summary's per-DOSE amount ("Acitrom 0.5mg", i.e. half of a 1mg tablet) can read
+                // longer than a newer prescription's actual tablet strength ("Acitrom 1mg"), and
+                // the newer, more authoritative script should win regardless of string length.
                 val dnKey = "$patient|$key"
                 val prevName = displayName[dnKey]
                 if (prevName == null ||
                     (clean.any { it.isDigit() } && !prevName.any { it.isDigit() }) ||
-                    (clean.any { it.isDigit() } == prevName.any { it.isDigit() } && clean.length > prevName.length)
+                    clean.any { it.isDigit() }
                 ) displayName[dnKey] = clean
                 medMap.getOrPut(key) { mutableListOf() }.add(
                     MedPoint(r.id, m.dosage.orEmpty().ifEmpty { "1 tablet" }, m.frequency.orEmpty(), m.duration ?: "",
-                        m.isOptional, m.weeklySchedule ?: emptyList(), m.notes ?: "", date, scanTime)
+                        m.isOptional, m.weeklySchedule ?: emptyList(), m.notes ?: "", date, scanTime,
+                        m.startDate, m.endDate, m.intervalDays)
                 )
             }
         }
@@ -279,10 +290,16 @@ object DashboardEngine {
                 }
                 // A medicine is "Discontinued" only when a MORE RECENTLY SCANNED prescription omitted
                 // it — i.e. the doctor's newer script dropped it. Not when an out-of-order printed date
-                // makes it look old.
-                val isOmitted = current.scanTime < latest
+                // makes it look old. EXCEPTION: a medicine still inside its own resolved endDate isn't
+                // discontinued just because a later, narrower-scope prescription didn't repeat it (e.g.
+                // a weekly 4-dose course from a discharge summary, mid-course when a chronic-meds-only
+                // follow-up script is scanned) — it stays Active/Scheduled until that window closes.
+                val stillInOwnWindow = current.endDate != null && current.endDate >= today
+                val isOmitted = current.scanTime < latest && !stillInOwnWindow
+                val notYetStarted = current.startDate != null && current.startDate > today
                 val status = when {
                     isOmitted -> "Discontinued"
+                    notYetStarted -> "Scheduled"
                     previous != null && (previous.dosage != current.dosage || previous.frequency != current.frequency) -> "Changed"
                     else -> "Active"
                 }
@@ -300,7 +317,10 @@ object DashboardEngine {
                         reportId = current.reportId,
                         isOptional = current.isOptional,
                         weeklySchedule = current.weeklySchedule,
-                        notes = current.notes
+                        notes = current.notes,
+                        currentStartDate = current.startDate,
+                        currentEndDate = current.endDate,
+                        currentIntervalDays = current.intervalDays
                     )
                 )
             }

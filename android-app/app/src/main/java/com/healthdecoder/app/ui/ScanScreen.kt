@@ -41,6 +41,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -1005,20 +1006,38 @@ fun ScanScreen(
                     Button(
                         onClick = { onTakePhotoClicked() },
                         modifier = Modifier.weight(1f).height(54.dp),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                     ) {
                         Icon(imageVector = Icons.Default.PhotoCamera, contentDescription = tr("Camera"))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(if (pages.isEmpty()) tr("Camera") else tr("Add Page"), fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        // Fixed single line so every button in these two rows stays the same
+                        // height — "From Device"/"Scan Email" used to wrap to a second line here
+                        // and visually overflow the button's fixed height while their row sibling
+                        // stayed single-line, an uneven, broken-looking row. Ellipsis is only a
+                        // last-resort safety net on unusually narrow screens; the tighter content
+                        // padding above gives the longer labels enough room to fit in practice.
+                        Text(
+                            if (pages.isEmpty()) tr("Camera") else tr("Add Page"),
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                     OutlinedButton(
                         onClick = { fileLauncher.launch(arrayOf("*/*")) },
                         modifier = Modifier.weight(1f).height(54.dp),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                     ) {
                         Icon(imageVector = Icons.Default.FolderOpen, contentDescription = tr("From device"), tint = Color(0xFFE8A838))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(tr("From Device"), fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            tr("From Device"),
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
 
@@ -1031,11 +1050,17 @@ fun ScanScreen(
                     OutlinedButton(
                         onClick = { showQrScanner = true },
                         modifier = Modifier.weight(1f).height(54.dp),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                     ) {
                         Icon(imageVector = Icons.Default.QrCodeScanner, contentDescription = tr("Scan QR Code"), tint = Color(0xFF1565C0))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(tr("Scan QR"), fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            tr("Scan QR"),
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                     OutlinedButton(
                         onClick = {
@@ -1048,11 +1073,17 @@ fun ScanScreen(
                             }
                         },
                         modifier = Modifier.weight(1f).height(54.dp),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                     ) {
                         Icon(imageVector = Icons.Default.Email, contentDescription = tr("Scan from Email"), tint = Color(0xFF6A1B9A))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(tr("Scan Email"), fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            tr("Scan Email"),
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
 

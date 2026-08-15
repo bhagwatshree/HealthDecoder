@@ -4,6 +4,8 @@ import android.content.Context
 import com.healthdecoder.app.model.MedName
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 data class SlotConfig(
     val enabled: Boolean = false,
@@ -20,13 +22,57 @@ data class MedicineSchedule(
     // Days of the week the medicine is taken (Calendar.DAY_OF_WEEK: 1=Sun .. 7=Sat).
     // null or empty means EVERY day — used for weekly scripts like "Wed & Sat only"
     // (e.g. Tolvaptan). Nullable so schedules saved before this field existed still load.
-    val daysOfWeek: List<Int>? = null
+    val daysOfWeek: List<Int>? = null,
+    // Structured reminder window resolved from the prescription (or set directly by the user in
+    // the Add/Edit dialog). Null means "no constraint" — matches every schedule saved before these
+    // fields existed, so nothing about existing reminders changes.
+    val startDate: String? = null,
+    val endDate: String? = null,
+    // "Once every N days" dosing cadence (e.g. "once in 15 days" -> 15) for a medicine that
+    // doesn't land on the same weekday every week, so [daysOfWeek] can't express it. Null for the
+    // ordinary daily/weekly-named-day case — those already work via [runsOn]. When set, this
+    // OVERRIDES daysOfWeek for the "is it due today" check (see [isDueToday]): counting exact
+    // days from [startDate] is the only way to know if today is dose N, day N+1, etc.
+    val intervalDays: Int? = null
 )
 
 /** True if this schedule's medicine is due on [dayOfWeek] (Calendar.DAY_OF_WEEK). Every day when no
  *  specific days are set. */
 fun MedicineSchedule.runsOn(dayOfWeek: Int): Boolean =
     daysOfWeek.isNullOrEmpty() || daysOfWeek!!.contains(dayOfWeek)
+
+/** True if [todayIso] ("YYYY-MM-DD") falls within this schedule's start/end window. ISO strings
+ *  compare lexicographically correctly, so no date parsing is needed at check time. */
+fun MedicineSchedule.isCurrentlyActive(todayIso: String): Boolean =
+    (startDate == null || startDate <= todayIso) && (endDate == null || endDate >= todayIso)
+
+private fun daysBetweenIso(fromIso: String, toIso: String): Long? = try {
+    val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    val from = fmt.parse(fromIso.trim())
+    val to = fmt.parse(toIso.trim())
+    if (from == null || to == null) null else (to.time - from.time) / 86_400_000L
+} catch (e: Exception) { null }
+
+/**
+ * True if [todayIso] is one of this schedule's every-[intervalDays]-days dose days, counting from
+ * [startDate] (day 0). Without an anchor date to count from, an interval can't be evaluated, so
+ * this defaults to true (falls back to firing daily) rather than silently never firing.
+ */
+fun MedicineSchedule.isDueByInterval(todayIso: String): Boolean {
+    val interval = intervalDays ?: return true
+    if (interval <= 0) return true
+    val anchor = startDate ?: return true
+    val diff = daysBetweenIso(anchor, todayIso) ?: return true
+    return diff >= 0 && diff % interval == 0L
+}
+
+/**
+ * True if this schedule's medicine is due TODAY, combining the day-of-week script ([runsOn]) with
+ * the every-N-days cadence ([isDueByInterval]) — [intervalDays], when set, replaces the
+ * day-of-week check entirely (a 15-day cycle isn't tied to any particular weekday).
+ */
+fun MedicineSchedule.isDueToday(dayOfWeek: Int, todayIso: String): Boolean =
+    if (intervalDays != null && intervalDays > 0) isDueByInterval(todayIso) else runsOn(dayOfWeek)
 
 object MedicineScheduleStore {
     private const val PREFS_NAME = "medicine_schedules"
@@ -39,7 +85,7 @@ object MedicineScheduleStore {
     private val gson = GsonBuilder().create()
 
     private fun dismissKey(medicineName: String, patientName: String) =
-        "${medicineName.trim().lowercase()}|${patientName.trim().lowercase()}"
+        "${MedName.canonicalKey(medicineName)}|${patientName.trim().lowercase()}"
 
     private fun loadDismissed(context: Context): MutableSet<String> {
         val json = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(KEY_DISMISSED, null)
@@ -168,6 +214,56 @@ object MedicineScheduleStore {
         saveAll(context, result)
     }
 
+    /**
+     * Refreshes an EXISTING reminder's clinical facts — display name, dosage, frequency,
+     * WHICH DAYS it's taken, and its start/end date — from the latest scanned prescription, so a
+     * corrected re-scan (e.g. a follow-up prescription fixing a discharge summary's misread
+     * dosage, adding a real end date, or narrowing daily to "5 days a week, Thu & Sun off")
+     * actually reaches the reminder instead of leaving it stuck with whatever the first scan
+     * produced. [daysOfWeek] IS a clinical fact (which days the doctor prescribed it for), not a
+     * user preference — only [SlotConfig] (which of those days' time-slots are toggled on, and at
+     * what time) is the user's own reminder-timing choice and stays untouched here. No-op when no
+     * schedule exists yet (that's [autoSeedIfAbsent]'s job) or nothing actually changed.
+     */
+    fun syncFromLatest(
+        context: Context,
+        medicineName: String,
+        patientName: String,
+        dosage: String,
+        frequency: String,
+        daysOfWeek: List<Int> = emptyList(),
+        startDate: String? = null,
+        endDate: String? = null,
+        intervalDays: Int? = null
+    ) {
+        val canon = MedName.canonicalKey(medicineName)
+        val list = loadAll(context).toMutableList()
+        val idx = list.indexOfFirst {
+            it.patientName.equals(patientName, ignoreCase = true) && MedName.canonicalKey(it.medicineName) == canon
+        }
+        if (idx < 0) return
+        val existing = list[idx]
+        // The latest scan's name wins when it's at least as rich (carries a strength digit the
+        // existing label lacks, or the existing label has none either) — same tie-break DashboardEngine
+        // uses so the reminder shows the same authoritative name as the tracker, not a stale one.
+        val existingHasDigit = existing.medicineName.any { it.isDigit() }
+        val newHasDigit = medicineName.any { it.isDigit() }
+        val newName = if (newHasDigit || !existingHasDigit) medicineName else existing.medicineName
+        val updated = existing.copy(
+            medicineName = newName,
+            dosage = dosage.ifBlank { existing.dosage },
+            frequency = frequency.ifBlank { existing.frequency },
+            daysOfWeek = daysOfWeek.ifEmpty { null },
+            startDate = startDate,
+            endDate = endDate,
+            intervalDays = intervalDays
+        )
+        if (updated != existing) {
+            list[idx] = updated
+            saveAll(context, list)
+        }
+    }
+
     fun autoSeedIfAbsent(
         context: Context,
         medicineName: String,
@@ -175,7 +271,10 @@ object MedicineScheduleStore {
         dosage: String,
         frequency: String,
         activeSlots: List<String>,
-        daysOfWeek: List<Int> = emptyList()
+        daysOfWeek: List<Int> = emptyList(),
+        startDate: String? = null,
+        endDate: String? = null,
+        intervalDays: Int? = null
     ) {
         // Canonical match so "Tab. Concor" and "Concor 5mg" (same drug, different scans) don't both seed.
         val canon = MedName.canonicalKey(medicineName)
@@ -190,12 +289,12 @@ object MedicineScheduleStore {
         // Seed directly (not via upsert, which would clear the dismissed flag — irrelevant here since
         // we've already confirmed it isn't dismissed, but keeps the auto-seed path self-contained).
         val list = loadAll(context).toMutableList()
-        list.add(MedicineSchedule(medicineName, patientName, dosage, frequency, slots, daysOfWeek.ifEmpty { null }))
+        list.add(MedicineSchedule(medicineName, patientName, dosage, frequency, slots, daysOfWeek.ifEmpty { null }, startDate, endDate, intervalDays))
         saveAll(context, list)
     }
 
     private fun MedicineSchedule.matches(name: String, patient: String) =
-        medicineName.equals(name, ignoreCase = true) &&
+        MedName.canonicalKey(medicineName) == MedName.canonicalKey(name) &&
         patientName.equals(patient, ignoreCase = true)
 
     /**
@@ -231,7 +330,10 @@ object MedicineScheduleStore {
             dosage = primary.dosage.ifBlank { secondary.dosage },
             frequency = primary.frequency.ifBlank { secondary.frequency },
             slots = slots,
-            daysOfWeek = primary.daysOfWeek ?: secondary.daysOfWeek
+            daysOfWeek = primary.daysOfWeek ?: secondary.daysOfWeek,
+            startDate = primary.startDate ?: secondary.startDate,
+            endDate = primary.endDate ?: secondary.endDate,
+            intervalDays = primary.intervalDays ?: secondary.intervalDays
         )
     }
 }

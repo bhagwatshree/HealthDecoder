@@ -287,6 +287,35 @@ Also ensure that:
    - "isOptional": true only for SOS / PRN / "if required" medicines.
    - "notes": special instructions (empty stomach, before/after food, "no food 2 hrs"), AND any
      HANDWRITTEN substitution or brand the doctor wrote beside the printed drug.
+   - "startDate": an EXPLICIT future start date printed or handwritten (e.g. "start from 20/10/26",
+     a handwritten addition next to another drug), as YYYY-MM-DD. Leave null when the medicine
+     starts on the visit/report date itself (the normal case).
+   - "startAfterDays": if instead stated as an offset ("starts after 5 days"), the number of days
+     after the report/visit date — same day-math convention as followUps.afterDays below
+     ("after 1 week"→7, "after 2 weeks"→14, "after 1 month"→30). Leave null when startDate is set
+     or the medicine starts immediately.
+   - "endDate": an EXPLICIT end date printed or handwritten ANYWHERE on this medicine's row/entry
+     — in an instruction sentence, a frequency line, a remarks column, or a dedicated date field —
+     e.g. "TILL 20/10/26", "TILL 20 OCT 2026". Search the WHOLE row for this, not just an obvious
+     "Duration"/"Instruction" column: a row can print BOTH a generic day-count ("Duration: 90
+     Days") AND a separate, more specific calendar date in its instructions ("TILL 20 OCT 2026, 5
+     DAYS A WEEK, THURSDAY & SUNDAY OFF..."). When both appear, the calendar date is the real,
+     doctor-intended stop date and MUST be captured here — do not let a printed day-count column
+     substitute for it or cause you to skip it. Do NOT set "endDate" for vague endings like "till
+     follow-up" or "continue" — leave null; "duration" already captures that text as-is.
+   - "durationDays": the course length in days, ONLY when it is a concrete count — "10 days"→10,
+     "1 month"→30, "2 weeks"→14, "once a week, complete 4 tabs totally"→28. This is independent of
+     "endDate" above — fill both when both are printed (e.g. a "Duration: 90 Days" column AND a
+     "TILL 20 OCT 2026" instruction on the same row both get captured, into durationDays and
+     endDate respectively). Leave null for "till follow-up"/"continue"/"ongoing" or anything
+     without a determinable day count.
+   - "intervalDays": ONLY for a dosing CADENCE that repeats every N days without lining up to the
+     same weekday each week — "once in 15 days"→15, "every 3 days"→3, "alternate day"/"every other
+     day"→2. Leave null for a daily medicine (use "frequency"'s position codes + weeklySchedule
+     ["Everyday"]) or a medicine tied to specific weekday(s) (use "weeklySchedule" with the day
+     names instead, e.g. "twice a week (Wed, Sat)") — those recurrence patterns are captured there,
+     not here. Do not confuse with "durationDays" (the total course length, e.g. "90 Days"):
+     "intervalDays" is how often each dose repeats, "durationDays" is how long the course runs.
    When the doctor has struck through a printed medicine and handwritten a replacement next to it,
    use the handwritten one as the name and note the original in "notes".
 5. Future recommended tests go into that report's "recommendedTests".
@@ -326,7 +355,8 @@ The response MUST be a JSON object with this schema:
       "datesFound": [ { "label": "Reported", "date": "YYYY-MM-DD" } ],
       "comments": "Doctor's instructions/advice/notes for THIS report",
       "medications": [
-        { "name": "", "dosage": "", "frequency": "", "duration": "", "isOptional": false, "weeklySchedule": ["Everyday"], "notes": "" }
+        { "name": "", "dosage": "", "frequency": "", "duration": "", "isOptional": false, "weeklySchedule": ["Everyday"], "notes": "",
+          "startDate": "YYYY-MM-DD or null", "startAfterDays": null, "endDate": "YYYY-MM-DD or null", "durationDays": null, "intervalDays": null }
       ],
       "recommendedTests": [ { "testName": "", "dueDate": "YYYY-MM-DD or null" } ],
       "followUps": [ { "doctorName": "", "specialty": "", "afterDays": 7, "date": "YYYY-MM-DD or null", "place": "", "notes": "" } ],

@@ -3,6 +3,9 @@ package com.healthdecoder.app.ai
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 class DateResolverTest {
 
@@ -119,5 +122,27 @@ class DateResolverTest {
             dates = listOf("Reported" to "2099-12-31", "Collected" to "2026-03-10")
         )
         assertEquals("2026-03-10", DateResolver.resolve(s, "blood_test"))
+    }
+
+    // ── Medicine start/end dates (legitimately in the future, unlike report dates) ────────────
+    // Real case: a handwritten addition on a follow-up prescription — "Ecosprin Gold 20 — 0-0-1
+    // — from 20/10/26" — a NEW medicine that starts about two months after the visit date.
+    @Test
+    fun `normalizeMedicineDate accepts a future date that normalize rejects`() {
+        val cal = Calendar.getInstance().apply { add(Calendar.MONTH, 2) }
+        val iso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+        val dayFirst = SimpleDateFormat("dd/MM/yyyy", Locale.US).format(cal.time)
+        assertEquals(iso, DateResolver.normalizeMedicineDate(dayFirst))
+        // normalize() exists to sanity-check REPORT dates — it must keep rejecting future dates,
+        // so the two functions weren't accidentally merged into one behavior.
+        assertNull(DateResolver.normalize(dayFirst))
+    }
+
+    @Test
+    fun `normalizeMedicineDate still rejects implausible OCR garbage`() {
+        val farFuture = Calendar.getInstance().apply { add(Calendar.YEAR, 10) }
+        assertNull(DateResolver.normalizeMedicineDate(SimpleDateFormat("dd/MM/yyyy", Locale.US).format(farFuture.time)))
+        val farPast = Calendar.getInstance().apply { add(Calendar.YEAR, -10) }
+        assertNull(DateResolver.normalizeMedicineDate(SimpleDateFormat("dd/MM/yyyy", Locale.US).format(farPast.time)))
     }
 }

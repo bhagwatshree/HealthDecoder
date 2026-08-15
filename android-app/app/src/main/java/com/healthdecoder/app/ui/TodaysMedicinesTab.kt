@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -45,7 +46,10 @@ import com.healthdecoder.app.reminder.AppointmentSchedule
 import com.healthdecoder.app.reminder.AppointmentStore
 import com.healthdecoder.app.reminder.AppointmentReminderManager
 import com.healthdecoder.app.reminder.doctorLabel
+import com.healthdecoder.app.reminder.isCurrentlyActive
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Locale
 import java.util.UUID
 
 private data class SlotStyle(val bg: Color, val fg: Color, val icon: ImageVector)
@@ -68,6 +72,25 @@ private val DOW_LETTER = mapOf(1 to "S", 2 to "M", 3 to "T", 4 to "W", 5 to "T",
 private fun daysLabel(days: List<Int>?): String? =
     if (days.isNullOrEmpty() || days.size >= 7) null
     else days.sorted().joinToString(", ") { DOW_SHORT[it] ?: "" }
+
+/** "20 Oct" when [startDate] is set and still in the future; null once it's started or when
+ *  there's no start date (nothing worth showing on the card either way). Caller prefixes with a
+ *  translated label, same as [daysLabel] callers do — this helper can't call the composable tr(). */
+private fun startDateLabel(startDate: String?): String? {
+    if (startDate.isNullOrBlank()) return null
+    val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Calendar.getInstance().time)
+    if (startDate <= todayIso) return null
+    return try {
+        val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(startDate) ?: return null
+        SimpleDateFormat("d MMM", Locale.getDefault()).format(parsed)
+    } catch (e: Exception) { null }
+}
+
+/** "15 days" for an interval-based cadence; null when not set (a plain daily/weekly script
+ *  already shows via [daysLabel] instead — the two are mutually exclusive on one schedule).
+ *  Caller prefixes with a translated "Every", same as [daysLabel] callers prefix "Only". */
+private fun intervalLabel(intervalDays: Int?): String? =
+    intervalDays?.takeIf { it > 0 }?.let { "$it days" }
 
 @Composable
 fun TodaysMedicinesTab(
@@ -131,13 +154,35 @@ fun TodaysMedicinesTab(
     LaunchedEffect(medicationHistory) {
         // Collapse any duplicate reminders left by the same drug scanned under different name formats.
         MedicineScheduleStore.dedupeCanonical(context)
-        medicationHistory.filter { it.status.lowercase() == "active" }.forEach { med ->
+        // "Scheduled" (future startDate) medicines are seeded too, ahead of time — the schedule's
+        // own startDate/endDate (below) is what keeps MedicineReminderManager.dueMedicines from
+        // actually firing it before its window opens, so it's ready to go the moment it starts.
+        // "Changed" is included too — that status means THIS scan's dosage/frequency differ from
+        // the previous one, i.e. it's exactly the case syncFromLatest exists to catch. Excluding
+        // it (as the seed-only version of this loop used to) left a corrected re-scan's dosage,
+        // days-of-week and end date never reaching an already-seeded reminder.
+        medicationHistory.filter {
+            it.status.lowercase() in setOf("active", "scheduled", "changed")
+        }.forEach { med ->
             val activeSlots = parseRoutine(med.currentFrequency, med.currentDosage)
                 .filter { it.second }.map { it.first }
             val days = parseWeekdays(med.weeklySchedule, med.currentFrequency)
+            // Refreshes an existing reminder's clinical facts (name/dosage/frequency/dates) from
+            // this scan first — otherwise a corrected re-scan (e.g. a follow-up prescription
+            // fixing a discharge summary's dosage, or adding a real end date) never reaches an
+            // already-seeded reminder. autoSeedIfAbsent right after only creates one when there
+            // isn't one yet; it's a no-op once synced.
+            MedicineScheduleStore.syncFromLatest(
+                context, med.medicineName, med.patientName,
+                med.currentDosage, med.currentFrequency, days,
+                startDate = med.currentStartDate, endDate = med.currentEndDate,
+                intervalDays = med.currentIntervalDays
+            )
             MedicineScheduleStore.autoSeedIfAbsent(
                 context, med.medicineName, med.patientName,
-                med.currentDosage, med.currentFrequency, activeSlots, days
+                med.currentDosage, med.currentFrequency, activeSlots, days,
+                startDate = med.currentStartDate, endDate = med.currentEndDate,
+                intervalDays = med.currentIntervalDays
             )
         }
         schedules = MedicineScheduleStore.loadAll(context)
@@ -161,7 +206,13 @@ fun TodaysMedicinesTab(
     var editingAppt by remember { mutableStateOf<AppointmentSchedule?>(null) }
     var deletingAppt by remember { mutableStateOf<AppointmentSchedule?>(null) }
 
-    val hasMedsToday = visibleSchedules.any { s -> s.slots.values.any { it.enabled } }
+    // A future-dated ("Scheduled") or already-ended medicine is seeded ahead of time so its
+    // reminder is ready to go, but shouldn't show up in "Today's medicines" before its window
+    // opens or after it closes — the Manage section below still lists every schedule so the user
+    // can see/edit it regardless.
+    val todayIso = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date()) }
+    val activeVisibleSchedules = visibleSchedules.filter { it.isCurrentlyActive(todayIso) }
+    val hasMedsToday = activeVisibleSchedules.any { s -> s.slots.values.any { it.enabled } }
 
     val canScheduleExact = remember {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
@@ -251,7 +302,7 @@ fun TodaysMedicinesTab(
 
         // Today's dose sections grouped by time slot
         if (showMedicines) TIME_SLOTS.forEach { slot ->
-            val medsForSlot = visibleSchedules.filter { it.slots[slot]?.enabled == true }
+            val medsForSlot = activeVisibleSchedules.filter { it.slots[slot]?.enabled == true }
             if (medsForSlot.isNotEmpty()) {
                 item(key = "header_$slot") {
                     SlotHeader(slot = slot, isCurrent = slot == currentSlot,
@@ -732,17 +783,46 @@ private fun ManageCard(
                                 color = MaterialTheme.colorScheme.secondary)
                         }
                     }
+                    intervalLabel(schedule.intervalDays)?.let { lbl ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.DateRange, null, modifier = Modifier.size(13.dp),
+                                tint = MaterialTheme.colorScheme.secondary)
+                            Spacer(Modifier.width(4.dp))
+                            Text("${tr("Every")} $lbl", fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.secondary)
+                        }
+                    }
+                    startDateLabel(schedule.startDate)?.let { lbl ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Schedule, null, modifier = Modifier.size(13.dp),
+                                tint = MaterialTheme.colorScheme.tertiary)
+                            Spacer(Modifier.width(4.dp))
+                            Text("${tr("Starts")}: $lbl", fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.tertiary)
+                        }
+                    }
                 }
                 if (schedule.dosage.isNotEmpty()) {
+                    // Capped width + ellipsis: an AI-extracted dosage can be a full generic/salt
+                    // name ("Amiloride 5mg + Frusemide 40mg"), not just a short "1/2 tablet". This
+                    // Box has no weight of its own, so an unbounded-width badge here squeezes the
+                    // name/patient Column (weight(1f) above) down to ~0dp — Compose then wraps its
+                    // Text one character per line instead of failing loudly, which is exactly the
+                    // "each letter on its own line" bug this guards against.
                     Box(
                         modifier = Modifier
+                            .widthIn(max = 108.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(schedule.dosage, fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            fontWeight = FontWeight.SemiBold)
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis)
                     }
                 }
                 IconButton(onClick = onEdit) {
@@ -855,10 +935,14 @@ private fun AddMedicineDialog(
     onConfirm: (MedicineSchedule) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     var medName by remember { mutableStateOf(initialSchedule?.medicineName ?: "") }
     var patName by remember { mutableStateOf(initialSchedule?.patientName ?: "Me") }
     var dosage by remember { mutableStateOf(initialSchedule?.dosage ?: "") }
     var frequency by remember { mutableStateOf(initialSchedule?.frequency ?: "Daily") }
+    // Blank = no constraint (today's default) — a course that starts on scan/add and never ends.
+    var startDate by remember { mutableStateOf(initialSchedule?.startDate ?: "") }
+    var endDate by remember { mutableStateOf(initialSchedule?.endDate ?: "") }
 
     // Empty = every day; specific codes = weekly script (e.g. Wed & Sat).
     val selectedDays = remember {
@@ -922,6 +1006,64 @@ private fun AddMedicineDialog(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f)
                     )
+                }
+
+                // Optional reminder window — blank means no constraint (today's default).
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            OutlinedTextField(
+                                value = startDate,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text(tr("Starts")) },
+                                placeholder = { Text(tr("Not set")) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Box(
+                                modifier = Modifier.matchParentSize().clickable {
+                                    val cal = Calendar.getInstance()
+                                    android.app.DatePickerDialog(
+                                        context,
+                                        { _, y, m, d -> startDate = "%04d-%02d-%02d".format(y, m + 1, d) },
+                                        cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
+                                    ).show()
+                                }
+                            )
+                        }
+                        if (startDate.isNotEmpty()) {
+                            TextButton(onClick = { startDate = "" }) { Text(tr("Clear")) }
+                        }
+                    }
+                    Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            OutlinedTextField(
+                                value = endDate,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text(tr("Ends")) },
+                                placeholder = { Text(tr("Not set")) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Box(
+                                modifier = Modifier.matchParentSize().clickable {
+                                    val cal = Calendar.getInstance()
+                                    android.app.DatePickerDialog(
+                                        context,
+                                        { _, y, m, d -> endDate = "%04d-%02d-%02d".format(y, m + 1, d) },
+                                        cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
+                                    ).show()
+                                }
+                            )
+                        }
+                        if (endDate.isNotEmpty()) {
+                            TextButton(onClick = { endDate = "" }) { Text(tr("Clear")) }
+                        }
+                    }
                 }
 
                 // Weekly days — all-off means "Every day"; tap letters for a weekly script.
@@ -1024,7 +1166,9 @@ private fun AddMedicineDialog(
                             dosage = dosage.trim(),
                             frequency = frequency.trim(),
                             slots = slotConfigMap.toMap(),
-                            daysOfWeek = selectedDays.sorted().ifEmpty { null }
+                            daysOfWeek = selectedDays.sorted().ifEmpty { null },
+                            startDate = startDate.trim().ifBlank { null },
+                            endDate = endDate.trim().ifBlank { null }
                         )
                     )
                 }

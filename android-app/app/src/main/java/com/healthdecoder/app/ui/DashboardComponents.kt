@@ -887,6 +887,8 @@ fun MedicationDetailsDialog(
     var isOptional by remember { mutableStateOf(med.isOptional) }
     var weeklySchedule by remember { mutableStateOf(med.weeklySchedule) }
     var notes by remember { mutableStateOf(med.notes) }
+    var startDate by remember { mutableStateOf(med.currentStartDate ?: "") }
+    var endDate by remember { mutableStateOf(med.currentEndDate ?: "") }
     
     var intakeLogs by remember { mutableStateOf<List<MedLogEntry>>(emptyList()) }
     var isLogsLoading by remember { mutableStateOf(false) }
@@ -1067,7 +1069,62 @@ fun MedicationDetailsDialog(
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.weight(1f)) {
+                                    OutlinedTextField(
+                                        value = startDate,
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        label = { Text(tr("Starts")) },
+                                        placeholder = { Text(tr("Not set")) },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Box(
+                                        modifier = Modifier.matchParentSize().clickable {
+                                            val cal = java.util.Calendar.getInstance()
+                                            android.app.DatePickerDialog(
+                                                context,
+                                                { _, y, m, d -> startDate = "%04d-%02d-%02d".format(y, m + 1, d) },
+                                                cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH), cal.get(java.util.Calendar.DAY_OF_MONTH)
+                                            ).show()
+                                        }
+                                    )
+                                }
+                                if (startDate.isNotEmpty()) {
+                                    TextButton(onClick = { startDate = "" }) { Text(tr("Clear")) }
+                                }
+                            }
+                            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.weight(1f)) {
+                                    OutlinedTextField(
+                                        value = endDate,
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        label = { Text(tr("Ends")) },
+                                        placeholder = { Text(tr("Not set")) },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Box(
+                                        modifier = Modifier.matchParentSize().clickable {
+                                            val cal = java.util.Calendar.getInstance()
+                                            android.app.DatePickerDialog(
+                                                context,
+                                                { _, y, m, d -> endDate = "%04d-%02d-%02d".format(y, m + 1, d) },
+                                                cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH), cal.get(java.util.Calendar.DAY_OF_MONTH)
+                                            ).show()
+                                        }
+                                    )
+                                }
+                                if (endDate.isNotEmpty()) {
+                                    TextButton(onClick = { endDate = "" }) { Text(tr("Clear")) }
+                                }
+                            }
+                        }
+
                         OutlinedTextField(
                             value = notes,
                             onValueChange = { notes = it },
@@ -1244,7 +1301,11 @@ fun MedicationDetailsDialog(
                         try {
                             LocalRepository.updateMedicineEverywhere(
                                 context, med.reportId, med.patientName, med.medicineName, medName,
-                                dosage, frequency, duration, isOptional, weeklySchedule, notes
+                                dosage, frequency, duration, isOptional, weeklySchedule, notes,
+                                // Always the live edited value (never null) — this dialog has no
+                                // separate "untouched" state, so a blank string here must mean
+                                // "clear it", not "leave it alone" (see resolveOptionalDate).
+                                startDate.trim(), endDate.trim()
                             )
                             onUpdateSuccess()
                         } catch (e: Exception) {

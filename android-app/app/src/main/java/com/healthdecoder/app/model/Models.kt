@@ -34,7 +34,23 @@ data class Medication(
     @SerializedName("duration") val duration: String? = "",
     @SerializedName("isOptional") val isOptional: Boolean = false,
     @SerializedName("weeklySchedule") val weeklySchedule: List<String> = emptyList(),
-    @SerializedName("notes") val notes: String? = ""
+    @SerializedName("notes") val notes: String? = "",
+    // Structured start/stop window, resolved to absolute ISO dates by
+    // LocalRepository.resolveMedicationDates before a report is saved. startAfterDays/
+    // durationDays are the AI's raw relative signals ("start after 5 days", "10 days" -> 10);
+    // startDate/endDate hold either the AI's explicit date or the resolved result. All nullable
+    // so older saved reports/backups without these fields deserialize unchanged. endDate == null
+    // covers BOTH "till follow-up" and "continue" — only a concrete printed end date sets it.
+    @SerializedName("startDate") val startDate: String? = null,
+    @SerializedName("startAfterDays") val startAfterDays: Int? = null,
+    @SerializedName("endDate") val endDate: String? = null,
+    @SerializedName("durationDays") val durationDays: Int? = null,
+    // "Once every N days" dosing cadence (e.g. "once in 15 days" -> 15), distinct from
+    // durationDays (total course length). Null for daily/weekly-named-day patterns, which
+    // weeklySchedule/daysOfWeek already express. Reminders count days since startDate (defaulted
+    // to the report date when this is set but no explicit start was given — the interval needs
+    // an anchor day to count from).
+    @SerializedName("intervalDays") val intervalDays: Int? = null
 )
 
 data class TestParameter(
@@ -249,7 +265,10 @@ data class MedicationHistory(
     @SerializedName("reportId") val reportId: String = "",
     @SerializedName("isOptional") val isOptional: Boolean = false,
     @SerializedName("weeklySchedule") val weeklySchedule: List<String> = emptyList(),
-    @SerializedName("notes") val notes: String = ""
+    @SerializedName("notes") val notes: String = "",
+    @SerializedName("currentStartDate") val currentStartDate: String? = null,
+    @SerializedName("currentEndDate") val currentEndDate: String? = null,
+    @SerializedName("currentIntervalDays") val currentIntervalDays: Int? = null
 )
 
 data class ScannedReportData(

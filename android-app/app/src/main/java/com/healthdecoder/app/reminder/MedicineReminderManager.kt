@@ -7,7 +7,9 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Locale
 
 /**
  * Schedules medicine reminders. Alarms are keyed by TIME OF DAY, not by medicine:
@@ -49,11 +51,14 @@ object MedicineReminderManager {
     }
 
     /** All medicines whose enabled slots fire at exactly hour:minute AND are due today (weekly
-     *  scripts like "Wed & Sat only" are skipped on other days). */
+     *  scripts like "Wed & Sat only", or an every-N-days cadence like "once in 15 days", are
+     *  skipped on off days, and a medicine outside its own start/end window — not yet started, or
+     *  its course has ended — is skipped entirely). */
     fun dueMedicines(context: Context, hour: Int, minute: Int): List<DueMedicine> {
         val today = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
+        val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Calendar.getInstance().time)
         return MedicineScheduleStore.loadAll(context)
-            .filter { it.runsOn(today) }
+            .filter { it.isDueToday(today, todayIso) && it.isCurrentlyActive(todayIso) }
             .flatMap { schedule ->
             schedule.slots.mapNotNull { (slot, cfg) ->
                 if (cfg.enabled && cfg.hour == hour && cfg.minute == minute)

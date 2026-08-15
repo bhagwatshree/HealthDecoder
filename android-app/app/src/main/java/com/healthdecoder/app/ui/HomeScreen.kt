@@ -335,6 +335,14 @@ private fun ActionSquare(action: HomeAction, modifier: Modifier = Modifier) {
     val bgColor = if (isDark) action.contentColor.copy(alpha = 0.22f).compositeOver(MaterialTheme.colorScheme.surface) else action.containerColor
     val fgColor = if (isDark) action.containerColor else action.contentColor
 
+    // Every tile keeps the SAME fixed size (the original aspectRatio, untouched) so the grid
+    // never looks uneven across rows or devices. A two-word label wraps to a second line within
+    // that same fixed footprint instead of growing the card (which made a wrapped tile visibly
+    // taller than its row neighbor) or shrinking to near-illegible size (which still fell back to
+    // an ellipsis on real devices once font scale pushed past ~1.15x, because there's a hard
+    // floor on how small text can get before it stops being legible). A slightly smaller, fixed
+    // label size leaves enough headroom for two lines to fit the existing card height comfortably
+    // even at a large system font scale; overflow="Ellipsis" is only a last-resort safety net.
     Card(
         modifier = modifier
             .aspectRatio(1.6f)
@@ -354,19 +362,25 @@ private fun ActionSquare(action: HomeAction, modifier: Modifier = Modifier) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(10.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Text(
                 text = action.emoji,
-                fontSize = 26.sp,
-                modifier = Modifier.padding(bottom = 4.dp)
+                fontSize = 24.sp,
+                // Extra gap before the label — since the icon+label pair is vertically centered
+                // as a block, a bigger gap here also nudges the icon up and the label down within
+                // that block, instead of the two sitting cramped together in the middle.
+                modifier = Modifier.padding(bottom = 8.dp)
             )
             Text(
                 text = label,
                 fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
+                fontSize = 12.sp,
+                lineHeight = 14.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
                 color = fgColor,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )

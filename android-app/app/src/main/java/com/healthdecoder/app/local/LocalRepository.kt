@@ -226,7 +226,7 @@ object LocalRepository {
                 reportType = sectionType,
                 extractedText = sectionText,
                 comments = section.comments ?: "",
-                medications = dedupeMedications(section.medications),
+                medications = dedupeMedications(resolveMedicationDates(section.medications, reportDate)),
                 imagePath = imagePath,
                 imagePaths = imagePaths,
                 sourceFiles = sourceFiles,
@@ -399,6 +399,24 @@ object LocalRepository {
         fmt.format(cal.time)
     } catch (e: Exception) { null }
 
+    /**
+     * Resolves each medication's startDate/endDate to absolute ISO strings, the same way
+     * [addFollowUpAppointments] resolves a follow-up's afterDays: an explicit date the AI already
+     * read off the page wins; otherwise startAfterDays/durationDays are added to [reportDate].
+     * When [Medication.intervalDays] is set ("once every 15 days") but no start date could be
+     * resolved, [reportDate] itself becomes the anchor — an every-N-days cadence is meaningless
+     * without a day to count from, and the visit/scan date is the only date guaranteed to exist.
+     * Idempotent — a medication whose dates are already resolved ISO strings passes through
+     * unchanged, so it's safe to call again on a previously-resolved list.
+     */
+    private fun resolveMedicationDates(medications: List<Medication>, reportDate: String): List<Medication> =
+        medications.map { m ->
+            var start = m.startDate?.takeIf { isValidIsoDate(it) } ?: m.startAfterDays?.let { addDaysIso(reportDate, it) }
+            val end = m.endDate?.takeIf { isValidIsoDate(it) } ?: m.durationDays?.let { addDaysIso(reportDate, it) }
+            if (start == null && m.intervalDays != null && m.intervalDays > 0) start = reportDate
+            if (start == m.startDate && end == m.endDate) m else m.copy(startDate = start, endDate = end)
+        }
+
     /** Resolves a scanned patient name to an existing patient/family member when the names clearly
      *  refer to the same person (shared name tokens), so a longer printed name doesn't fragment into
      *  a new patient. Returns the detected name unchanged when there's no confident match. */
@@ -532,7 +550,9 @@ object LocalRepository {
         // report's placeholder comment doesn't count as real user content, so it's replaced too).
         var updated = existing.copy(
             testResults = section.testResults ?: existing.testResults,
-            medications = dedupeMedications(section.medications.ifEmpty { existing.medications }),
+            medications = dedupeMedications(resolveMedicationDates(
+                section.medications.ifEmpty { existing.medications }, correctedDate ?: today()
+            )),
             comments = if (wasDegraded) section.comments else (existing.comments?.takeIf { it.isNotBlank() } ?: section.comments),
             extractedText = existing.extractedText?.takeIf { it.isNotBlank() } ?: section.rawText,
             // An upload-only report becomes a full, analyzed report once this succeeds. For a
@@ -690,7 +710,7 @@ object LocalRepository {
                         reportType = sectionType,
                         extractedText = sectionText,
                         comments = section.comments ?: "",
-                        medications = dedupeMedications(section.medications),
+                        medications = dedupeMedications(resolveMedicationDates(section.medications, reportDate)),
                         imagePath = rep.imagePath,
                         imagePaths = rep.imagePaths,
                         sourceFiles = rep.sourceFiles,
@@ -741,11 +761,13 @@ object LocalRepository {
     private fun findPrevious(context: Context, patient: String?, category: String, date: String, excludeId: String): MedicalReport? =
         LocalStore.findPreviousReport(context, patient, category, date, excludeId)
 
-    /** Drops repeated medicines (same name ignoring case/extra spaces), keeping the first. */
+    /** Drops repeated medicines (same drug AND same power, e.g. a bracketed-salt-annotation
+     *  variant of a name already seen at the same strength on this scan), keeping the first. Two
+     *  different powers of the same drug on one prescription are NOT duplicates and both stay. */
     private fun dedupeMedications(meds: List<Medication>): List<Medication> {
         val seen = HashSet<String>()
         return meds.filter { m ->
-            val key = m.name.trim().lowercase().replace(Regex("\\s+"), " ")
+            val key = MedName.strengthKey(m.name, m.dosage)
             key.isNotBlank() && seen.add(key)
         }
     }
@@ -1021,8 +1043,16 @@ object LocalRepository {
         LocalStore.getMedLogs(context, patientName, medicineName)
     }
 
+    /** [new] wins when explicitly provided (blank clears the field to null); a null [new] means
+     *  "caller didn't touch this field", so [old] is kept — same nullable-means-unset convention
+     *  the dosage/frequency/etc params in this file already use, extended to support clearing a
+     *  date since "" isn't itself a valid date the way it's a valid dosage/notes string. */
+    private fun resolveOptionalDate(new: String?, old: String?): String? =
+        if (new == null) old else new.trim().ifBlank { null }
+
     suspend fun updateMedicationDetails(context: Context, reportId: String, medicineName: String, patientName: String,
-                                        dosage: String?, frequency: String?, duration: String?, isOptional: Boolean?, weeklySchedule: List<String>?, notes: String?) = withContext(Dispatchers.IO) {
+                                        dosage: String?, frequency: String?, duration: String?, isOptional: Boolean?, weeklySchedule: List<String>?, notes: String?,
+                                        startDate: String? = null, endDate: String? = null) = withContext(Dispatchers.IO) {
         val report = LocalStore.getReport(context, reportId) ?: return@withContext
         val meds = report.medications.toMutableList()
         var found = false
@@ -1031,11 +1061,14 @@ object LocalRepository {
                 meds[i] = meds[i].copy(
                     dosage = dosage ?: meds[i].dosage, frequency = frequency ?: meds[i].frequency,
                     duration = duration ?: meds[i].duration, isOptional = isOptional ?: meds[i].isOptional,
-                    weeklySchedule = weeklySchedule ?: meds[i].weeklySchedule, notes = notes ?: meds[i].notes)
+                    weeklySchedule = weeklySchedule ?: meds[i].weeklySchedule, notes = notes ?: meds[i].notes,
+                    startDate = resolveOptionalDate(startDate, meds[i].startDate),
+                    endDate = resolveOptionalDate(endDate, meds[i].endDate))
                 found = true
             }
         }
-        if (!found) meds.add(Medication(medicineName, dosage ?: "", frequency ?: "", duration ?: "", isOptional ?: false, weeklySchedule ?: listOf("Everyday"), notes ?: ""))
+        if (!found) meds.add(Medication(medicineName, dosage ?: "", frequency ?: "", duration ?: "", isOptional ?: false, weeklySchedule ?: listOf("Everyday"), notes ?: "",
+            startDate = resolveOptionalDate(startDate, null), endDate = resolveOptionalDate(endDate, null)))
         LocalStore.upsertReport(context, report.copy(medications = meds))
         LocalStore.addMedLog(context, MedLogEntry(LocalStore.newId(), patientName, medicineName, "UPDATE_DETAILS", frequency, "Dosage: ${dosage ?: ""}", nowIso()))
         afterWrite(context)
@@ -1057,7 +1090,8 @@ object LocalRepository {
     suspend fun updateMedicineEverywhere(
         context: Context, reportId: String, patientName: String, oldName: String, newName: String,
         dosage: String?, frequency: String?, duration: String?, isOptional: Boolean?,
-        weeklySchedule: List<String>?, notes: String?
+        weeklySchedule: List<String>?, notes: String?,
+        startDate: String? = null, endDate: String? = null
     ) = withContext(Dispatchers.IO) {
         val from = oldName.trim()
         val to = newName.trim().ifBlank { from }
@@ -1076,7 +1110,9 @@ object LocalRepository {
                         name = to,
                         dosage = dosage ?: m.dosage, frequency = frequency ?: m.frequency,
                         duration = duration ?: m.duration, isOptional = isOptional ?: m.isOptional,
-                        weeklySchedule = weeklySchedule ?: m.weeklySchedule, notes = notes ?: m.notes
+                        weeklySchedule = weeklySchedule ?: m.weeklySchedule, notes = notes ?: m.notes,
+                        startDate = resolveOptionalDate(startDate, m.startDate),
+                        endDate = resolveOptionalDate(endDate, m.endDate)
                     )
                 } else if (nameChanged) {
                     // Other reports: only the identity (name) propagates; their own dosage/history stays.
