@@ -26,40 +26,41 @@ object SecureKeyManager {
     /**
      * Retrieves the persisted database passphrase, generating a new one if it doesn't exist.
      * Returns the 32-byte key as a ByteArray.
+     *
+     * Routes through [getSecurePrefs] — the SAME Keystore-try/fallback helper [setDatabasePassphrase]
+     * uses — rather than its own separate copy of that logic. It used to duplicate the Keystore
+     * attempt with its own inline fallback to a differently-named file ("legacy_key_prefs" here vs
+     * "legacy_secure_prefs" in getSecurePrefs). On a device where the Keystore-backed path is
+     * flaky (a known issue on some Samsung builds), a write from one function and a read from the
+     * other could silently land in two different files: a restored passphrase would never be seen
+     * by whatever next re-opens the database, or a backup created while Keystore was down would
+     * bundle a passphrase that doesn't even match the one actually encrypting the live database —
+     * making that backup permanently unrestorable (INCOMPATIBLE_KEY) regardless of password.
      */
     fun getDatabasePassphrase(context: Context): ByteArray {
-        return try {
-            val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
-            val sharedPreferences = EncryptedSharedPreferences.create(
-                PREFS_FILE,
-                masterKeyAlias,
-                context,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
-
-            var passStr = sharedPreferences.getString(KEY_DB_PASSWORD, null)
-            if (passStr.isNullOrBlank()) {
-                val key = ByteArray(32)
-                SecureRandom().nextBytes(key)
-                passStr = Base64.encodeToString(key, Base64.NO_WRAP)
-                sharedPreferences.edit().putString(KEY_DB_PASSWORD, passStr).apply()
-            }
-            Base64.decode(passStr, Base64.NO_WRAP)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            usedInsecureFallback = true
-            // Fallback (e.g., if Keystore has become corrupted or modified on custom ROMs)
-            val legacyPrefs = context.getSharedPreferences("legacy_key_prefs", Context.MODE_PRIVATE)
-            var passStr = legacyPrefs.getString(KEY_DB_PASSWORD, null)
-            if (passStr.isNullOrBlank()) {
-                val key = ByteArray(32)
-                SecureRandom().nextBytes(key)
-                passStr = Base64.encodeToString(key, Base64.NO_WRAP)
-                legacyPrefs.edit().putString(KEY_DB_PASSWORD, passStr).apply()
-            }
-            Base64.decode(passStr, Base64.NO_WRAP)
+        val prefs = getSecurePrefs(context)
+        var passStr = prefs.getString(KEY_DB_PASSWORD, null)
+            // One-time migration for anyone who already hit the two-file split bug: the value
+            // that's actually keying their live (already-encrypted) database may be sitting in
+            // the old inline fallback this function used before, not in getSecurePrefs' file.
+            // Must check this BEFORE generating a random key below, or their existing database
+            // becomes permanently unreadable the moment this fix lands.
+            ?: migrateLegacyPassphrase(context, prefs)
+        if (passStr.isNullOrBlank()) {
+            val key = ByteArray(32)
+            SecureRandom().nextBytes(key)
+            passStr = Base64.encodeToString(key, Base64.NO_WRAP)
+            prefs.edit().putString(KEY_DB_PASSWORD, passStr).apply()
         }
+        return Base64.decode(passStr, Base64.NO_WRAP)
+    }
+
+    private fun migrateLegacyPassphrase(context: Context, target: android.content.SharedPreferences): String? {
+        val legacy = context.getSharedPreferences("legacy_key_prefs", Context.MODE_PRIVATE)
+        val found = legacy.getString(KEY_DB_PASSWORD, null) ?: return null
+        target.edit().putString(KEY_DB_PASSWORD, found).apply()
+        legacy.edit().remove(KEY_DB_PASSWORD).apply()
+        return found
     }
 
     /**
