@@ -156,6 +156,7 @@ app.post('/api/auth/signup', async (req, res) => {
         trackFirebaseVerify(null, true);
       } catch (error) {
         trackFirebaseVerify(null, false);
+        console.error('Phone verification failed:', error);
         return res.status(401).json({ error: 'Phone verification failed. Please request a new OTP and try again.' });
       }
     } else {
@@ -229,6 +230,7 @@ app.post('/api/auth/login-phone', async (req, res) => {
       trackFirebaseVerify(null, true);
     } catch (error) {
       trackFirebaseVerify(null, false);
+      console.error('Phone verification failed:', error);
       return res.status(401).json({ error: 'Phone verification failed. Please request a new OTP and try again.' });
     }
 
@@ -343,6 +345,7 @@ app.post('/api/auth/reset-password-otp', async (req, res) => {
       trackFirebaseVerify(null, true);
     } catch (error) {
       trackFirebaseVerify(null, false);
+      console.error('Phone verification failed:', error);
       return res.status(401).json({ error: 'Phone verification failed. Please try again.' });
     }
 
