@@ -529,7 +529,7 @@ object LocalRepository {
 
         val category = existing.reportCategory ?: "other"
         val scanType = if (category == "prescription" || existing.reportType == "Prescription") "prescription" else "report"
-        val extraction = OcrEngine.scan(context, pages, "", scanType, category)
+        val extraction = OcrEngine.scan(context, pages, "", scanType, category, operation = "reprocess")
         val sections = extraction.reports.ifEmpty { listOf(extraction.merged()) }
         val section = sections.firstOrNull { DateResolver.resolve(it, category) == existing.reportDate } ?: sections.first()
 
@@ -693,7 +693,7 @@ object LocalRepository {
             val category = rep.reportCategory ?: "other"
             val scanType = if (category == "prescription") "prescription" else "report"
             try {
-                val extraction = OcrEngine.scan(context, pages, "", scanType, category)
+                val extraction = OcrEngine.scan(context, pages, "", scanType, category, operation = "reprocess")
                 for (section in extraction.reports.ifEmpty { listOf(extraction.merged()) }) {
                     val reportDate = DateResolver.resolve(section, category) ?: continue
                     val sectionType = section.reportName?.takeIf { it.isNotBlank() } ?: section.reportType ?: continue
@@ -1193,8 +1193,8 @@ object LocalRepository {
     // ── Compare two images (no save) ───────────────────────────────────────────
     suspend fun compare(context: Context, img1: ByteArray, mime1: String, scanType1: String, cat1: String,
                         img2: ByteArray, mime2: String, scanType2: String, cat2: String): CompareResponse = withContext(Dispatchers.IO) {
-        val e1 = OcrEngine.scan(context, listOf(img1 to mime1), "", scanType1, cat1).merged()
-        val e2 = OcrEngine.scan(context, listOf(img2 to mime2), "", scanType2, cat2).merged()
+        val e1 = OcrEngine.scan(context, listOf(img1 to mime1), "", scanType1, cat1, operation = "compare").merged()
+        val e2 = OcrEngine.scan(context, listOf(img2 to mime2), "", scanType2, cat2, operation = "compare").merged()
         val r1 = toScanned(e1, cat1, "Report 1")
         val r2 = toScanned(e2, cat2, "Report 2")
         // Reuse comparison by wrapping the extractions in temporary reports.

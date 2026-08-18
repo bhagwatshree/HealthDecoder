@@ -64,14 +64,14 @@ object BackendAiClient {
 
     class BackendAiException(message: String) : Exception(message)
 
-    fun generateText(context: Context, prompt: String): String =
-        generate(context, prompt, emptyList())
+    fun generateText(context: Context, prompt: String, operation: String = "scan"): String =
+        generate(context, prompt, emptyList(), operation)
 
-    fun generateFromImage(context: Context, prompt: String, imageBytes: ByteArray, mimeType: String): String =
-        generate(context, prompt, listOf(imageBytes to mimeType))
+    fun generateFromImage(context: Context, prompt: String, imageBytes: ByteArray, mimeType: String, operation: String = "scan"): String =
+        generate(context, prompt, listOf(imageBytes to mimeType), operation)
 
-    fun generateFromImages(context: Context, prompt: String, images: List<Pair<ByteArray, String>>): String =
-        generate(context, prompt, images)
+    fun generateFromImages(context: Context, prompt: String, images: List<Pair<ByteArray, String>>, operation: String = "scan"): String =
+        generate(context, prompt, images, operation)
 
     /**
      * Text-to-speech via POST /api/ai/tts — returns base64-encoded audio clips (WAV), or an
@@ -135,7 +135,7 @@ object BackendAiClient {
             ?: DeviceIdentity.ensureToken(context)
             ?: throw BackendAiException("Can't reach the analysis server. Check your connection and try again.")
 
-    private fun generate(context: Context, prompt: String, images: List<Pair<ByteArray, String>>): String {
+    private fun generate(context: Context, prompt: String, images: List<Pair<ByteArray, String>>, operation: String): String {
         val token = authToken(context)
 
         val imagesJson = JsonArray().apply {
@@ -149,7 +149,7 @@ object BackendAiClient {
         val body = JsonObject().apply {
             addProperty("prompt", prompt)
             add("images", imagesJson)
-            addProperty("operation", "scan")
+            addProperty("operation", operation)
         }
 
         val payload = body.toString()
@@ -172,40 +172,76 @@ object BackendAiClient {
             // backoff. NOT retried: 429 (our own daily quota — retrying won't help) and other 4xx
             // (a client-side problem with this exact request).
             val maxAttempts = 3
-            for (attempt in 0 until maxAttempts) {
-                try {
+            var attempt = 0
+            // 202 means the backend is already paying Gemini for this exact request elsewhere
+            // (server-side single-flight de-dup) — most often because API Gateway's hard,
+            // non-configurable 30s cap cut this same request off earlier while the Lambda kept
+            // running past it. That's real progress, not a failure, so it gets its own much
+            // longer, separate budget instead of eating into maxAttempts: ~85s of short polls,
+            // just under the server's own 110s abandoned-leader cutoff, giving a slow-but-genuine
+            // Gemini call time to finish and be reused for free rather than paid for twice.
+            var processingPolls = 0
+            val maxProcessingPolls = 25
+            val processingPollDelayMs = 3500L
+
+            try {
+                while (true) {
+                    var result: String? = null
+                    var retryDelayMs = 0L
+                    var giveUp: BackendAiException? = null
+
                     client.newCall(request).execute().use { response ->
+                        if (response.code == 202) {
+                            if (processingPolls < maxProcessingPolls) {
+                                processingPolls++
+                                retryDelayMs = processingPollDelayMs
+                            } else {
+                                giveUp = BackendAiException(
+                                    "The analysis is taking longer than expected. It may still finish in the " +
+                                        "background — check back in a minute before scanning again."
+                                )
+                            }
+                            return@use
+                        }
+
                         val respText = response.body?.string().orEmpty()
-                        if (response.isSuccessful) return extractText(respText)
+                        if (response.isSuccessful) {
+                            result = extractText(respText)
+                            return@use
+                        }
 
                         val serverMessage = errorMessage(respText)
                         when {
-                            response.code == 429 -> throw BackendAiException(serverMessage ?: "Daily free analysis limit reached.")
-                            response.code == 413 -> throw BackendAiException(
+                            response.code == 429 -> giveUp = BackendAiException(serverMessage ?: "Daily free analysis limit reached.")
+                            response.code == 413 -> giveUp = BackendAiException(
                                 serverMessage ?: "This scan is too large to send in one request. Try fewer pages at a time."
                             )
                             response.code in intArrayOf(502, 503, 504) && attempt < maxAttempts - 1 -> {
-                                try { Thread.sleep((attempt + 1) * 2000L) } catch (_: InterruptedException) { }
+                                attempt++
+                                retryDelayMs = attempt * 2000L
                             }
-                            response.code in intArrayOf(502, 503, 504) -> throw BackendAiException(
+                            response.code in intArrayOf(502, 503, 504) -> giveUp = BackendAiException(
                                 serverMessage ?: "The analysis server is temporarily unavailable. Please try again shortly."
                             )
-                            else -> throw BackendAiException(serverMessage ?: "Request failed (${response.code}).")
+                            else -> giveUp = BackendAiException(serverMessage ?: "Request failed (${response.code}).")
                         }
                     }
-                } catch (e: IOException) {
-                    // Do NOT retry the same host on a transport error — move on immediately.
-                    // Retrying buys nothing here (a host that can't be connected to won't start
-                    // working two seconds later) and costs a great deal: OkHttp 4.x has no Happy
-                    // Eyeballs, so it walks every resolved address in turn, each for the full
-                    // connectTimeout. The Function URL resolves to 14 addresses, 6 of them IPv6 —
-                    // on a network advertising IPv6 without a working route, one attempt already
-                    // burns minutes, and three of them turned a scan into a ~10-minute wait that
-                    // ended in "check your connection". Falling through to the next host is both
-                    // faster and far more likely to actually succeed.
-                    lastNetworkError = e
-                    break
+
+                    result?.let { return it }
+                    giveUp?.let { throw it }
+                    try { Thread.sleep(retryDelayMs) } catch (_: InterruptedException) { }
                 }
+            } catch (e: IOException) {
+                // Do NOT retry the same host on a transport error — move on immediately.
+                // Retrying buys nothing here (a host that can't be connected to won't start
+                // working two seconds later) and costs a great deal: OkHttp 4.x has no Happy
+                // Eyeballs, so it walks every resolved address in turn, each for the full
+                // connectTimeout. The Function URL resolves to 14 addresses, 6 of them IPv6 —
+                // on a network advertising IPv6 without a working route, one attempt already
+                // burns minutes, and three of them turned a scan into a ~10-minute wait that
+                // ended in "check your connection". Falling through to the next host is both
+                // faster and far more likely to actually succeed.
+                lastNetworkError = e
             }
             // This host failed at the transport layer — try the next.
         }

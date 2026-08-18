@@ -161,7 +161,8 @@ object OcrEngine {
         images: List<Pair<ByteArray, String>>,
         localOcrText: String,
         scanType: String,
-        reportCategory: String
+        reportCategory: String,
+        operation: String = "scan"
     ): MultiScanExtraction {
         val chunkSize = com.healthdecoder.app.local.AppSettings.getScanChunkPages(context)
         val chunks = if (images.isEmpty()) listOf(emptyList())
@@ -172,7 +173,7 @@ object OcrEngine {
         for ((index, chunk) in chunks.withIndex()) {
             // The device-OCR hint text belongs to the first page; only give it to chunk 1.
             val ref = if (index == 0) localOcrText else ""
-            val result = scanChunk(context, chunk, ref, scanType, reportCategory, index + 1, chunks.size)
+            val result = scanChunk(context, chunk, ref, scanType, reportCategory, index + 1, chunks.size, operation)
             if (result != null) results.add(result) else failedChunks++
         }
         if (results.isEmpty()) return localFallback(localOcrText, scanType)
@@ -199,14 +200,15 @@ object OcrEngine {
         scanType: String,
         reportCategory: String,
         part: Int,
-        totalParts: Int
+        totalParts: Int,
+        operation: String
     ): MultiScanExtraction? = try {
         val prompt = buildPrompt(referenceText, scanType, reportCategory, images.size, part, totalParts)
         // Scan calls go through our backend proxy (BackendAiClient), NOT GeminiClient directly —
         // the Gemini key never touches the device. Chat, medicine lookup/identify, and detailed
         // analysis are migrated too (see MedicalEngine). TTS (SpeechEngine) and translation
         // (LanguageUtil) still call Sarvam directly — the backend has no Sarvam proxy yet.
-        val raw = BackendAiClient.generateFromImages(context, prompt, images)
+        val raw = BackendAiClient.generateFromImages(context, prompt, images, operation)
         parse(GeminiClient.stripJsonFences(raw))
     } catch (e: BackendAiClient.BackendAiException) {
         // A known, deterministic failure (daily quota exhausted, server down) — never worth
@@ -486,7 +488,7 @@ Return ONLY raw JSON. No markdown code fences, no extra text.
             Output: 
         """.trimIndent()
         return try {
-            val response = BackendAiClient.generateText(context, prompt)
+            val response = BackendAiClient.generateText(context, prompt, operation = "email-search-filter")
             GeminiClient.stripJsonFences(response).trim().removeSurrounding("\"").trim()
         } catch (e: Exception) {
             e.printStackTrace()

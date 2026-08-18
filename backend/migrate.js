@@ -364,6 +364,46 @@ ON CONFLICT (canonical_param, status) DO NOTHING;
     await db.query(`ALTER TABLE api_usage_events ADD COLUMN IF NOT EXISTS device_id UUID REFERENCES devices(id) ON DELETE SET NULL;`);
     console.log('Column api_usage_events.device_id checked/added.');
 
+    // Per-(pooled-key, calendar-minute) request counter, so the AI proxy can keep each Gemini
+    // key under its free-tier requests-per-minute limit (see GEMINI_RPM_LIMIT in keyPool.js)
+    // by spilling over to the next key in the pool, rather than just spreading load by day.
+    // Rows are short-lived (see the opportunistic cleanup in keyPool.js) — this table is a
+    // sliding rate-limit counter, not a durable log.
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS gemini_key_minute_usage (
+          key_hash VARCHAR(16) NOT NULL,
+          minute_bucket TIMESTAMPTZ NOT NULL,
+          request_count INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (key_hash, minute_bucket)
+      );
+    `);
+    console.log('Table gemini_key_minute_usage created or already exists.');
+
+    // Short-TTL cache of AI proxy responses, keyed by a hash of (caller, operation, prompt,
+    // images). A retried request for content already answered within the last few minutes —
+    // whether from a client-side retry after a timeout, or a user re-tapping after a crash —
+    // returns the cached answer instead of paying Gemini again for identical input.
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS ai_response_cache (
+          request_hash VARCHAR(64) PRIMARY KEY,
+          response_text TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table ai_response_cache created or already exists.');
+
+    // Turns the cache into a single-flight lock: 'pending' means some request is already
+    // paying Gemini for this exact hash right now, so a concurrent/retried duplicate (e.g. a
+    // client retry after API Gateway's 30s cap cuts it off while the Lambda keeps running) can
+    // be told to wait instead of starting a second paid call. See server.js /api/ai/generate.
+    // response_text was NOT NULL in the original version of this table (before single-flight
+    // 'pending' rows, which have no text yet) — relax it if this DB already has that constraint.
+    await db.query(`ALTER TABLE ai_response_cache ALTER COLUMN response_text DROP NOT NULL;`);
+    await db.query(`ALTER TABLE ai_response_cache ADD COLUMN IF NOT EXISTS status VARCHAR(10) NOT NULL DEFAULT 'done';`);
+    await db.query(`ALTER TABLE ai_response_cache ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;`);
+    await db.query(`ALTER TABLE ai_response_cache ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;`);
+    console.log('Columns status/started_at/completed_at checked/added to ai_response_cache.');
+
     console.log('Database migration completed successfully!');
     process.exit(0);
   } catch (error) {
