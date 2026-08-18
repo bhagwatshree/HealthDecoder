@@ -122,9 +122,10 @@ object MedicineScheduleStore {
             .getString(KEY_SCHEDULES, null) ?: return emptyList()
         return try {
             val type = object : TypeToken<List<MedicineSchedule>>() {}.type
-            gson.fromJson<List<MedicineSchedule>>(json, type) ?: emptyList()
+            gson.fromJson<List<MedicineSchedule>>(json, type).orEmpty().mapNotNull { it.sanitized() }
         } catch (e: Exception) { emptyList() }
     }
+
 
     fun saveAll(context: Context, schedules: List<MedicineSchedule>) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -337,3 +338,31 @@ object MedicineScheduleStore {
         )
     }
 }
+
+/**
+ * Gson fills fields by reflection and knows nothing about Kotlin nullability: a stored record
+ * missing "patientName" (or carrying an explicit null) produces a MedicineSchedule whose
+ * non-null String field IS null. Nothing complains until the first use, which crashed the whole
+ * app — dedupeCanonical() calling patientName.trim() took out the Reminders and Doctor
+ * Appointments screens on open, as a bare NPE with no hint that JSON was involved.
+ *
+ * So every schedule is repaired here, at the one place untrusted JSON becomes objects, rather
+ * than defending at each of the dozens of use sites. A record with no usable medicine name is
+ * dropped: it can't be displayed, matched or scheduled, and keeping it only moves the crash.
+ */
+internal fun MedicineSchedule?.sanitized(): MedicineSchedule? {
+    val s = this ?: return null
+    val name = str(s.medicineName).trim()
+    if (name.isEmpty()) return null
+    return s.copy(
+        medicineName = name,
+        patientName = str(s.patientName),
+        dosage = str(s.dosage),
+        frequency = str(s.frequency),
+        // A null slot value is as fatal as a null field once something reads .enabled.
+        slots = s.slots.orEmpty().filterValues { it != null }
+    )
+}
+
+/** Non-null String is a subtype of String?, so this accepts the field and catches Gson's null. */
+private fun str(value: String?): String = value ?: ""

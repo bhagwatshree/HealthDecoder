@@ -37,6 +37,19 @@
 # looked more elegant, but did NOT keep FoundDate -- verify any replacement against
 # build/outputs/mapping/release/mapping.txt, where a kept class maps to ITSELF.
 -keep class com.healthdecoder.app.ai.** { *; }
+# Same exposure, found the same way (a LinkedTreeMap -> SlotConfig crash in
+# MedicineReminderManager.scheduleAll): every package holding a class Gson deserializes into
+# must be kept, not just .model. These are the packages with fromJson/TypeToken call sites --
+# .reminder (MedicineSchedule, SlotConfig, AppointmentSchedule), .backup (ExportManager.Payload)
+# and .local (RemoteHealthTip, FamilyProfile, plus the Room converters' targets).
+#
+# Kept wholesale by package rather than class-by-class on purpose. Being surgical here failed
+# twice, and each failure shipped as a release-only crash that debug builds never reproduce;
+# the lost shrinking is a cheap price. If you narrow these, verify against
+# build/outputs/mapping/release/mapping.txt -- a kept class maps to ITSELF.
+-keep class com.healthdecoder.app.reminder.** { *; }
+-keep class com.healthdecoder.app.backup.** { *; }
+-keep class com.healthdecoder.app.local.** { *; }
 -keep class com.healthdecoder.app.network.** { *; }
 -keepclassmembers,allowobfuscation class * {
     @com.google.gson.annotations.SerializedName <fields>;
