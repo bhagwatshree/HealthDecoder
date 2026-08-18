@@ -565,13 +565,17 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                         Text(
-                            text = tr("$degradedCount report(s) were saved while the AI analysis server was unavailable (e.g. daily quota reached), so their date and category are guesses instead of read from the document. Re-analyzing uses the images already stored — no need to re-scan them yourself."),
+                            text = trFormat("%1\$d report(s) were saved while the AI analysis server was unavailable (e.g. daily quota reached), so their date and category are guesses instead of read from the document. Re-analyzing uses the images already stored — no need to re-scan them yourself.", degradedCount),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                         if (MaintenanceScheduler.fixDegradedBusy) {
                             Text(
-                                tr("Re-analyzing ${MaintenanceScheduler.fixDegradedProgress.first} of ${MaintenanceScheduler.fixDegradedProgress.second}…"),
+                                trFormat(
+                                    "Re-analyzing %1\$d of %2\$d…",
+                                    MaintenanceScheduler.fixDegradedProgress.first,
+                                    MaintenanceScheduler.fixDegradedProgress.second
+                                ),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
@@ -594,7 +598,7 @@ fun SettingsScreen(
                             if (MaintenanceScheduler.fixDegradedBusy) {
                                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onError)
                             } else {
-                                Text(tr("Re-analyze All ($degradedCount)"), color = MaterialTheme.colorScheme.onError)
+                                Text(trFormat("Re-analyze All (%1\$d)", degradedCount), color = MaterialTheme.colorScheme.onError)
                             }
                         }
                     }
@@ -618,13 +622,17 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                         Text(
-                            text = tr("$atRiskCount multi-page scan(s) were processed before a fix to how large documents are split for analysis — a panel from the same document (e.g. an electrolytes or PT/INR page) may be missing. This re-checks them using the pages already stored and adds anything that was missed; anything already saved is left alone."),
+                            text = trFormat("%1\$d multi-page scan(s) were processed before a fix to how large documents are split for analysis — a panel from the same document (e.g. an electrolytes or PT/INR page) may be missing. This re-checks them using the pages already stored and adds anything that was missed; anything already saved is left alone.", atRiskCount),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                         if (MaintenanceScheduler.recoverBusy) {
                             Text(
-                                tr("Checking ${MaintenanceScheduler.recoverProgress.first} of ${MaintenanceScheduler.recoverProgress.second}…"),
+                                trFormat(
+                                    "Checking %1\$d of %2\$d…",
+                                    MaintenanceScheduler.recoverProgress.first,
+                                    MaintenanceScheduler.recoverProgress.second
+                                ),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
@@ -647,7 +655,7 @@ fun SettingsScreen(
                             if (MaintenanceScheduler.recoverBusy) {
                                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onError)
                             } else {
-                                Text(tr("Check Now ($atRiskCount)"), color = MaterialTheme.colorScheme.onError)
+                                Text(trFormat("Check Now (%1\$d)", atRiskCount), color = MaterialTheme.colorScheme.onError)
                             }
                         }
                     }

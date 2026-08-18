@@ -4,15 +4,26 @@ import android.content.Context
 import com.healthdecoder.app.local.RemoteHealthTips
 import com.healthdecoder.app.model.MedicalReport
 
+/**
+ * Which of the patient's OWN results a tip was derived from — kept as its three parts rather
+ * than a pre-built sentence so the sentence can be assembled from a translated template at
+ * render time (see HealthTipCard). Baking the values into an English string here would produce
+ * a different string for every patient, which no translation map can ever match.
+ */
+data class TipSource(
+    val param: String,
+    val status: String,
+    val date: String
+)
+
 data class HealthTip(
     val headline: String,
     val detail: String,
-    // Which of the patient's OWN results this tip was derived from, e.g. "Based on your Sodium
-    // result (Low) from your report dated 2026-08-12." Null for the general (non-personalized)
-    // tip rotation, which isn't tied to any specific data point. Shown on "Learn More" so a
-    // personalized tip is traceable back to its source rather than reading as an unexplained
-    // claim — both for the user's own trust and for health-content policy review.
-    val source: String? = null
+    // Null for the general (non-personalized) tip rotation, which isn't tied to any specific
+    // data point. Shown on "Learn More" so a personalized tip is traceable back to its source
+    // rather than reading as an unexplained claim — both for the user's own trust and for
+    // health-content policy review.
+    val source: TipSource? = null
 )
 
 /**
@@ -118,7 +129,7 @@ object PersonalizedTips {
                     ?: (if (statusKey == "low") LOW_TIPS[canon] else HIGH_TIPS[canon])
                     ?: continue
                 val date = r.reportDate?.takeIf { it.isNotBlank() } ?: r.createdAt.take(10)
-                out.add(base.copy(source = "Based on your $canon result ($status) from your report dated $date."))
+                out.add(base.copy(source = TipSource(param = canon, status = status, date = date)))
             }
         }
         return out

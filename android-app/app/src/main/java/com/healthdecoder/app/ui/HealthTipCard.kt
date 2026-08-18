@@ -28,10 +28,12 @@ import com.healthdecoder.app.ai.PersonalizedTips
 import com.healthdecoder.app.local.LocalRepository
 import kotlinx.coroutines.delay
 
-// Local, hardcoded rotation — no ad SDK, no network call. Every string is wrapped in tr() where
-// it's rendered so this rotates through the app's existing translation pipeline like everything
-// else, without needing its own localized copies here. Personalized tips (see
-// [PersonalizedTips]) are prepended ahead of these when the patient has recent abnormal results.
+// Local rotation — no ad SDK. This list is an offline seed only: tips can also arrive from the
+// backend's health_tips table without an app release, so tip text is rendered through
+// trDynamic() (translated once at runtime, then cached) rather than tr(), which can only ever
+// see strings someone hand-added to UiTranslations.kt. The card's own chrome — the "HEALTH TIP"
+// eyebrow, "Learn More", the disclaimer — is fixed, so that stays on tr().
+// Personalized tips (see [PersonalizedTips]) are prepended when the patient has recent abnormal results.
 private val HEALTH_TIPS = listOf(
     HealthTip(
         "Hydrate before a blood draw",
@@ -121,9 +123,9 @@ fun HealthTipCard(modifier: Modifier = Modifier) {
                     letterSpacing = 0.8.sp, color = MaterialTheme.colorScheme.tertiary
                 )
             }
-            Text(tr(tip.headline), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Text(trDynamic(tip.headline), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
             Text(
-                tr(tip.detail), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                trDynamic(tip.detail), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2, overflow = TextOverflow.Ellipsis
             )
             TextButton(onClick = { showDetail = true }, contentPadding = PaddingValues(0.dp)) {
@@ -135,16 +137,19 @@ fun HealthTipCard(modifier: Modifier = Modifier) {
     if (showDetail) {
         AlertDialog(
             onDismissRequest = { showDetail = false },
-            title = { Text(tr(tip.headline), fontWeight = FontWeight.Bold) },
+            title = { Text(trDynamic(tip.headline), fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(tr(tip.detail))
+                    Text(trDynamic(tip.detail))
                     // Traceability for a personalized tip: exactly which result it came from,
                     // plus a plain lifestyle-only disclaimer — neither is shown for the general
                     // (non-personalized) rotation, which isn't tied to the patient's own data.
                     tip.source?.let { source ->
                         Text(
-                            tr(source),
+                            trFormat(
+                                "Based on your %1\$s result (%2\$s) from your report dated %3\$s.",
+                                trDynamic(source.param), tr(source.status), source.date
+                            ),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

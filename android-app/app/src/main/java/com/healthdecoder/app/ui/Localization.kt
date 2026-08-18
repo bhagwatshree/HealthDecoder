@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import com.healthdecoder.app.local.AppLanguageState
 import com.healthdecoder.app.local.AppSettings
+import com.healthdecoder.app.local.DynamicTranslations
 import com.healthdecoder.app.local.RemoteUiTranslations
 
 /**
@@ -37,9 +38,57 @@ fun tr(text: String): String {
 
     if (language.equals("English", ignoreCase = true)) return text
 
-    return RemoteUiTranslations.get(context, language, text)
-        ?: UiTranslations.lookup(language, text)
-        ?: text
+    return staticLookup(context, language, text) ?: text
+}
+
+private fun staticLookup(context: android.content.Context, language: String, text: String): String? =
+    RemoteUiTranslations.get(context, language, text) ?: UiTranslations.lookup(language, text)
+
+/**
+ * [tr] for content rather than chrome — text that can change without an app release, so no
+ * hand-maintained map can ever cover it: health tips (the backend's `health_tips` table is the
+ * real source, the bundled lists are only an offline seed) and anything read off a scanned
+ * report, such as canonical test names.
+ *
+ * Still prefers the static maps when the string happens to be in them — free, offline, and
+ * exact — and only falls through to a translation call for what they don't cover. The English
+ * text renders first and is replaced when the translation arrives, so a slow or absent network
+ * costs nothing but the original wording; see [DynamicTranslations] for the cache.
+ */
+@Composable
+fun trDynamic(text: String): String {
+    if (text.isBlank()) return text
+    val context = LocalContext.current
+    LaunchedEffect(Unit) { AppLanguageState.ensureInit(context) }
+    val language = AppLanguageState.current
+
+    if (language.equals("English", ignoreCase = true)) return text
+    staticLookup(context, language, text)?.let { return it }
+
+    var resolved by remember(language, text) {
+        mutableStateOf(DynamicTranslations.cached(context, language, text) ?: text)
+    }
+    LaunchedEffect(language, text) {
+        resolved = DynamicTranslations.translate(context, language, text)
+    }
+    return resolved
+}
+
+/**
+ * [tr] for a string that embeds a runtime value. The key stays a positional format template
+ * ("Re-analyze All (%1\$d)") so it can live in the translation maps like any other string, and
+ * each language can move the placeholder to wherever its grammar needs it. Interpolating first —
+ * tr("Re-analyze All ($count)") — builds a different string on every call, so it never matches a
+ * key and silently renders in English forever.
+ *
+ * A translation with the wrong format specifiers would throw at render time, so a bad row in the
+ * DB can't crash a screen: formatting failures fall back to the English template.
+ */
+@Composable
+fun trFormat(template: String, vararg args: Any?): String {
+    val localized = tr(template)
+    return runCatching { String.format(localized, *args) }
+        .getOrElse { runCatching { String.format(template, *args) }.getOrDefault(template) }
 }
 
 @Composable
