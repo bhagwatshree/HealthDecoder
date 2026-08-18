@@ -11,7 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -77,7 +77,7 @@ private val HEALTH_TIPS = listOf(
     ),
 )
 
-private const val ROTATE_INTERVAL_MS = 5 * 60_000L
+private const val ROTATE_INTERVAL_MS = 2 * 60_000L
 
 /**
  * Renamed from the earlier draft's "SPONSORED HEALTH INSIGHT" — that wording implies paid
@@ -85,10 +85,13 @@ private const val ROTATE_INTERVAL_MS = 5 * 60_000L
  * local, rotating content only: no ad SDK, no advertising ID, no third-party call.
  *
  * Personalized tips are derived on-device (see [PersonalizedTips], rule-based, no AI call) from
- * the signed-in patient's own recent abnormal results and shown first in the rotation, ahead of
- * the general list — e.g. a recent low Sodium surfaces a natural rehydration/electrolyte tip
- * instead of a generic one. Falls back to the general list alone when there's no report data or
- * nothing currently abnormal.
+ * the active patient's own recent abnormal results — e.g. a recent low Sodium surfaces a natural
+ * rehydration/electrolyte tip. This needs reports, NOT an account: they come from the local store
+ * and work fully signed-out, so nothing here is gated on sign-in.
+ *
+ * When the patient has personalized tips they are the whole rotation; the general list is the
+ * fallback for someone with no reports yet or nothing currently abnormal. The card is never
+ * empty and never mixes the two.
  */
 @Composable
 fun HealthTipCard(modifier: Modifier = Modifier) {
@@ -97,13 +100,30 @@ fun HealthTipCard(modifier: Modifier = Modifier) {
     LaunchedEffect(Unit) {
         personalized = PersonalizedTips.tipsFor(context, LocalRepository.getReports(context))
     }
-    val allTips = personalized + HEALTH_TIPS
+    // Personalized tips replace the general list rather than being prepended to it. Once the
+    // patient's own results have something to say, a generic "hydrate before a blood draw" in the
+    // same rotation is strictly worse — it takes a slot that could have said something about their
+    // data. The general list is the fallback for patients with no reports yet (or nothing
+    // abnormal), which keeps the card useful from day one instead of empty.
+    val allTips = personalized.ifEmpty { HEALTH_TIPS }
 
-    var index by remember { mutableIntStateOf(0) }
-    LaunchedEffectRotate(tipCount = allTips.size, onTick = { index = (index + 1) % allTips.size })
+    // Which slot of the rotation we're in, derived from the wall clock rather than counted from
+    // zero. Counting made the card look frozen on tip #1: the counter lived in composition state,
+    // so every trip to another screen and back reset it to 0 AND restarted the timer, and few
+    // people sit on Home for a full interval in one go. Off the clock it keeps advancing while
+    // the user is elsewhere, so coming back to Home genuinely shows a different tip.
+    var slot by remember { mutableLongStateOf(System.currentTimeMillis() / ROTATE_INTERVAL_MS) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            // Wake on the interval boundary, not a full interval from now, so the tip changes on
+            // the same cadence no matter when this screen was opened.
+            delay(ROTATE_INTERVAL_MS - System.currentTimeMillis() % ROTATE_INTERVAL_MS)
+            slot = System.currentTimeMillis() / ROTATE_INTERVAL_MS
+        }
+    }
 
     var showDetail by remember { mutableStateOf(false) }
-    val tip = allTips[(index % allTips.size).coerceAtLeast(0)]
+    val tip = allTips[(slot.mod(allTips.size.toLong())).toInt()]
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -163,17 +183,6 @@ fun HealthTipCard(modifier: Modifier = Modifier) {
             },
             confirmButton = { TextButton(onClick = { showDetail = false }) { Text(tr("Got it")) } }
         )
-    }
-}
-
-/** Rotates on a fixed timer while this composable stays alive (i.e. while Home is visible). */
-@Composable
-private fun LaunchedEffectRotate(tipCount: Int, onTick: () -> Unit) {
-    androidx.compose.runtime.LaunchedEffect(tipCount) {
-        while (true) {
-            delay(ROTATE_INTERVAL_MS)
-            onTick()
-        }
     }
 }
 
