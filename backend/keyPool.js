@@ -53,7 +53,8 @@ async function reserveGeminiKey(id) {
   const minuteBucket = currentMinuteBucket();
 
   for (let i = 0; i < pool.length; i++) {
-    const key = pool[(startIndex + i) % pool.length];
+    const keyIndex = (startIndex + i) % pool.length;
+    const key = pool[keyIndex];
     // Atomic reserve-a-slot: only increments (and only returns a row) if the bucket is still
     // under the cap, so concurrent Lambda invocations can't both "win" the last slot.
     const result = await db.query(
@@ -67,7 +68,7 @@ async function reserveGeminiKey(id) {
     );
     if (result.rows.length > 0) {
       sweepOldMinuteBuckets();
-      return { key, rateLimited: false };
+      return { key, keyIndex, rateLimited: false };
     }
   }
   sweepOldMinuteBuckets();
@@ -168,13 +169,14 @@ export async function resolveKeysForDevice(deviceId) {
   // Reserve a key BEFORE counting the issuance — a caller that only hit the per-minute RPM
   // ceiling (every pooled key momentarily saturated) hasn't actually used any quota yet, so
   // it shouldn't burn a day's issuance for a call that never reached Gemini.
-  const { key, rateLimited } = await reserveGeminiKey(deviceId);
+  const { key, keyIndex, rateLimited } = await reserveGeminiKey(deviceId);
   if (rateLimited) {
     return { geminiKey: null, sarvamKey, billedTo: 'none', usageToday, limit: FREE_TIER_DAILY_LIMIT, quotaExceeded: false, rateLimited: true };
   }
   const newCount = await incrementUsageForDevice(deviceId);
   return {
     geminiKey: key,
+    geminiKeyIndex: keyIndex,
     sarvamKey,
     billedTo: 'free',
     usageToday: newCount,
@@ -226,9 +228,10 @@ export async function resolveKeysForUser(user) {
   }
 
   if (user.plan === 'premium') {
-    const { key, rateLimited } = await reserveGeminiKey(user.id);
+    const { key, keyIndex, rateLimited } = await reserveGeminiKey(user.id);
     return {
       geminiKey: key,
+      geminiKeyIndex: keyIndex,
       sarvamKey,
       plan: user.plan,
       billedTo: 'premium',
@@ -254,7 +257,7 @@ export async function resolveKeysForUser(user) {
 
   // Same ordering as resolveKeysForDevice: reserve the per-minute slot before counting the
   // day's issuance, so an RPM-saturated pool doesn't cost the user part of their daily quota.
-  const { key, rateLimited } = await reserveGeminiKey(user.id);
+  const { key, keyIndex, rateLimited } = await reserveGeminiKey(user.id);
   if (rateLimited) {
     return {
       geminiKey: null,
@@ -272,6 +275,7 @@ export async function resolveKeysForUser(user) {
 
   return {
     geminiKey: key,
+    geminiKeyIndex: keyIndex,
     sarvamKey,
     plan: user.plan,
     billedTo: 'free',

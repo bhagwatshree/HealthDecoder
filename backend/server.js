@@ -904,7 +904,7 @@ app.post('/api/ai/generate', requireDeviceOrUser, async (req, res) => {
 
     const deviceRowId = req.auth.kind === 'device' ? await getOrCreateDevice(req.auth.deviceId) : null;
     const response = await runWithUsageContext(
-      { userId: req.auth.kind === 'user' ? req.auth.user.id : null, deviceId: deviceRowId, operation: op },
+      { userId: req.auth.kind === 'user' ? req.auth.user.id : null, deviceId: deviceRowId, operation: op, keyIndex: resolved.geminiKeyIndex },
       () => trackGemini(ai, { model: process.env.GEMINI_MODEL || 'gemini-3.6-flash', contents: parts })
     );
 

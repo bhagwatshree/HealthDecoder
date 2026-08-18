@@ -404,6 +404,13 @@ ON CONFLICT (canonical_param, status) DO NOTHING;
     await db.query(`ALTER TABLE ai_response_cache ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;`);
     console.log('Columns status/started_at/completed_at checked/added to ai_response_cache.');
 
+    // Which position in the GEMINI_API_KEYS pool served each Gemini call — NULL for BYOK calls
+    // (own_gemini_key, never pooled) or non-Gemini providers. Lets the cost dashboard break
+    // down estimated spend per pooled key, to reconcile against that key's own Google Cloud
+    // project's actual billing (see D:\Medical_Admin_Dashboard).
+    await db.query(`ALTER TABLE api_usage_events ADD COLUMN IF NOT EXISTS gemini_key_index INTEGER;`);
+    console.log('Column api_usage_events.gemini_key_index checked/added.');
+
     console.log('Database migration completed successfully!');
     process.exit(0);
   } catch (error) {
