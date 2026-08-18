@@ -85,6 +85,50 @@ data class MultiScanExtraction(
  */
 object OcrEngine {
 
+    /**
+     * AWS Lambda refuses any invocation payload over 6,291,456 bytes — a hard platform limit,
+     * not a setting, returned as a 413 before our code runs. Budget the RAW image bytes for one
+     * request well under it: base64 costs 4 bytes per 3 (+33%), and the prompt, JSON envelope and
+     * per-image metadata all share the same body. 3.5MB raw lands around 4.7MB on the wire,
+     * leaving real headroom rather than sitting on the cliff edge.
+     */
+    private const val LAMBDA_MAX_REQUEST_BYTES = 6L * 1024 * 1024
+    // x3/4 converts the wire budget back to raw bytes (undoing base64's +33%), then a further
+    // x3/4 keeps a quarter of the limit free for the prompt and JSON envelope. ~3.5MB raw.
+    private const val MAX_CHUNK_RAW_BYTES = LAMBDA_MAX_REQUEST_BYTES * 3 / 4 * 3 / 4
+
+    /**
+     * Splits pages into chunks bounded by page count AND total bytes, whichever is hit first.
+     *
+     * A single page larger than [maxBytes] is still sent on its own rather than dropped — it is
+     * the caller's only chance at that page, and [ImageUtil] has already downscaled it, so in
+     * practice one page is well under the budget. If such a page does exceed the platform limit
+     * the backend's 413 now carries the real reason.
+     */
+    internal fun chunkByBudget(
+        images: List<Pair<ByteArray, String>>,
+        maxPages: Int,
+        maxBytes: Long
+    ): List<List<Pair<ByteArray, String>>> {
+        val chunks = mutableListOf<List<Pair<ByteArray, String>>>()
+        var current = mutableListOf<Pair<ByteArray, String>>()
+        var currentBytes = 0L
+        for (image in images) {
+            val size = image.first.size.toLong()
+            val wouldExceed = current.isNotEmpty() &&
+                (current.size >= maxPages || currentBytes + size > maxBytes)
+            if (wouldExceed) {
+                chunks.add(current)
+                current = mutableListOf()
+                currentBytes = 0L
+            }
+            current.add(image)
+            currentBytes += size
+        }
+        if (current.isNotEmpty()) chunks.add(current)
+        return chunks
+    }
+
     private val gson: Gson = GsonBuilder().setLenient().create()
 
     /** Marks a report saved via [localFallback] — the AI never actually read the document, so
@@ -97,10 +141,20 @@ object OcrEngine {
      * Scans one or more page images. The pages may contain several distinct reports;
      * each comes back as its own entry with its own name and correctly chosen date.
      *
-     * Large batches are processed CHUNK BY CHUNK ([AppSettings.getScanChunkPages] pages
-     * per AI request — one giant request exceeds free-tier limits and fails), then the
-     * chunk results are merged; a report whose pages span two chunks is recombined by
-     * matching name + date. A failed chunk is skipped rather than failing the whole scan.
+     * Large batches are processed CHUNK BY CHUNK, then merged; a report whose pages span two
+     * chunks is recombined by matching name + date. A failed chunk is skipped rather than
+     * failing the whole scan.
+     *
+     * A chunk is bounded by BOTH a page count ([AppSettings.getScanChunkPages]) and a byte
+     * budget ([MAX_CHUNK_RAW_BYTES]) — see [chunkByBudget]. The page count alone was not enough:
+     * AWS Lambda hard-rejects any request body over 6,291,456 bytes with a 413 before our
+     * handler ever runs, and 12 pages of a densely printed report comfortably exceeds that once
+     * base64 inflates them by a third. Photograph a thick discharge summary and every scan
+     * failed, with the size never mentioned anywhere in the error.
+     *
+     * Note this is about rendered PAGES, not source files: a PDF is rasterised to at most 15
+     * page images before it gets here (see FileImportUtil.renderPdf) and the PDF's own file size
+     * is never sent anywhere, so a 40MB PDF is not itself a problem.
      */
     fun scan(
         context: Context,
@@ -110,7 +164,8 @@ object OcrEngine {
         reportCategory: String
     ): MultiScanExtraction {
         val chunkSize = com.healthdecoder.app.local.AppSettings.getScanChunkPages(context)
-        val chunks = if (images.isEmpty()) listOf(emptyList()) else images.chunked(chunkSize)
+        val chunks = if (images.isEmpty()) listOf(emptyList())
+            else chunkByBudget(images, chunkSize, MAX_CHUNK_RAW_BYTES)
 
         val results = mutableListOf<MultiScanExtraction>()
         var failedChunks = 0
