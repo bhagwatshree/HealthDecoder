@@ -31,13 +31,36 @@ object BackendAiClient {
 
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
-            .connectTimeout(60, TimeUnit.SECONDS)
+            // Deliberately short. Establishing a TCP connection either works in a couple of
+            // seconds or is not going to: a network that blackholes SYNs to the Function URL's
+            // host used to burn the full 60s here, three times over, so a scan spent ~3 minutes
+            // looking like it was "analyzing" before reporting a connection error. Fail fast and
+            // let the host fallback below do the useful work instead.
+            .connectTimeout(15, TimeUnit.SECONDS)
             // Longer than the Lambda's own 120s timeout (see template.yaml), so a slow-but-
             // legitimate Gemini response always finishes server-side before the client gives up.
             .readTimeout(150, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
             .build()
     }
+
+    /**
+     * Hosts to try for an AI-proxy call, in order.
+     *
+     * The Function URL is first because it is the only one without API Gateway's hard,
+     * non-configurable 30s integration cap, which a large multi-page extraction can exceed.
+     * But it lives on a different domain (`*.lambda-url.*.on.aws`) from everything else the app
+     * talks to (`*.execute-api.*.amazonaws.com`), and some networks — captive portals, ISP or
+     * DNS filtering, restrictive corporate Wi-Fi — resolve or route one and not the other. When
+     * that happened, scanning was the only broken feature in an app that otherwise worked
+     * perfectly, and it blamed the user's internet for it.
+     *
+     * So: if the Function URL cannot be reached at all, fall back to API Gateway rather than
+     * failing the scan. Single-page extractions finish in a few seconds, well inside the 30s
+     * cap, so the fallback is a real scan rather than a slower failure.
+     */
+    private fun proxyHosts(context: Context): List<String> =
+        listOf(NetworkModule.AI_PROXY_BASE_URL, NetworkModule.resolveBaseUrl(context)).distinct()
 
     class BackendAiException(message: String) : Exception(message)
 
@@ -129,50 +152,82 @@ object BackendAiClient {
             addProperty("operation", "scan")
         }
 
-        val url = "${NetworkModule.AI_PROXY_BASE_URL}api/ai/generate"
-        val request = Request.Builder()
-            .url(url)
-            .addHeader("Authorization", "Bearer $token")
-            .addHeader("ngrok-skip-browser-warning", "true")
-            .post(body.toString().toRequestBody(JSON_MEDIA.toMediaType()))
-            .build()
-
-        // Retry transient backend/upstream failures (Lambda cold start, Gemini hiccup) with
-        // backoff. NOT retried: 429 (our own daily quota — retrying won't help) and other 4xx
-        // (a client-side problem with this exact request).
-        val maxAttempts = 3
+        val payload = body.toString()
+        val hosts = proxyHosts(context)
         var lastNetworkError: IOException? = null
-        for (attempt in 0 until maxAttempts) {
-            try {
-                client.newCall(request).execute().use { response ->
-                    val respText = response.body?.string().orEmpty()
-                    if (response.isSuccessful) return extractText(respText)
 
-                    val serverMessage = errorMessage(respText)
-                    when {
-                        response.code == 429 -> throw BackendAiException(serverMessage ?: "Daily free analysis limit reached.")
-                        response.code in intArrayOf(502, 503, 504) && attempt < maxAttempts - 1 -> {
-                            try { Thread.sleep((attempt + 1) * 2000L) } catch (_: InterruptedException) { }
+        // Try each host in turn. A host is only abandoned for a TRANSPORT failure (unreachable,
+        // DNS, TLS, timeout) — once a host answers, its answer is authoritative and is either
+        // returned or thrown, never retried against a different host. Re-sending a scan that the
+        // backend already accepted would double-charge the user's daily quota.
+        for (host in hosts) {
+            val request = Request.Builder()
+                .url("${host}api/ai/generate")
+                .addHeader("Authorization", "Bearer $token")
+                .addHeader("ngrok-skip-browser-warning", "true")
+                .post(payload.toRequestBody(JSON_MEDIA.toMediaType()))
+                .build()
+
+            // Retry transient backend/upstream failures (Lambda cold start, Gemini hiccup) with
+            // backoff. NOT retried: 429 (our own daily quota — retrying won't help) and other 4xx
+            // (a client-side problem with this exact request).
+            val maxAttempts = 3
+            for (attempt in 0 until maxAttempts) {
+                try {
+                    client.newCall(request).execute().use { response ->
+                        val respText = response.body?.string().orEmpty()
+                        if (response.isSuccessful) return extractText(respText)
+
+                        val serverMessage = errorMessage(respText)
+                        when {
+                            response.code == 429 -> throw BackendAiException(serverMessage ?: "Daily free analysis limit reached.")
+                            response.code == 413 -> throw BackendAiException(
+                                serverMessage ?: "This scan is too large to send in one request. Try fewer pages at a time."
+                            )
+                            response.code in intArrayOf(502, 503, 504) && attempt < maxAttempts - 1 -> {
+                                try { Thread.sleep((attempt + 1) * 2000L) } catch (_: InterruptedException) { }
+                            }
+                            response.code in intArrayOf(502, 503, 504) -> throw BackendAiException(
+                                serverMessage ?: "The analysis server is temporarily unavailable. Please try again shortly."
+                            )
+                            else -> throw BackendAiException(serverMessage ?: "Request failed (${response.code}).")
                         }
-                        response.code in intArrayOf(502, 503, 504) -> throw BackendAiException(
-                            serverMessage ?: "The analysis server is temporarily unavailable. Please try again shortly."
-                        )
-                        else -> throw BackendAiException(serverMessage ?: "Request failed (${response.code}).")
                     }
-                }
-            } catch (e: IOException) {
-                lastNetworkError = e
-                if (attempt < maxAttempts - 1) {
-                    try { Thread.sleep((attempt + 1) * 2000L) } catch (_: InterruptedException) { }
+                } catch (e: IOException) {
+                    // Do NOT retry the same host on a transport error — move on immediately.
+                    // Retrying buys nothing here (a host that can't be connected to won't start
+                    // working two seconds later) and costs a great deal: OkHttp 4.x has no Happy
+                    // Eyeballs, so it walks every resolved address in turn, each for the full
+                    // connectTimeout. The Function URL resolves to 14 addresses, 6 of them IPv6 —
+                    // on a network advertising IPv6 without a working route, one attempt already
+                    // burns minutes, and three of them turned a scan into a ~10-minute wait that
+                    // ended in "check your connection". Falling through to the next host is both
+                    // faster and far more likely to actually succeed.
+                    lastNetworkError = e
+                    break
                 }
             }
+            // This host failed at the transport layer — try the next.
         }
-        throw BackendAiException("Can't reach the analysis server. Check your connection and try again.")
-            .also { if (lastNetworkError != null) it.initCause(lastNetworkError) }
+
+        // Name the hosts that were actually tried. "Check your internet connection" sent people
+        // hunting a fault in their Wi-Fi when the rest of the app was working fine and only this
+        // one domain was blocked; the host list is what makes that distinguishable in a bug report.
+        throw BackendAiException(
+            "Couldn't reach the analysis server (tried ${hosts.size} address(es): " +
+                hosts.joinToString { it.substringAfter("://").substringBefore("/") } +
+                "). Other parts of the app may still work — this can be a network that blocks " +
+                "one of these domains."
+        ).also { if (lastNetworkError != null) it.initCause(lastNetworkError) }
     }
 
+    // Our own handlers return {"error": ...}, but AWS's own rejections don't go through them and
+    // use {"Message": ...} / {"message": ...} — the 6MB Lambda payload cap is one such, and its
+    // very specific reason ("Request must be smaller than 6291456 bytes") was being dropped on
+    // the floor and reported as a bare "Request failed (413)".
     private fun errorMessage(json: String): String? = try {
-        JsonParser.parseString(json).asJsonObject.get("error")?.asString
+        val obj = JsonParser.parseString(json).asJsonObject
+        (obj.get("error") ?: obj.get("Message") ?: obj.get("message"))?.asString
     } catch (e: Exception) { null }
 
     private fun extractText(json: String): String = try {
