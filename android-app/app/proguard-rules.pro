@@ -24,10 +24,24 @@
 -keepattributes *Annotation*
 -keep class com.google.gson.stream.** { *; }
 -keep class com.healthdecoder.app.model.** { *; }
+# The scan-extraction DTOs -- ScanExtraction, MultiScanExtraction, FoundDate, RecommendedTest,
+# FollowUp -- live in .ai, not .model, and were covered by no keep rule. That single omission
+# broke EVERY scan in release builds: keeping only the @SerializedName FIELDS (rule below) still
+# lets R8 obfuscate and merge the enclosing CLASS, which loses a nested generic's element type.
+# List<FoundDate> then deserialized into LinkedTreeMaps and threw a bare ClassCastException at
+# the first element access, far from Gson -- which the scan pipeline reported to users as
+# "check your internet connection".
+#
+# Confirmed on-device by retracing the crash to DateResolver.resolve() reading section.datesFound.
+# A conditional `-if class * { @SerializedName <fields>; } -keep class <1>` was tried first and
+# looked more elegant, but did NOT keep FoundDate -- verify any replacement against
+# build/outputs/mapping/release/mapping.txt, where a kept class maps to ITSELF.
+-keep class com.healthdecoder.app.ai.** { *; }
 -keep class com.healthdecoder.app.network.** { *; }
 -keepclassmembers,allowobfuscation class * {
     @com.google.gson.annotations.SerializedName <fields>;
 }
+
 
 # `new TypeToken<List<X>>() {}` anonymous subclasses (used throughout for generic JSON
 # collections/maps) need their own generic superclass signature preserved too — R8 can still
