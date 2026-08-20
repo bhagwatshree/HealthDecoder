@@ -188,9 +188,11 @@ object DashboardEngine {
     private data class MedPoint(
         val reportId: String, val dosage: String, val frequency: String, val duration: String,
         val isOptional: Boolean, val weeklySchedule: List<String>, val notes: String, val date: String,
-        // When the report was SCANNED (createdAt). Printed report dates are often mis-read, so
-        // medication currency (which prescription is "latest") follows scan time, not [date].
-        val scanTime: String,
+        // Which prescription supersedes which. The printed report date when the document carries
+        // one — a doctor's 13 Aug script overrides a 30 June discharge summary whichever order
+        // they happened to be scanned in — falling back to the scan date for a document whose own
+        // date could not be read. Compared as yyyy-MM-dd, so both forms sort together.
+        val currency: String,
         val startDate: String?, val endDate: String?, val intervalDays: Int?
     )
 
@@ -225,18 +227,35 @@ object DashboardEngine {
         )
     }
 
+    /**
+     * The yyyy-MM-dd a report speaks for: its printed date, or the day it was scanned when the
+     * document carried no readable date. Used to decide which of two prescriptions supersedes the
+     * other, so a later script wins on clinical recency rather than on the order the user happened
+     * to catalogue their paperwork in.
+     */
+    internal fun currencyOf(report: MedicalReport): String =
+        report.reportDate?.takeIf { it.isNotBlank() } ?: report.createdAt.take(10)
+
     private fun buildMedicationHistory(reports: List<MedicalReport>): List<MedicationHistory> {
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        // Ordered by SCAN time (oldest first) so we can detect dosage changes over time. Printed
-        // report dates are frequently mis-read on discharge summaries, which used to reorder
-        // prescriptions and wrongly discontinue medicines — scan order is what the user controls.
-        val chrono = reports.sortedBy { it.createdAt }
+        // Ordered oldest-first by the PRINTED report date, so dosage changes are read in the order
+        // the doctor actually prescribed them. Scan time only breaks ties and stands in for a
+        // document whose own date could not be read.
+        //
+        // This used to order by scan time alone, on the grounds that printed dates were often
+        // mis-read. The cost of that was worse than the problem it avoided: scanning an OLD
+        // document late — a June discharge summary catalogued after August's prescription — made
+        // the stale script current and drove the reminders from it, and no amount of reprocessing
+        // could correct it, because reprocessing preserves createdAt. A later script superseding
+        // an earlier one is the actual clinical rule, and date extraction is now specified in far
+        // more detail (see OcrEngine.buildPrompt's DATES section) than when that trade was made.
+        val chrono = reports.sortedWith(compareBy({ currencyOf(it) }, { it.createdAt }))
         // Keyed by MedName.canonicalKey so the SAME drug written differently across scans
         // ("Tab. Concor" vs "Concor 5mg") is ONE medicine, not two duplicated reminders.
         val patientMed = mutableMapOf<String, MutableMap<String, MutableList<MedPoint>>>()
         // Best display label seen for each "patient|canonicalKey" (form prefix dropped, strength kept).
         val displayName = mutableMapOf<String, String>()
-        val latestScan = mutableMapOf<String, String>()
+        val latestCurrency = mutableMapOf<String, String>()
 
         for (r in chrono) {
             // Only reports that carry medicines (prescriptions) can change medication
@@ -247,8 +266,8 @@ object DashboardEngine {
             if (r.medications.none { !it.name.isNullOrBlank() }) continue
             val patient = r.patientName ?: "Unknown Patient"
             val date = r.reportDate ?: r.createdAt          // shown to the user
-            val scanTime = r.createdAt                       // decides which prescription is current
-            if ((latestScan[patient] ?: "") <= scanTime) latestScan[patient] = scanTime
+            val currency = currencyOf(r)                     // decides which prescription is current
+            if ((latestCurrency[patient] ?: "") <= currency) latestCurrency[patient] = currency
             val medMap = patientMed.getOrPut(patient) { mutableMapOf() }
             for (m in r.medications) {
                 if (m.name.isNullOrBlank()) continue
@@ -268,7 +287,7 @@ object DashboardEngine {
                 ) displayName[dnKey] = clean
                 medMap.getOrPut(key) { mutableListOf() }.add(
                     MedPoint(r.id, m.dosage.orEmpty().ifEmpty { "1 tablet" }, m.frequency.orEmpty(), m.duration ?: "",
-                        m.isOptional, m.weeklySchedule ?: emptyList(), m.notes ?: "", date, scanTime,
+                        m.isOptional, m.weeklySchedule ?: emptyList(), m.notes ?: "", date, currency,
                         m.startDate, m.endDate, m.intervalDays)
                 )
             }
@@ -276,7 +295,7 @@ object DashboardEngine {
 
         val out = mutableListOf<MedicationHistory>()
         for ((patient, medMap) in patientMed) {
-            val latest = latestScan[patient] ?: ""
+            val latest = latestCurrency[patient] ?: ""
             for ((medKey, list) in medMap) {
                 val medName = displayName["$patient|$medKey"] ?: medKey
                 if (list.isEmpty()) continue
@@ -295,7 +314,7 @@ object DashboardEngine {
                 // a weekly 4-dose course from a discharge summary, mid-course when a chronic-meds-only
                 // follow-up script is scanned) — it stays Active/Scheduled until that window closes.
                 val stillInOwnWindow = current.endDate != null && current.endDate >= today
-                val isOmitted = current.scanTime < latest && !stillInOwnWindow
+                val isOmitted = current.currency < latest && !stillInOwnWindow
                 val notYetStarted = current.startDate != null && current.startDate > today
                 val status = when {
                     isOmitted -> "Discontinued"

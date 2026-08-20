@@ -154,6 +154,12 @@ fun ReportDetailScreen(
                     editRawText = fetchedReport.extractedText ?: ""
                     editMedications.clear()
                     editMedications.addAll(fetchedReport.medications)
+
+                    // The comparison and insights cards are built on demand rather than at scan
+                    // time, so opening a report is what pays for them — and only once. The report
+                    // above is already on screen while this runs; the cards appear when ready.
+                    runCatching { LocalRepository.ensureEnrichment(context, reportId) }
+                        .getOrNull()?.let { report = it }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()

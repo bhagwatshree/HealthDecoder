@@ -238,11 +238,10 @@ object LocalRepository {
                 pageHashes = incomingHashes
             )
 
-            val previous = findPrevious(context, patientName, category, reportDate, excludeId = report.id)
-            val comparison = MedicalEngine.compareReports(context, report, previous, allowAi = allowPerReportAi)
-            val insights = MedicalEngine.healthInsights(context, report, allowAi = allowPerReportAi)
-            report = report.copy(comparisonResult = comparison, healthInsights = insights)
-
+            // Comparison and insights are NOT computed here. They are two further paid AI calls
+            // per saved report, and they only ever surface on the report's own detail screen —
+            // scanning a document is not the same thing as asking to read its analysis, and most
+            // saved reports are never opened. [ensureEnrichment] fills them in on first open.
             LocalStore.upsertReport(context, report)
 
             // Auto-add recommended tests, then auto-resolve matching pending tests.
@@ -562,22 +561,65 @@ object LocalRepository {
             reportCategory = correctedCategory,
             reportDate = correctedDate
         )
-        // Comparison/insights are enrichment, not correctness — each is a separate AI call, so a
-        // bulk fix-up (see fixDegradedReports) skips them to spend the day's quota on actually
-        // re-reading documents instead of burning 2/3 of it on summaries. They fill in later, the
-        // next time this report is normally opened/edited.
-        val previous = findPrevious(context, updated.patientName, correctedCategory, updated.reportDate ?: today(), excludeId = id)
-        val comparison = MedicalEngine.compareReports(context, updated, previous, allowAi = allowAi)
-        val insights = MedicalEngine.healthInsights(context, updated, allowAi = allowAi)
-        updated = updated.copy(comparisonResult = comparison, healthInsights = insights)
+        // Comparison/insights are enrichment, not correctness, and each is a further paid AI call.
+        // Re-reading the document has just invalidated whatever they previously said, so they are
+        // cleared rather than recomputed: [ensureEnrichment] rebuilds them the next time someone
+        // actually opens this report, and never for a report nobody looks at.
+        updated = updated.copy(comparisonResult = null, healthInsights = null)
         LocalStore.upsertReport(context, updated)
-        // Analyzing a (possibly upload-only) discharge summary should also add its follow-up visits
-        // and revive reminders for its medicines, just like a fresh scan does.
+        // Analyzing a (possibly upload-only) discharge summary should also add its follow-up visits,
+        // its recommended tests, and revive reminders for its medicines, just like a fresh scan
+        // does. The recommended tests were missing here: a discharge summary that only became
+        // readable on reprocess produced follow-up appointments but never the tests it asked for,
+        // so its pending tests simply never appeared.
         addFollowUpAppointments(context, section.followUps, updated.reportDate ?: today(), updated.patientName)
+        for (t in section.recommendedTests) {
+            if (t.testName.isBlank()) continue
+            val alreadyTracked = LocalStore.getPendingTests(context).any {
+                it.patientName.equals(updated.patientName, ignoreCase = true) &&
+                    it.testName.equals(t.testName, ignoreCase = true)
+            }
+            if (alreadyTracked) continue
+            LocalStore.upsertPendingTest(context, PendingTest(
+                id = LocalStore.newId(), patientName = updated.patientName ?: "Unknown Patient",
+                testName = t.testName, dueDate = t.dueDate, status = "Pending",
+                resolvedReportId = null, createdAt = nowIso()
+            ))
+        }
+        autoResolvePending(context, updated)
         for (m in updated.medications) if (m.name.isNotBlank())
             MedicineScheduleStore.clearDismissed(context, m.name, updated.patientName ?: "")
         Log.i("ScanDiag", "REPROCESSED id=$id meds=${updated.medications.size} followUps=${section.followUps.size}")
         detailedCacheFile(context, id).delete() // invalidate cached detailed analysis
+        afterWrite(context)
+        updated
+    }
+
+    /**
+     * Computes a report's comparison-with-previous and health insights if they are missing, and
+     * stores them. Called when a report's detail screen is opened — the only place either is
+     * shown — so the two AI calls they cost are spent on reports someone actually reads rather
+     * than on every document that passes through a scan.
+     *
+     * Returns the report unchanged (no AI calls) when both are already present, so re-opening a
+     * report is free. A failed call leaves the field null and simply retries on the next open;
+     * MedicalEngine already degrades to a local, non-AI comparison rather than throwing.
+     */
+    suspend fun ensureEnrichment(context: Context, id: String): MedicalReport? = withContext(Dispatchers.IO) {
+        val report = LocalStore.getReport(context, id) ?: return@withContext null
+        if (report.comparisonResult != null && report.healthInsights != null) return@withContext report
+
+        val category = report.reportCategory ?: "other"
+        val previous = findPrevious(
+            context, report.patientName, category, report.reportDate ?: today(), excludeId = id
+        )
+        val updated = report.copy(
+            comparisonResult = report.comparisonResult
+                ?: MedicalEngine.compareReports(context, report, previous),
+            healthInsights = report.healthInsights
+                ?: MedicalEngine.healthInsights(context, report)
+        )
+        LocalStore.upsertReport(context, updated)
         afterWrite(context)
         updated
     }
