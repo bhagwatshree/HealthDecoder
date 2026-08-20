@@ -228,6 +228,37 @@ object DashboardEngine {
     }
 
     /**
+     * The three buckets a patient actually sorts their own paperwork into. Narrower than the
+     * stored [MedicalReport.reportCategory], which only ever says "prescription" or "other" and so
+     * cannot separate a blood test from a discharge summary.
+     */
+    enum class RecordKind { PRESCRIPTION, LAB, OTHER }
+
+    private val LAB_TYPE_SIGNALS = listOf(
+        "lab", "haemogram", "hemogram", "cbc", "blood count", "profile", "panel", "urine",
+        "biochem", "pathology", "haematolog", "hematolog", "electrolyte", "protein", "lipid",
+        "renal", "liver", "kidney", "thyroid", "hba1c", "glycated", "prothrombin", "fibrinogen",
+        "serum", "culture", "biopsy", "assay"
+    )
+
+    /**
+     * Which bucket a report belongs to. A prescription is whatever was filed as one; a lab report
+     * is recognised by CARRYING measured parameters first and by its printed type second, since
+     * "PROTEINS (SERUM)" and "BIOCHEMISTRY REPORT" are unmistakably lab work while matching no
+     * fixed list of names. Everything else — discharge summaries, consultation notes, echoes and
+     * scans — is OTHER.
+     */
+    fun recordKindOf(report: MedicalReport): RecordKind {
+        val type = (report.reportType ?: "").trim().lowercase()
+        if (report.reportCategory == "prescription" || type.contains("prescription")) {
+            return RecordKind.PRESCRIPTION
+        }
+        val hasMeasuredValues = (report.testResults?.parameters?.size ?: 0) > 0
+        if (hasMeasuredValues || LAB_TYPE_SIGNALS.any { type.contains(it) }) return RecordKind.LAB
+        return RecordKind.OTHER
+    }
+
+    /**
      * The yyyy-MM-dd a report speaks for: its printed date, or the day it was scanned when the
      * document carried no readable date. Used to decide which of two prescriptions supersedes the
      * other, so a later script wins on clinical recency rather than on the order the user happened

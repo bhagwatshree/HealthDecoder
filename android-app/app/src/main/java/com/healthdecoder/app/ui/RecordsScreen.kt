@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.healthdecoder.app.ai.DashboardEngine
 import com.healthdecoder.app.local.BackgroundScanScheduler
 import com.healthdecoder.app.model.DashboardData
 import kotlinx.coroutines.launch
@@ -39,6 +40,10 @@ fun RecordsScreen(
     var searchQuery by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
     var selectedPeriod by remember { mutableStateOf<String?>(null) }
+    // null = every kind. Scanning one PDF can file several reports at once (a haemogram, a
+    // biochemistry panel and a urine routine out of the same document), so a patient looking for
+    // "my prescriptions" otherwise has to read past a wall of lab panels to find them.
+    var selectedKind by remember { mutableStateOf<DashboardEngine.RecordKind?>(null) }
     var ftsMatchIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     LaunchedEffect(searchQuery) {
@@ -178,6 +183,35 @@ fun RecordsScreen(
             }
             Spacer(modifier = Modifier.height(8.dp))
 
+            val kinds = listOf(
+                DashboardEngine.RecordKind.PRESCRIPTION to tr("Prescriptions"),
+                DashboardEngine.RecordKind.LAB to tr("Lab Reports"),
+                DashboardEngine.RecordKind.OTHER to tr("Others"),
+                null to tr("All")
+            )
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(kinds) { (value, label) ->
+                    FilterChip(
+                        selected = selectedKind == value,
+                        onClick = { selectedKind = value },
+                        label = { Text(label, fontSize = 12.sp) },
+                        leadingIcon = if (selectedKind == value) {{
+                            Icon(imageVector = Icons.Default.Check, contentDescription = tr("Selected"), modifier = Modifier.size(14.dp))
+                        }} else null,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.secondary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onSecondary,
+                            selectedLeadingIconColor = MaterialTheme.colorScheme.onSecondary
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
             if (errorMessage.isNotEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -212,7 +246,9 @@ fun RecordsScreen(
                         val typeMatch = report.reportType?.contains(searchQuery, ignoreCase = true) == true
                         val medMatch = report.medications.any { it.name.contains(searchQuery, ignoreCase = true) }
                         val textMatch = report.id in ftsMatchIds
-                        patientMatch || commentsMatch || typeMatch || medMatch || textMatch
+                        val kindMatch = selectedKind == null ||
+                            DashboardEngine.recordKindOf(report) == selectedKind
+                        kindMatch && (patientMatch || commentsMatch || typeMatch || medMatch || textMatch)
                     }
                         // Order by the document's own date (newest first) — that's the order a
                         // patient/doctor actually reads records in, especially when catching up
