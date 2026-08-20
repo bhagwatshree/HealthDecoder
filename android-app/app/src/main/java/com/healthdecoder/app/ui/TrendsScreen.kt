@@ -258,7 +258,9 @@ fun TrendsScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(listOf(null to "All", "3m" to "3M", "6m" to "6M", "1y" to "1Y", "2y" to "2Y")) { (value, label) ->
+                // Narrowest first, "All" last — same widening order as Records' filter, and the
+                // widest is least used now that the screen opens on a focused window.
+                items(listOf("3m" to "3M", "6m" to "6M", "1y" to "1Y", "2y" to "2Y", null to "All")) { (value, label) ->
                     FilterChip(
                         selected = period == value,
                         onClick = { period = value },

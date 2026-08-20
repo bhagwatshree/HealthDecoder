@@ -143,12 +143,14 @@ fun RecordsScreen(
                 )
             )
 
+            // Narrowest first, "All Time" last: the list reads as widening ranges, and the widest
+            // one is the least-used now that the screen opens on a focused window by default.
             val periods = listOf(
-                null to tr("All Time"),
                 "1m" to tr("1 Month"),
                 "3m" to tr("3 Months"),
                 "6m" to tr("6 Months"),
-                "1y" to tr("1 Year")
+                "1y" to tr("1 Year"),
+                null to tr("All Time")
             )
             LazyRow(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),

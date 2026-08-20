@@ -488,25 +488,28 @@ fun ReportDetailScreen(
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Row(
+                            // Patient/date and the report type are stacked, not placed side by side.
+                            // A real report type runs long ("Diagnostic Lab Report (Haemogram,
+                            // PT/INR, Urine Routine, Biochemistry, Electrolytes)"), and as the
+                            // right-hand item of a SpaceBetween row its pill grew back across the
+                            // patient's name and covered it. On its own line it can use the full
+                            // width and wrap normally.
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text(
-                                        text = "Patient: ${currentReport.patientName ?: "Unknown"}",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "Date: ${currentReport.reportDate ?: "Unknown"}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                                Text(
+                                    text = "Patient: ${currentReport.patientName ?: "Unknown"}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Date: ${currentReport.reportDate ?: "Unknown"}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(6.dp))
@@ -517,7 +520,8 @@ fun ReportDetailScreen(
                                         text = currentReport.reportType ?: "Other",
                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp
+                                        fontSize = 12.sp,
+                                        lineHeight = 16.sp
                                     )
                                 }
                             }
@@ -716,12 +720,21 @@ fun ReportDetailScreen(
                                                     horizontalArrangement = Arrangement.End,
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Text(text = param.referenceRange.ifEmpty { "-" }, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    // The range yields width to the badge instead of the
+                                                    // other way round: a long range ("1,50,000 - 4,50,000")
+                                                    // used to squeeze the pill until its label wrapped.
+                                                    Text(
+                                                        text = param.referenceRange.ifEmpty { "-" },
+                                                        fontSize = 11.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        textAlign = TextAlign.End,
+                                                        modifier = Modifier.weight(1f, fill = false)
+                                                    )
 
                                                     val paramStatus = param.status ?: ""
                                                     if (paramStatus.isNotEmpty()) {
-                                                        Spacer(modifier = Modifier.width(4.dp))
-                                                        StatusBadge(paramStatus)
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        StatusBadge(paramStatus, compact = true)
                                                     }
                                                 }
                                             }
