@@ -2,6 +2,7 @@ package com.healthdecoder.app.ui
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -710,10 +712,18 @@ fun ReportGroupCard(
     val first = reports.first()
     val sourceName = reports.firstNotNullOfOrNull { r -> r.sourceFiles.firstOrNull()?.name?.takeIf { it.isNotBlank() } }
 
+    // The box is read by its OUTLINE, not by its fill. A tinted fill alone cannot work in both
+    // themes from one value — light enough to show against a white page is invisible against a
+    // near-black one, and vice versa — so the grouping is carried by a definite primary-tinted
+    // border, with the fill only lifting the container a step away from the page behind it.
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                .compositeOver(MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
+        ),
+        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(12.dp),

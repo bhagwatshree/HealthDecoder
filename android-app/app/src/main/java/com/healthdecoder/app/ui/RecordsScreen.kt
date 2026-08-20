@@ -123,7 +123,6 @@ fun RecordsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .appWatermark()
         ) {
             BackgroundScanProgressBar(onNavigateToDetail = onNavigateToDetail)
 

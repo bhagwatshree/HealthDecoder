@@ -272,7 +272,6 @@ fun ReportDetailScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
-                .appWatermark()
         ) {
             if (isLoading && report == null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
