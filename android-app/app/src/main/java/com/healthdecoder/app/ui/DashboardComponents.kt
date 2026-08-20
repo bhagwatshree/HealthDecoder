@@ -755,7 +755,7 @@ fun ReportGroupCard(
                 ReportItemCard(
                     report = report,
                     onClick = { onReportClick(report.id) },
-                    showPatientAndDate = false
+                    insideGroup = true
                 )
             }
         }
@@ -766,10 +766,13 @@ fun ReportGroupCard(
 fun ReportItemCard(
     report: MedicalReport,
     onClick: () -> Unit,
-    // False when the card sits inside a document group, which already states the patient and date
-    // once in its header — repeating them on every panel of one scanned PDF is most of what makes
-    // that list hard to read.
-    showPatientAndDate: Boolean = true
+    // True when this card is a panel INSIDE a document group. The group already draws the outline
+    // and states the patient and date once in its header, so a panel repeats neither: a second
+    // border inside the first reads as a box in a box, and repeating "Patient / date" on every
+    // panel of one PDF is most of what made that list hard to read. A standalone report keeps
+    // both, so every top-level row in the list carries the same outline whether it came from a
+    // document with one report or eight.
+    insideGroup: Boolean = false
 ) {
     Card(
         modifier = Modifier
@@ -777,7 +780,9 @@ fun ReportItemCard(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = if (insideGroup) null
+            else BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
     ) {
         Column(
             modifier = Modifier
@@ -805,7 +810,7 @@ fun ReportItemCard(
                 )
             }
 
-            if (showPatientAndDate) {
+            if (!insideGroup) {
                 Text(
                     text = "Patient: ${report.patientName ?: "Unknown Patient"}",
                     style = MaterialTheme.typography.titleMedium,
