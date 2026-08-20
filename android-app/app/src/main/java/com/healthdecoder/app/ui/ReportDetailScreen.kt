@@ -771,7 +771,9 @@ fun ReportDetailScreen(
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
-                                containerColor = Color(0xFFE8EAF6)
+                                // Same reason as the alignment card below: tint over the theme's
+                                // surface so this stays readable in dark mode.
+                                containerColor = statusContainerColor(MaterialTheme.colorScheme.primary)
                             ),
                             shape = RoundedCornerShape(14.dp)
                         ) {
@@ -821,11 +823,13 @@ fun ReportDetailScreen(
                                         color = Color(0xFF3F51B5)
                                     )
                                     hi.specialistRecommendations.forEach { rec ->
-                                        val (bgColor, textColor, urgencyIcon) = when (rec.urgency.lowercase()) {
-                                            "urgent" -> Triple(Color(0xFFFFEBEE), Color(0xFFB71C1C), "🚨")
-                                            "soon" -> Triple(Color(0xFFFFF8E1), Color(0xFFE65100), "⚠️")
-                                            else -> Triple(Color(0xFFE8F5E9), Color(0xFF1B5E20), "📅")
+                                        val (urgencyAccent, urgencyIcon) = when (rec.urgency.lowercase()) {
+                                            "urgent" -> ClinicalStatus.High to "🚨"
+                                            "soon" -> ClinicalStatus.Low to "⚠️"
+                                            else -> ClinicalStatus.Normal to "📅"
                                         }
+                                        val bgColor = statusContainerColor(urgencyAccent)
+                                        val textColor = urgencyAccent
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -938,12 +942,18 @@ fun ReportDetailScreen(
                     // ══ CARD 2: Prescription Alignment Check ════════════════════════════════
                     val alignment = hi?.prescriptionAlignment
                     if (alignment != null && alignment.score != "N/A") {
-                        val (cardBg, headerColor, iconVec) = when (alignment.score.lowercase()) {
-                            "good" -> Triple(Color(0xFFE8F5E9), Color(0xFF2E7D32), Icons.Default.CheckCircle)
-                            "partial" -> Triple(Color(0xFFFFF3E0), Color(0xFFE65100), Icons.Default.Warning)
-                            "poor" -> Triple(Color(0xFFFFEBEE), Color(0xFFC62828), Icons.Default.Cancel)
-                            else -> Triple(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant, Icons.Default.Info)
+                        // Accent tinted OVER the theme's surface, never a fixed pale hex: a pale
+                        // fill stays pale in dark theme while the body text stays white, which is
+                        // what made this card's own text unreadable there. Same treatment as the
+                        // comparison card above — see statusContainerColor.
+                        val (accent, iconVec) = when (alignment.score.lowercase()) {
+                            "good" -> ClinicalStatus.Normal to Icons.Default.CheckCircle
+                            "partial" -> ClinicalStatus.Low to Icons.Default.Warning
+                            "poor" -> ClinicalStatus.High to Icons.Default.Cancel
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant to Icons.Default.Info
                         }
+                        val cardBg = statusContainerColor(accent)
+                        val headerColor = accent
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = cardBg),
@@ -1075,15 +1085,11 @@ fun ReportDetailScreen(
                                 sideEffects.forEach { se ->
                                     val isExpanded = expandedMed == se.medicine
                                     val severityColor = when (se.severity.lowercase()) {
-                                        "serious" -> Color(0xFFC62828)
-                                        "moderate" -> Color(0xFFE65100)
-                                        else -> Color(0xFF2E7D32)
+                                        "serious" -> ClinicalStatus.High
+                                        "moderate" -> ClinicalStatus.Low
+                                        else -> ClinicalStatus.Normal
                                     }
-                                    val severityBg = when (se.severity.lowercase()) {
-                                        "serious" -> Color(0xFFFFEBEE)
-                                        "moderate" -> Color(0xFFFFF3E0)
-                                        else -> Color(0xFFE8F5E9)
-                                    }
+                                    val severityBg = statusContainerColor(severityColor)
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -1181,7 +1187,7 @@ fun ReportDetailScreen(
                                                             modifier = Modifier
                                                                 .fillMaxWidth()
                                                                 .clip(RoundedCornerShape(6.dp))
-                                                                .background(Color(0xFFFFEBEE))
+                                                                .background(statusContainerColor(ClinicalStatus.High))
                                                                 .padding(8.dp),
                                                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                                                             verticalAlignment = Alignment.Top
@@ -1196,7 +1202,7 @@ fun ReportDetailScreen(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
                                                             .clip(RoundedCornerShape(6.dp))
-                                                            .background(Color(0xFFE3F2FD))
+                                                            .background(statusContainerColor(MaterialTheme.colorScheme.primary))
                                                             .padding(8.dp),
                                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                                                         verticalAlignment = Alignment.Top
