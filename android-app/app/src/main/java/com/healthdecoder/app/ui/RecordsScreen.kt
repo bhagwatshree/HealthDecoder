@@ -280,8 +280,31 @@ fun RecordsScreen(
                                     )
                                 }
                             }
-                            items(filteredReports, key = { it.id }) { report ->
-                                ReportItemCard(report = report, onClick = { onNavigateToDetail(report.id) })
+                            // Grouped by source document normally; FLAT while searching, because a
+                            // search result needs to show the report that actually matched rather
+                            // than burying it among the other panels of its document.
+                            if (searchQuery.isNotEmpty()) {
+                                items(filteredReports, key = { it.id }) { report ->
+                                    ReportItemCard(report = report, onClick = { onNavigateToDetail(report.id) })
+                                }
+                            } else {
+                                val groups = DashboardEngine.groupBySourceDocument(filteredReports)
+                                items(groups, key = { it.first().id }) { group ->
+                                    // A document that produced a single report needs no box around
+                                    // it — the grouping only earns its space when there is a
+                                    // relationship to show.
+                                    if (group.size == 1) {
+                                        ReportItemCard(
+                                            report = group.first(),
+                                            onClick = { onNavigateToDetail(group.first().id) }
+                                        )
+                                    } else {
+                                        ReportGroupCard(
+                                            reports = group,
+                                            onReportClick = { id -> onNavigateToDetail(id) }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

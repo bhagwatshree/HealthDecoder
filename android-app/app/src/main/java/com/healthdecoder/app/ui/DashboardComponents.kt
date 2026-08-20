@@ -693,10 +693,73 @@ fun PendingTestCard(
     }
 }
 
+/**
+ * Several reports extracted from ONE scanned document, drawn inside a single box so it is obvious
+ * they came from the same PDF and were only split apart for detail. The patient and date are
+ * stated once in the header instead of on every panel, and the source file is named because that
+ * is the least ambiguous way to say "these are the same piece of paper".
+ *
+ * Each panel inside is still its own tappable card opening its own detail screen — the split is
+ * real, this only makes the relationship visible.
+ */
+@Composable
+fun ReportGroupCard(
+    reports: List<MedicalReport>,
+    onReportClick: (String) -> Unit
+) {
+    val first = reports.first()
+    val sourceName = reports.firstNotNullOfOrNull { r -> r.sourceFiles.firstOrNull()?.name?.takeIf { it.isNotBlank() } }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "Patient: ${first.patientName ?: "Unknown Patient"}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = first.reportDate ?: tr("No Date"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = listOfNotNull(
+                        sourceName,
+                        "${reports.size} ${tr("reports from this document")}"
+                    ).joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            reports.forEach { report ->
+                ReportItemCard(
+                    report = report,
+                    onClick = { onReportClick(report.id) },
+                    showPatientAndDate = false
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun ReportItemCard(
     report: MedicalReport,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    // False when the card sits inside a document group, which already states the patient and date
+    // once in its header — repeating them on every panel of one scanned PDF is most of what makes
+    // that list hard to read.
+    showPatientAndDate: Boolean = true
 ) {
     Card(
         modifier = Modifier
@@ -732,18 +795,20 @@ fun ReportItemCard(
                 )
             }
 
-            Text(
-                text = "Patient: ${report.patientName ?: "Unknown Patient"}",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            if (showPatientAndDate) {
+                Text(
+                    text = "Patient: ${report.patientName ?: "Unknown Patient"}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
 
-            Text(
-                text = report.reportDate ?: tr("No Date"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                Text(
+                    text = report.reportDate ?: tr("No Date"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             if (report.medications.isNotEmpty()) {
                 FlowRow(

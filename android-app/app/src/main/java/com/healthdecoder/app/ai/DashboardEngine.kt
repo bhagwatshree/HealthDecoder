@@ -259,6 +259,30 @@ object DashboardEngine {
     }
 
     /**
+     * Groups reports by the document they were extracted from, preserving the order they arrive in.
+     *
+     * One scanned PDF routinely yields several reports — a haemogram, a biochemistry panel, a
+     * urine routine — and on a flat list they look like unrelated records that happen to share a
+     * date, with nothing to say they came from the same page set until you open one. Reports from
+     * one scan share their stored page files, which is what identifies the document here.
+     *
+     * A report with no stored pages (imported, restored, or manually entered) is keyed by its own
+     * id so it stands alone: keyed on empty paths, every such report would collapse into one
+     * meaningless group. The patient is part of the key too, so the theoretical case of one
+     * document covering two people can't merge them.
+     */
+    fun groupBySourceDocument(reports: List<MedicalReport>): List<List<MedicalReport>> {
+        val groups = LinkedHashMap<String, MutableList<MedicalReport>>()
+        for (report in reports) {
+            val pages = report.imagePaths.filter { it.isNotBlank() }
+            val key = if (pages.isEmpty()) "report:${report.id}"
+                else "doc:${report.patientName.orEmpty().trim().lowercase()}|${pages.joinToString("|")}"
+            groups.getOrPut(key) { mutableListOf() }.add(report)
+        }
+        return groups.values.toList()
+    }
+
+    /**
      * The yyyy-MM-dd a report speaks for: its printed date, or the day it was scanned when the
      * document carried no readable date. Used to decide which of two prescriptions supersedes the
      * other, so a later script wins on clinical recency rather than on the order the user happened
