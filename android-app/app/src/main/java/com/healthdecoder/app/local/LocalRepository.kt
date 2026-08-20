@@ -1023,6 +1023,20 @@ object LocalRepository {
         return reports.filter { (it.reportDate ?: it.createdAt) >= cutoff }
     }
 
+    /**
+     * Picks the narrowest of "3m"/"6m"/"1y" whose window actually contains at least one report,
+     * so the Records/Trends screens default to a focused view instead of a whole history dump —
+     * without ever defaulting to an EMPTY view just because the most recent report happens to be
+     * a bit older than 3 months. Falls back to "All Time" (null) only when even a year back has
+     * nothing, e.g. a sparse or old-only patient history.
+     */
+    fun computeDefaultPeriod(reports: List<MedicalReport>): String? {
+        for (period in listOf("3m", "6m", "1y")) {
+            if (filterByPeriod(reports, period).isNotEmpty()) return period
+        }
+        return null
+    }
+
     // ── Pending tests ─────────────────────────────────────────────────────────
     suspend fun createPendingTest(context: Context, patientName: String, testName: String, dueDate: String?): PendingTest = withContext(Dispatchers.IO) {
         val pt = PendingTest(LocalStore.newId(), patientName, testName, dueDate?.ifBlank { null }, "Pending", null, nowIso())

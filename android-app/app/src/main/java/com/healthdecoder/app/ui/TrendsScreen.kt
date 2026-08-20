@@ -115,7 +115,15 @@ fun TrendsScreen(
         // Default to the family member selected on Home, if that person has trend data.
         val active = com.healthdecoder.app.local.AppSettings.getActivePatient(context)
         selectedPatient = patients.firstOrNull { it.equals(active, ignoreCase = true) } ?: patients.firstOrNull()
-        if (selectedPatient == null) isLoading = false
+        if (selectedPatient == null) {
+            isLoading = false
+        } else {
+            // Default to the narrowest period (3m/6m/1y) that actually has data for THIS
+            // patient, rather than every report ever scanned — filter chips still let the
+            // user widen it.
+            val patientReports = reports.filter { it.patientName.equals(selectedPatient, ignoreCase = true) }
+            period = LocalRepository.computeDefaultPeriod(patientReports)
+        }
     }
 
     // Reload trends when patient/period changes, or the user taps refresh.

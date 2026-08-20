@@ -66,7 +66,14 @@ fun RecordsScreen(
         }
     }
 
-    LaunchedEffect(Unit) { loadDashboard() }
+    // On first open, default to the narrowest period (3m/6m/1y) that actually has data, rather
+    // than dumping every report ever scanned — the user can still widen it via the filter chips.
+    LaunchedEffect(Unit) {
+        selectedPeriod = com.healthdecoder.app.local.LocalRepository.computeDefaultPeriod(
+            com.healthdecoder.app.local.LocalRepository.getReports(context)
+        )
+        loadDashboard()
+    }
     LaunchedEffect(Unit) { BackgroundScanScheduler.onJobCompleted.collect { loadDashboard() } }
 
     Scaffold(
@@ -140,7 +147,8 @@ fun RecordsScreen(
                 null to tr("All Time"),
                 "1m" to tr("1 Month"),
                 "3m" to tr("3 Months"),
-                "6m" to tr("6 Months")
+                "6m" to tr("6 Months"),
+                "1y" to tr("1 Year")
             )
             LazyRow(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
