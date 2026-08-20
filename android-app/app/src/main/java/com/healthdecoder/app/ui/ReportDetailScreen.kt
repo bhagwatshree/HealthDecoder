@@ -1396,52 +1396,11 @@ fun ReportDetailScreen(
                         }
                     }
 
-                    // Collapsible Raw OCR Text
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { rawTextExpanded = !rawTextExpanded },
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = tr("Raw Transcribed Text"),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Icon(
-                                    imageVector = if (rawTextExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                    contentDescription = tr("Toggle text")
-                                )
-                            }
-                            
-                            AnimatedVisibility(visible = rawTextExpanded) {
-                                Column(modifier = Modifier.padding(top = 12.dp)) {
-                                    if (isEditing) {
-                                        OutlinedTextField(
-                                            value = editRawText,
-                                            onValueChange = { editRawText = it },
-                                            modifier = Modifier.fillMaxWidth().height(200.dp),
-                                            label = { Text(tr("Raw Text")) }
-                                        )
-                                    } else {
-                                        Text(
-                                            text = currentReport.extractedText.takeIf { !it.isNullOrBlank() } ?: "No raw text available.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                            lineHeight = 16.sp
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    // The raw transcription is deliberately NOT shown: it's a machine artifact
+                    // (on-device OCR output), not something a patient reads or edits. It is still
+                    // stored and still matters — it backs full-text search and the token-overlap
+                    // duplicate check in LocalStore — so [editRawText] keeps round-tripping the
+                    // saved value untouched rather than dropping it on edit.
                 }
             }
 
