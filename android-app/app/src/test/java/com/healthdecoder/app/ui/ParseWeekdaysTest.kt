@@ -25,6 +25,16 @@ class ParseWeekdaysTest {
         assertEquals(everyday, parseWeekdays(listOf("Daily"), "1-0-1"))
     }
 
+    /**
+     * "Everyday" is the schema's default and the model emits it even for a medicine whose
+     * frequency text then restricts the days. It must not suppress that text: treating it as a
+     * final answer is what kept the Acitrom reminder firing on Thursdays after the first fix.
+     */
+    @Test fun `Everyday does not suppress off-days named in the frequency text`() {
+        val days = parseWeekdays(listOf("Everyday"), "5 days a week, THURSDAY & SUNDAY OFF")
+        assertEquals(listOf(2, 3, 4, 6, 7), days)
+    }
+
     @Test fun `plain daily prescription is unrestricted`() {
         assertEquals(everyday, parseWeekdays(emptyList(), "1-0-1"))
         assertEquals(everyday, parseWeekdays(emptyList(), "twice a day after food"))

@@ -187,14 +187,16 @@ fun parseRoutine(frequencyStr: String, dosageStr: String): List<Pair<String, Boo
  * twice-weekly medicine like Tolvaptan (Wed & Sat) reminds only on those days.
  */
 fun parseWeekdays(weeklySchedule: List<String>, frequencyStr: String): List<Int> {
-    if (weeklySchedule.any { it.trim().equals("Everyday", true) || it.trim().equals("Daily", true) }) {
-        return emptyList()
-    }
     // The structured schedule is the doctor's actual answer to "which days"; the free-text
-    // frequency is only consulted when the schedule doesn't name any. Reading BOTH is what
-    // caused a 5-days-a-week anticoagulant to remind on its two off days: the frequency text
-    // that names the days ("Thursday & Sunday off") names them precisely BECAUSE they are
-    // excluded, and merging the two strings threw that distinction away.
+    // frequency is consulted only when the schedule names none. Reading BOTH is what caused a
+    // 5-days-a-week anticoagulant to remind on its two off days: the frequency text names those
+    // days precisely BECAUSE they are excluded, and merging the two strings lost that.
+    //
+    // Note there is deliberately no early return for "Everyday": the model emits it as the
+    // schema's default even for a medicine whose frequency text then says "Thursday & Sunday
+    // off", and short-circuiting on it skipped the only place the restriction was written down.
+    // It names no weekday, so it simply falls through to the frequency text and, when that names
+    // none either, to the empty "no restriction" answer it meant in the first place.
     val fromSchedule = activeWeekdaysIn(weeklySchedule.joinToString(" "))
     if (fromSchedule.isNotEmpty()) return fromSchedule
     return activeWeekdaysIn(frequencyStr)
