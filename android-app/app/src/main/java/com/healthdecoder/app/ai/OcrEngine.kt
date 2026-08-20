@@ -3,6 +3,7 @@ package com.healthdecoder.app.ai
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.util.Log
 import com.healthdecoder.app.model.Medication
 import com.healthdecoder.app.model.TestResults
 import com.google.android.gms.tasks.Tasks
@@ -469,7 +470,20 @@ Return ONLY raw JSON. No markdown code fences, no extra text.
      */
     private fun localOcrPages(images: List<Pair<ByteArray, String>>): PreparedPages {
         if (images.isEmpty()) return PreparedPages("", images)
-        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+
+        // Building the recognizer is itself failure-prone in release builds — ML Kit resolves
+        // implementations reflectively, and a missing keep rule surfaces as a bare NPE from
+        // inside obfuscated ML Kit code (see proguard-rules.pro). This step is an OPTIONAL
+        // enhancement to a scan, never a precondition for one, so nothing it does may take the
+        // scan down with it: on failure the pages go up exactly as they would have before this
+        // existed. Note that also means no redaction happened, hence the loud log — a silent
+        // fallback here would quietly send identity data the caller believes was covered.
+        val recognizer = runCatching { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
+            .getOrElse {
+                Log.w("ScanDiag", "on-device OCR unavailable; pages go UN-REDACTED and unindexed", it)
+                return PreparedPages("", images)
+            }
+
         val texts = mutableListOf<String>()
         val prepared = mutableListOf<Pair<ByteArray, String>>()
 

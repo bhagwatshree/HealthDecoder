@@ -187,14 +187,41 @@ fun parseRoutine(frequencyStr: String, dosageStr: String): List<Pair<String, Boo
  * twice-weekly medicine like Tolvaptan (Wed & Sat) reminds only on those days.
  */
 fun parseWeekdays(weeklySchedule: List<String>, frequencyStr: String): List<Int> {
-    val abbrToCode = linkedMapOf(
-        "sun" to 1, "mon" to 2, "tue" to 3, "wed" to 4, "thu" to 5, "fri" to 6, "sat" to 7
-    )
-    val hay = (weeklySchedule.joinToString(" ") + " " + frequencyStr).lowercase()
-    val days = sortedSetOf<Int>()
-    for ((abbr, code) in abbrToCode) if (hay.contains(abbr)) days.add(code)
-    // Only honour named days; "twice a week" with no day, or a plain daily schedule, stays daily.
-    return days.toList()
+    if (weeklySchedule.any { it.trim().equals("Everyday", true) || it.trim().equals("Daily", true) }) {
+        return emptyList()
+    }
+    // The structured schedule is the doctor's actual answer to "which days"; the free-text
+    // frequency is only consulted when the schedule doesn't name any. Reading BOTH is what
+    // caused a 5-days-a-week anticoagulant to remind on its two off days: the frequency text
+    // that names the days ("Thursday & Sunday off") names them precisely BECAUSE they are
+    // excluded, and merging the two strings threw that distinction away.
+    val fromSchedule = activeWeekdaysIn(weeklySchedule.joinToString(" "))
+    if (fromSchedule.isNotEmpty()) return fromSchedule
+    return activeWeekdaysIn(frequencyStr)
+}
+
+/** Day names, matched on word boundaries so "month" is not a Monday and "saturation" not a Saturday. */
+private val DAY_PATTERNS: List<Pair<Int, Regex>> = listOf(
+    1 to """sun(day)?""", 2 to """mon(day)?""", 3 to """tue(s|sday)?""", 4 to """wed(nesday)?""",
+    5 to """thu(r|rs|rsday)?""", 6 to """fri(day)?""", 7 to """sat(urday)?"""
+).map { (code, body) -> code to Regex("""\b${body}s?\b""", RegexOption.IGNORE_CASE) }
+
+/** Wording that flips named days from "take on these" to "skip these". */
+private val DAY_EXCLUSION = Regex("""\b(off|except|excluding|omit|skip|holiday)\b""", RegexOption.IGNORE_CASE)
+
+/**
+ * Days named in [text] as Calendar.DAY_OF_WEEK codes (1=Sun..7=Sat), honouring exclusion wording:
+ * "Thursday & Sunday off" yields Mon/Tue/Wed/Fri/Sat, not Thursday and Sunday. An empty result
+ * means the text named no days at all, which callers read as "every day".
+ */
+private fun activeWeekdaysIn(text: String): List<Int> {
+    if (text.isBlank()) return emptyList()
+    val named = DAY_PATTERNS.filter { (_, pattern) -> pattern.containsMatchIn(text) }.map { it.first }.toSet()
+    if (named.isEmpty()) return emptyList()
+    if (!DAY_EXCLUSION.containsMatchIn(text)) return named.sorted()
+    // Every day excluded is not a real prescription; fall back to the named days rather than
+    // returning empty, which callers would read as "every day" — the opposite of what it says.
+    return ((1..7).toSet() - named).sorted().ifEmpty { named.sorted() }
 }
 
 fun parseFoodInstruction(frequencyStr: String, dosageStr: String): String? {
@@ -838,16 +865,12 @@ fun getActiveDaysFromSchedule(weeklySchedule: List<String>, frequencyStr: String
         return listOf(false, false, false, false, false, false, false)
     }
     
-    val mon = freq.contains("mon") || freq.contains("monday")
-    val tue = freq.contains("tue") || freq.contains("tuesday")
-    val wed = freq.contains("wed") || freq.contains("wednesday")
-    val thu = freq.contains("thu") || freq.contains("thursday")
-    val fri = freq.contains("fri") || freq.contains("friday")
-    val sat = freq.contains("sat") || freq.contains("saturday")
-    val sun = freq.contains("sun") || freq.contains("sunday")
-    
-    if (mon || tue || wed || thu || fri || sat || sun) {
-        return listOf(mon, tue, wed, thu, fri, sat, sun)
+    // Same negation-aware parse the reminders use, so the day dots shown here can never disagree
+    // with the days the alarms actually fire on. Codes are Calendar's (1=Sun..7=Sat); this list
+    // is Mon..Sun.
+    val activeCodes = activeWeekdaysIn(frequencyStr)
+    if (activeCodes.isNotEmpty()) {
+        return listOf(2, 3, 4, 5, 6, 7, 1).map { it in activeCodes }
     }
     
     if (freq.contains("alternate") || freq.contains("alt")) {

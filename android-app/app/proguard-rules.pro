@@ -73,3 +73,15 @@
 }
 -dontwarn okhttp3.**
 -dontwarn retrofit2.**
+
+# ML Kit text recognition (on-device OCR: OcrEngine.localOcrPages, PiiRedactor, ScanScreen).
+# ML Kit resolves its recognizer implementations reflectively through its own component
+# registry, so R8 shrinking leaves the option/impl classes half-present: the failure is a bare
+# NullPointerException from inside obfuscated ML Kit code the first time a recognizer is built,
+# release-only, with nothing in the trace naming ML Kit as the cause. Same defect shape as the
+# .ai/.reminder keeps above -- see 75d7330 and d0fca82.
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.android.gms.internal.mlkit_vision_text** { *; }
+-keep class com.google.android.gms.internal.mlkit_common** { *; }
+-keep interface com.google.mlkit.** { *; }
+-dontwarn com.google.mlkit.**
