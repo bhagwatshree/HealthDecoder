@@ -8,7 +8,7 @@ lab formats and available in 11 languages.
 Android app + serverless backend. Records live encrypted on the phone and the app works fully
 without an account.
 
-**Current release:** 1.3.0 (versionCode 9) · minSdk 24 (Android 7.0) · targetSdk 36
+**Current release:** 1.3.4 (versionCode 13) · minSdk 24 (Android 7.0) · targetSdk 36
 **Repo:** [github.com/bhagwatshree/HealthDecoder](https://github.com/bhagwatshree/HealthDecoder)
 
 ---
@@ -50,6 +50,11 @@ needs attention, current medicines, upcoming appointment, recent history.
 
 **Multi-patient** — One phone covers a family. Every screen scopes to the active patient, chosen
 from the Home header.
+
+**Identity covered before upload** — A page is OCR'd on the device first, and the regions holding
+the patient's name, the referring or signing doctor, the lab's letterhead and any ID or contact
+numbers are painted over before the image is sent for analysis. Best-effort, not
+de-identification — see [Privacy & data handling](#privacy--data-handling).
 
 ### Screens
 
@@ -301,6 +306,20 @@ Two different mechanisms, both under **Settings**:
   live in the local encrypted database. The backend never receives or stores them.
 - **Images are sent to the AI provider only during analysis**, through the backend proxy, to
   produce the extraction — they are not retained server-side.
+- **Identity regions are covered before a page is uploaded.** On-device OCR (ML Kit) locates the
+  patient name, referring/signing clinician, lab letterhead and ID/contact numbers, and those
+  regions are painted out of the copy that leaves the phone (`PiiRedactor.kt`). The originals
+  stay on the device untouched, and the patient's name is resolved locally rather than being
+  asked of the model.
+
+  ⚠️ **This is best-effort risk reduction, not de-identification, and must not be described as
+  such to users.** It keys off what the OCR reads, so a bare unlabelled name, a name rendered
+  inside a logo, or handwriting can still be uploaded. `PiiRedactorTest.kt` pins both directions;
+  the rules deliberately under-redact rather than risk a black box landing on a dose or a lab
+  value.
+- **A short-lived response cache** on the proxy returns the previous answer for an identical
+  repeat request instead of re-sending it to the provider, keyed by a hash of the caller,
+  operation, prompt and images.
 - **An account is optional.** Everything works signed-out; sign-in only adds cross-device sync and
   a personal API key.
 - **What the backend does store:** account records, UI translations, health-tip content, and
@@ -334,22 +353,57 @@ Data Safety form. See the release checklist below.
 ## Cost tracking
 
 Every Gemini/Sarvam/Firebase call the backend makes is logged — provider, operation, tokens,
-estimated cost — to the `api_usage_events` table (`backend/usageTracker.js`, `backend/pricing.js`).
-Point the separate dashboard project at the same `DATABASE_URL` for spend by
-provider/operation/model plus a CloudWatch-based AWS estimate.
+estimated cost, and which pooled key served it — to the `api_usage_events` table
+(`backend/usageTracker.js`, `backend/pricing.js`). Point the separate dashboard project at the
+same `DATABASE_URL` for spend by provider/operation/model plus a CloudWatch-based AWS estimate.
+
+`cost_usd` is an **estimate** computed from published token prices, not an invoice: it says
+nothing about whether the Google Cloud project behind a given key is still inside its own free
+tier. `gemini_key_index` records the caller's position in `GEMINI_API_KEYS` so a figure here can
+be reconciled against that specific project's real billing.
+
+Four things keep the bill down, all in `backend/server.js` and `backend/keyPool.js`:
+
+- **Requests are de-duplicated.** Identical requests are single-flighted — the first caller
+  performs the work and a concurrent or retried duplicate waits for that result rather than
+  paying for a second call. This is what stops a client retry after a gateway timeout from being
+  billed twice for a scan that was already completing.
+- **Per-minute key rotation.** Each pooled key's requests-per-minute are counted, and a caller
+  whose key is saturated spills to the next key instead of bursting past the free-tier RPM. Note
+  this only buys real headroom if each key belongs to a *separate* Google Cloud project — keys
+  minted from one project share one quota.
+- **The model is not asked to transcribe.** Extraction returns structured fields only; the
+  searchable text comes from the device's own OCR. Output tokens are billed at several times the
+  input rate, so re-typing a page you already hold was most of the cost of a scan.
+- **Comparison and insights are computed on demand**, when a report is opened, rather than for
+  every report scanned.
 
 ## Release checklist
 
 Known gaps between this repo and a Play Store submission:
 
-- [ ] **Signing keystore** — none exists yet; `releases/` has no signed APK (`releases/README.md`).
-- [ ] **Privacy policy** — write it, host it, and put the URL in the Play listing.
-- [ ] **Data Safety form** — required for health data.
+- [x] **Signing keystore** — `android-app/keystore/release-v2.jks`, wired up through
+      `RELEASE_STORE_FILE` in the gitignored `local.properties`. Releases are built with
+      `./gradlew bundleRelease` and signed automatically. The keystore is **not** in git and must
+      never be — losing it means never being able to update the app again, so back it up
+      somewhere durable and off this machine.
+- [ ] **Privacy policy** — write it, host it, and put the URL in the Play listing. Must cover the
+      AI processing: report pages are sent to Google's Gemini API, which by Play's definition is
+      *sharing* health data with a third party.
+- [ ] **Data Safety form** — required for health data, and the answers must match actual
+      behaviour rather than intent.
+- [ ] **Confirm the Gemini tier used in production** — the free tier permits Google to use
+      submitted content to improve its products. For medical documents that has to be disclosed,
+      or the deployment moved to a paid tier where it does not apply.
 - [ ] **License** — the repo has no `LICENSE` file, so it is currently "all rights reserved" by
-      default. Add one that matches your intent.
-- [ ] **Screenshot refresh** — `docs/journey_*.png` predate the bottom-navigation refactor.
+      default. Add one that matches your intent **before making the repo public**.
+- [ ] **Screenshot refresh** — `docs/journey_*.png` predate the bottom-navigation refactor. Use
+      the built-in demo patient (Settings → Try Demo Data) rather than redacting real records.
 - [ ] **Native-speaker review** of the bundled translations in `UiTranslations.kt`.
-- [ ] **Bump `versionCode`/`versionName`** in `android-app/app/build.gradle.kts` for each upload.
+- [x] **Bump `versionCode`/`versionName`** in `android-app/app/build.gradle.kts` for each upload —
+      currently 13 / 1.3.4.
+- [ ] **Staged rollout for 1.3.4** — first build with on-device redaction; check a real scan for
+      over-redaction before going wide.
 
 ## License
 

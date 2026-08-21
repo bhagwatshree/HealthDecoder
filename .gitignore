@@ -42,3 +42,6 @@ backend/github-secrets.txt
 
 # --- Local debug captures ---
 scratch_*.txt
+
+# Local Claude Code tooling config (permission allowlists) — not project code
+.claude/
