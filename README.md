@@ -73,6 +73,60 @@ An interactive HTML prototype of all 13 screens, plus a Figma-style canvas that 
 component to its Compose source and design tokens, is at [`mockup/index.html`](mockup/index.html)
 — open it in any browser, no build step.
 
+## Quick start
+
+Three ways in. The first needs nothing but the APK.
+
+### 1 · See it working — no keys, no backend, no account
+
+Install a debug or release APK on any Android 7.0+ phone, then tap **Try Demo Data** on the
+onboarding screen (or **Settings → Try Demo Data** later). That seeds a fake patient with two lab
+reports, a medicine reminder and a doctor's appointment, so Records, Trends, Reminders and Doctor
+Brief all have something real in them.
+
+The demo rides the same write paths a real scan uses, so what you're looking at is the actual
+app, not a mockup. It stays entirely on the device — no network call, no API key, no sign-in. One
+tap on the same card removes it again.
+
+### 2 · Build the app — one command
+
+```bash
+cd android-app
+./gradlew assembleDebug        # → app/build/outputs/apk/debug/app-debug.apk
+```
+
+JDK 17 and the Android SDK are the only requirements; Android Studio is optional. Nothing else
+needs configuring to get a running app — the two files below are only needed for specific
+features, and the build succeeds without either.
+
+| File | Needed for | Without it |
+|---|---|---|
+| `android-app/app/google-services.json` | Phone-OTP and Google sign-in | Falls back to email/password |
+| `android-app/local.properties` → `RELEASE_*` | Signing a **release** build | Debug builds are unaffected |
+
+> **If you build this yourself, point it at your own backend.** `DEFAULT_SERVER_URL` in
+> `network/NetworkModule.kt` is set to the maintainer's deployed instance, so a fresh build sends
+> scans there and draws on that project's paid Gemini quota. Change it to your own deployment
+> (step 3), or set the server URL in the app's own Settings screen, which overrides the default at
+> runtime.
+
+### 3 · Run the whole stack
+
+You need a Postgres database (Neon's free tier is plenty) and a Gemini API key from
+[Google AI Studio](https://aistudio.google.com/apikey). Everything else is optional.
+
+```bash
+cd backend
+npm install
+cp .env.example .env      # DATABASE_URL + GEMINI_API_KEY + two random secrets is enough to start
+node migrate.js           # creates the tables
+npm run dev               # http://localhost:3000
+```
+
+Then point the app at it — Settings → server URL, `http://10.0.2.2:3000` from the emulator — and
+scan something. Deploying it to AWS instead is one command; see
+[Backend → Deploying](#deploying).
+
 ## Navigation
 
 Six first-class destinations, reachable from the bottom navigation bar on every one of them
@@ -131,11 +185,14 @@ A native iOS port is being scaffolded in
 
 ## Prerequisites
 
-- Node.js 20+
-- AWS CLI + AWS SAM CLI with credentials configured (`aws configure`) — to deploy the backend
-- A [Neon](https://neon.tech) Postgres database (free tier is enough)
-- Android Studio, or just JDK 17 + `gradlew`, for the app
-- A Firebase project with Phone Authentication enabled, only if you want phone-OTP login
+Only the first line matters if you just want to build the app — see
+[Quick start](#quick-start). The rest is for running or deploying the backend.
+
+- **JDK 17** (Android Studio optional) — the app
+- Node.js 20+ — the backend
+- A [Neon](https://neon.tech) Postgres database (free tier is enough) — the backend
+- AWS CLI + AWS SAM CLI with credentials configured (`aws configure`) — only to deploy to AWS
+- A Firebase project with Phone Authentication enabled — only for phone-OTP login
 
 ## Backend
 
