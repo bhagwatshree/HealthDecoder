@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import db from './db.js';
+import { verifyDeviceAttestation, isEnforced, attestationStatus } from './attestation.js';
 import { hashPassword, verifyPassword, signToken, requireAuth, encrypt, decrypt, publicUser, verifyPhoneIdToken, isPhoneAuthConfigured, verifyGoogleSignInIdToken, isGoogleAuthConfigured, signDeviceToken, requireDeviceOrUser } from './auth.js';
 import crypto from 'crypto';
 
@@ -746,12 +747,26 @@ app.delete('/api/user/account', requireAuth, async (req, res) => {
 // token yet) with a UUID it generated itself, and gets back a long-lived device token. This
 // lets /api/ai/generate meter/pool a Gemini key per install without requiring an account,
 // since phone OTP sign-in is optional/off by default.
+app.get('/api/device/attestation-status', (_req, res) => res.json(attestationStatus()));
+
 app.post('/api/device/register', async (req, res) => {
   try {
-    const { deviceId } = req.body || {};
+    const { deviceId, platform, attestation, keyId } = req.body || {};
     if (typeof deviceId !== 'string' || deviceId.length < 8 || deviceId.length > 128) {
       return res.status(400).json({ error: 'A valid deviceId is required.' });
     }
+
+    // Attestation proves this is a genuine build of our app on a real device. OFF by default and
+    // per-platform: an unattested client is allowed through unchanged until the flag is set, so
+    // enabling it can never strand already-installed apps that don't send one yet.
+    const result = await verifyDeviceAttestation({ platform, deviceId, attestation, keyId });
+    if (!result.ok) {
+      console.warn(`Device attestation rejected (${platform}): ${result.reason}`);
+      return res.status(403).json({
+        error: 'This app installation could not be verified. Please reinstall from the official store.',
+      });
+    }
+
     await getOrCreateDevice(deviceId);
     res.json({ token: signDeviceToken(deviceId) });
   } catch (error) {
