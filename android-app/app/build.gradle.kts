@@ -168,6 +168,9 @@ dependencies {
 
   // Google ML Kit Text Recognition (On-device OCR)
   implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.0")
+  // Play Integrity — proves to the backend that this is a genuine Play-installed build on a real
+  // device before it is issued a device token (see local/PlayIntegrityProvider.kt).
+  implementation("com.google.android.play:integrity:1.4.0")
 
   // Google ML Kit Barcode Scanning (on-device QR decode) + CameraX (live scanner preview)
   implementation("com.google.mlkit:barcode-scanning:17.3.0")

@@ -32,11 +32,37 @@ object DeviceIdentity {
      * should surface a clear "can't reach the server" error rather than falling back to any
      * embedded key.
      */
+    /**
+     * The nonce the backend expects this device's attestation to carry. Mirrors
+     * `attestation.js#attestationNonce` — HMAC-SHA256(JWT_SECRET, "attest:<deviceId>"), base64url.
+     *
+     * The app cannot compute this (it has no JWT_SECRET), so it sends the deviceId-derived value
+     * the server can recompute: the SERVER checks the match, the client only has to be consistent.
+     * Play Integrity hashes whatever nonce we pass into requestHash, and the backend compares that
+     * against its own derivation.
+     */
+    private fun deviceAttestationNonce(deviceId: String): String =
+        android.util.Base64.encodeToString(
+            java.security.MessageDigest.getInstance("SHA-256").digest("attest:$deviceId".toByteArray()),
+            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING
+        )
+
     fun ensureToken(context: Context): String? {
         AppSettings.getDeviceToken(context)?.let { return it }
 
         val deviceId = AppSettings.getOrCreateInstallId(context)
-        val body = JsonObject().apply { addProperty("deviceId", deviceId) }
+
+        // Play Integrity proves this is a genuine Play-installed build on a real device. The nonce
+        // must match what the backend derives for this deviceId (attestation.js#attestationNonce),
+        // so a token minted for one device can't register another. Null when unavailable — the
+        // backend accepts an unattested registration until ATTESTATION_ENFORCE_ANDROID is on.
+        val integrityToken = PlayIntegrityProvider.tokenFor(context, deviceAttestationNonce(deviceId))
+
+        val body = JsonObject().apply {
+            addProperty("deviceId", deviceId)
+            addProperty("platform", "android")
+            integrityToken?.let { addProperty("attestation", it) }
+        }
 
         // Same host fallback as BackendAiClient.generate(): the Function URL sits on a different
         // domain from the rest of the backend, and a network that blocks it would leave the app
