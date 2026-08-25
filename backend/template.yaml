@@ -128,13 +128,6 @@ Parameters:
       Your Neon plan's monthly compute-hour allowance. Default is the free plan's ~191.9 hours.
       Check your own plan in the Neon console - this is not read from the API.
     Default: '191.9'
-  MonitorScheduleExpression:
-    Type: String
-    Description: >-
-      How often the monitor polls Neon and table sizes. Neon's consumption figures update on the
-      order of minutes and none of these alarms need faster resolution than an hour, so the default
-      keeps both the Neon API calls and the Lambda invocations negligible.
-    Default: rate(1 hour)
   GeminiHourlySpendUsd:
     Type: String
     Description: >-
@@ -304,8 +297,13 @@ Resources:
         Schedule:
           Type: Schedule
           Properties:
-            ScheduleExpression: !Ref MonitorScheduleExpression
-            Description: Hourly Neon quota and table-growth metric publication
+            # Literal, not !Ref a parameter. SAM's transform validates this property before
+            # intrinsics are resolved, so a Ref here fails the whole changeset with the actively
+            # misleading "property ScheduleExpression not defined for resource of type Schedule".
+            # Hourly is the right cadence anyway and nothing needs to tune it per deploy: Neon's
+            # consumption figures move on the order of minutes, and the slowest alarm watching this
+            # data evaluates over 3 hours.
+            ScheduleExpression: rate(1 hour)
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
