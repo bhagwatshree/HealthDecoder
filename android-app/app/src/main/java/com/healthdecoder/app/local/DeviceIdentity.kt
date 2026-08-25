@@ -34,12 +34,14 @@ object DeviceIdentity {
      */
     /**
      * The nonce the backend expects this device's attestation to carry. Mirrors
-     * `attestation.js#attestationNonce` — HMAC-SHA256(JWT_SECRET, "attest:<deviceId>"), base64url.
+     * `attestation.js#attestationNonce` — plain SHA-256("attest:<deviceId>"), base64url. NOT
+     * HMAC: the app has no server secret to key one with, so this has to be a value the server
+     * can independently recompute rather than one only the server could produce.
      *
-     * The app cannot compute this (it has no JWT_SECRET), so it sends the deviceId-derived value
-     * the server can recompute: the SERVER checks the match, the client only has to be consistent.
-     * Play Integrity hashes whatever nonce we pass into requestHash, and the backend compares that
-     * against its own derivation.
+     * Passed to IntegrityTokenRequest.setNonce (the classic Play Integrity API, see
+     * PlayIntegrityProvider), which echoes it back in the decoded token's
+     * `requestDetails.nonce` — the backend checks that field, not `requestHash` (that belongs to
+     * the separate Standard API and this app doesn't use it).
      */
     private fun deviceAttestationNonce(deviceId: String): String =
         android.util.Base64.encodeToString(

@@ -381,6 +381,21 @@ ON CONFLICT (canonical_param, status) DO NOTHING;
     `);
     console.log('Table gemini_key_minute_usage created or already exists.');
 
+    // Per-(scope, hashed source IP, calendar-hour) request counter backing rateLimiter.js —
+    // caps how fast a single network can hit /api/device/register or /api/auth/* regardless of
+    // how many distinct device ids or accounts it mints. Same short-lived-counter shape as
+    // gemini_key_minute_usage above, just hourly instead of per-minute.
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS ip_rate_limit (
+          scope VARCHAR(32) NOT NULL,
+          ip_hash VARCHAR(32) NOT NULL,
+          hour_bucket TIMESTAMPTZ NOT NULL,
+          request_count INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (scope, ip_hash, hour_bucket)
+      );
+    `);
+    console.log('Table ip_rate_limit created or already exists.');
+
     // Short-TTL cache of AI proxy responses, keyed by a hash of (caller, operation, prompt,
     // images). A retried request for content already answered within the last few minutes —
     // whether from a client-side retry after a timeout, or a user re-tapping after a crash —

@@ -2,8 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import db from './db.js';
-import { verifyDeviceAttestation, isEnforced, attestationStatus } from './attestation.js';
+import { verifyDeviceAttestation, attestationStatus } from './attestation.js';
 import { hashPassword, verifyPassword, signToken, requireAuth, encrypt, decrypt, publicUser, verifyPhoneIdToken, isPhoneAuthConfigured, verifyGoogleSignInIdToken, isGoogleAuthConfigured, signDeviceToken, requireDeviceOrUser } from './auth.js';
+import { ipRateLimit } from './rateLimiter.js';
 import crypto from 'crypto';
 
 import { resolveKeysForUser, peekAssignmentForUser, resolveKeysForDevice, getOrCreateDevice } from './keyPool.js';
@@ -121,7 +122,14 @@ app.get('/api/health-tips', async (req, res) => {
 
 const VALID_GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'];
 
-app.post('/api/auth/signup', async (req, res) => {
+// Shared per-IP cap across every unauthenticated auth route (signup/login/OTP/Google) — an
+// account or an OTP attempt costs nothing to a script the way an AI call does, so this is the
+// only thing standing between a credential-stuffing loop and this endpoint. One shared 'auth'
+// scope (rather than one per route) means a script can't dodge the cap by spreading calls across
+// signup, login and reset-password-otp.
+const authIpLimit = ipRateLimit('auth', () => parseInt(process.env.AUTH_IP_LIMIT_PER_HOUR || '30', 10));
+
+app.post('/api/auth/signup', authIpLimit, async (req, res) => {
   try {
     const { firstName, lastName, dateOfBirth, gender, email, password, phoneIdToken } = req.body || {};
 
@@ -195,7 +203,7 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authIpLimit, async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) {
@@ -215,7 +223,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 // Phone+OTP login: the phone number was already OTP-verified client-side by the Firebase SDK;
 // this just confirms that verification (via the ID token) and looks up the linked account.
-app.post('/api/auth/login-phone', async (req, res) => {
+app.post('/api/auth/login-phone', authIpLimit, async (req, res) => {
   try {
     const { phoneIdToken } = req.body || {};
     if (!phoneIdToken) {
@@ -252,7 +260,7 @@ app.post('/api/auth/login-phone', async (req, res) => {
 // client secret. This only proves identity (email); it never requests Gmail scope/refresh
 // tokens — that's a separate, deliberately browser-based flow (see /api/auth/google below),
 // needed only when a user opts into email scanning.
-app.post('/api/auth/google-signin', async (req, res) => {
+app.post('/api/auth/google-signin', authIpLimit, async (req, res) => {
   try {
     const { idToken } = req.body || {};
     if (!idToken) {
@@ -330,7 +338,7 @@ app.put('/api/auth/me', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/auth/reset-password-otp', async (req, res) => {
+app.post('/api/auth/reset-password-otp', authIpLimit, async (req, res) => {
   try {
     const { phoneIdToken, newPassword } = req.body || {};
     if (!phoneIdToken || !newPassword || String(newPassword).length < 6) {
@@ -749,19 +757,27 @@ app.delete('/api/user/account', requireAuth, async (req, res) => {
 // since phone OTP sign-in is optional/off by default.
 app.get('/api/device/attestation-status', (_req, res) => res.json(attestationStatus()));
 
-app.post('/api/device/register', async (req, res) => {
+// IP-capped: a fresh device id is free to generate client-side, so without this a script can
+// mint registrations as fast as it can open connections regardless of attestation. Independent
+// of ATTESTATION_ENFORCE_ANDROID — this bounds velocity from one network even while attestation
+// is off, and stays in place after it's on as a second layer.
+const deviceRegisterIpLimit = ipRateLimit('device-register', () => parseInt(process.env.DEVICE_REGISTER_IP_LIMIT_PER_HOUR || '20', 10));
+
+app.post('/api/device/register', deviceRegisterIpLimit, async (req, res) => {
   try {
-    const { deviceId, platform, attestation, keyId } = req.body || {};
+    const { deviceId, platform, attestation } = req.body || {};
     if (typeof deviceId !== 'string' || deviceId.length < 8 || deviceId.length > 128) {
       return res.status(400).json({ error: 'A valid deviceId is required.' });
     }
 
-    // Attestation proves this is a genuine build of our app on a real device. OFF by default and
-    // per-platform: an unattested client is allowed through unchanged until the flag is set, so
+    // Attestation proves this is a genuine build of our app on a real Android device. OFF by
+    // default: an unattested client is allowed through unchanged until the flag is set, so
     // enabling it can never strand already-installed apps that don't send one yet.
-    const result = await verifyDeviceAttestation({ platform, deviceId, attestation, keyId });
+    const result = await verifyDeviceAttestation({ platform, deviceId, attestation });
     if (!result.ok) {
-      console.warn(`Device attestation rejected (${platform}): ${result.reason}`);
+      // platform is unvalidated client input — stringify rather than interpolate raw, so a
+      // crafted value can't inject newlines/control characters into the log stream.
+      console.warn(`Device attestation rejected (platform=${JSON.stringify(platform)}): ${result.reason}`);
       return res.status(403).json({
         error: 'This app installation could not be verified. Please reinstall from the official store.',
       });
