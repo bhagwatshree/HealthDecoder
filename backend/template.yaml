@@ -1010,12 +1010,14 @@ Resources:
             {
               "type": "metric", "x": 12, "y": 6, "width": 12, "height": 6,
               "properties": {
-                "title": "Gemini tokens",
+                "title": "Gemini tokens (thinking bills at the OUTPUT rate)",
                 "region": "${AWS::Region}",
                 "stat": "Sum", "period": 3600,
                 "metrics": [
                   [ "${MetricsNamespace}", "GeminiInputTokens", "Service", "backend" ],
-                  [ ".", "GeminiOutputTokens", ".", "." ]
+                  [ ".", "GeminiOutputTokens", ".", "." ],
+                  [ ".", "GeminiThinkingTokens", ".", "." ],
+                  [ ".", "GeminiCachedTokens", ".", "." ]
                 ]
               }
             },

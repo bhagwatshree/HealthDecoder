@@ -31,10 +31,12 @@ async function flushEvents(events) {
   for (const e of events) {
     await db.query(
       `INSERT INTO api_usage_events
-         (user_id, device_id, provider, operation, model, input_tokens, output_tokens, units, latency_ms, cost_usd, success, gemini_key_index)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+         (user_id, device_id, provider, operation, model, input_tokens, output_tokens,
+          thinking_tokens, cached_tokens, units, latency_ms, cost_usd, success, gemini_key_index)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [e.userId || null, e.deviceId || null, e.provider, e.operation, e.model || null, e.inputTokens ?? null,
-       e.outputTokens ?? null, e.units ?? null, e.latencyMs ?? null, e.costUsd || 0, e.success !== false,
+       e.outputTokens ?? null, e.thinkingTokens ?? null, e.cachedTokens ?? null,
+       e.units ?? null, e.latencyMs ?? null, e.costUsd || 0, e.success !== false,
        e.provider === 'gemini' ? (e.keyIndex ?? null) : null]
     );
   }
@@ -52,12 +54,25 @@ export async function trackGemini(ai, params) {
     const response = await ai.models.generateContent(params);
     const usage = response.usageMetadata || {};
     const latencyMs = Date.now() - start;
-    const costUsd = costGeminiUsd(params.model, usage.promptTokenCount, usage.candidatesTokenCount);
+    // thoughtsTokenCount is a SEPARATE field from candidatesTokenCount and is billed at the output
+    // rate. Reading only candidatesTokenCount -- as this did originally -- understates the cost of
+    // every call the model thinks on, and since output is 5x input on gemini-3.6-flash the miss
+    // lands on the expensive side. It also silently weakened the spend alarms, which can only be as
+    // accurate as this number.
+    const thinkingTokens = usage.thoughtsTokenCount || 0;
+    // Subset of promptTokenCount served from a context cache, priced lower. Zero until caching is
+    // actually enabled, but read now so switching it on doesn't quietly overstate the bill.
+    const cachedTokens = usage.cachedContentTokenCount || 0;
+    const costUsd = costGeminiUsd(
+      params.model, usage.promptTokenCount, usage.candidatesTokenCount, thinkingTokens, cachedTokens
+    );
     record({
       provider: 'gemini',
       model: params.model,
       inputTokens: usage.promptTokenCount,
       outputTokens: usage.candidatesTokenCount,
+      thinkingTokens,
+      cachedTokens,
       latencyMs,
       costUsd,
       success: true,
@@ -66,6 +81,11 @@ export async function trackGemini(ai, params) {
     sum('GeminiCostUsd', costUsd, 'None');
     count('GeminiInputTokens', usage.promptTokenCount || 0);
     count('GeminiOutputTokens', usage.candidatesTokenCount || 0);
+    // Tracked separately from GeminiOutputTokens rather than folded into it: they bill the same but
+    // mean different things, and "how much am I paying the model to think?" is exactly the question
+    // you need answered before deciding whether to cap thinkingBudget.
+    count('GeminiThinkingTokens', thinkingTokens);
+    count('GeminiCachedTokens', cachedTokens);
     observe('GeminiLatencyMs', latencyMs);
     return response;
   } catch (error) {

@@ -62,12 +62,33 @@ function usd(n) {
   return Math.round(n * 1e6) / 1e6;
 }
 
-export function costGeminiUsd(model, inputTokens, outputTokens) {
+// Cached input tokens bill at a fraction of the normal input rate. 0.25 matches the published
+// ratio on the Flash models (e.g. 2.5-flash at $0.075/M cached vs $0.30/M uncached) -- re-check it
+// against the pricing page when the cached path is actually turned on, and note this does NOT model
+// cache STORAGE, which Gemini bills per hour for as long as the cache lives.
+export const GEMINI_CACHED_INPUT_MULTIPLIER = 0.25;
+
+/**
+ * Estimated USD for one Gemini call.
+ *
+ * `thinkingTokens` (usageMetadata.thoughtsTokenCount) is billed at the OUTPUT rate, not the input
+ * rate and not free. Leaving it out understates every reasoning-model call -- and on
+ * gemini-3.6-flash output costs 5x input, so the omission lands squarely on the expensive side.
+ *
+ * `cachedTokens` (usageMetadata.cachedContentTokenCount) is the part of promptTokenCount that came
+ * from a context cache. It is a SUBSET of the prompt count rather than an addition, so it is
+ * subtracted out and re-priced at the cached rate; double-counting it would overstate instead.
+ */
+export function costGeminiUsd(model, inputTokens, outputTokens, thinkingTokens = 0, cachedTokens = 0) {
   const rate = GEMINI_PRICING[model];
   if (!rate) return 0;
+  const cached = Math.max(0, cachedTokens || 0);
+  const freshInput = Math.max(0, (inputTokens || 0) - cached);
+  const billedOutput = (outputTokens || 0) + (thinkingTokens || 0);
   return usd(
-    ((inputTokens || 0) / 1_000_000) * rate.inputPerMTokens +
-    ((outputTokens || 0) / 1_000_000) * rate.outputPerMTokens
+    (freshInput / 1_000_000) * rate.inputPerMTokens +
+    (cached / 1_000_000) * rate.inputPerMTokens * GEMINI_CACHED_INPUT_MULTIPLIER +
+    (billedOutput / 1_000_000) * rate.outputPerMTokens
   );
 }
 

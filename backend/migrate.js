@@ -428,6 +428,17 @@ ON CONFLICT (canonical_param, status) DO NOTHING;
     await db.query(`ALTER TABLE api_usage_events ADD COLUMN IF NOT EXISTS gemini_key_index INTEGER;`);
     console.log('Column api_usage_events.gemini_key_index checked/added.');
 
+    // Reasoning tokens (usageMetadata.thoughtsTokenCount) are billed at the OUTPUT rate but are a
+    // separate field from candidatesTokenCount, so a ledger that records only input/output
+    // understates every call the model thinks on. Kept in its own column rather than folded into
+    // output_tokens so historical rows stay honest -- rows written before this existed have NULL
+    // here, which is truthfully "not measured" rather than a zero that would read as "didn't think".
+    await db.query(`ALTER TABLE api_usage_events ADD COLUMN IF NOT EXISTS thinking_tokens INTEGER;`);
+    // Portion of input served from a context cache and billed at the reduced rate. Always 0/NULL
+    // until caching is enabled; recorded now so the cost column stays reconcilable when it is.
+    await db.query(`ALTER TABLE api_usage_events ADD COLUMN IF NOT EXISTS cached_tokens INTEGER;`);
+    console.log('Columns api_usage_events.thinking_tokens / cached_tokens checked/added.');
+
     console.log('Database migration completed successfully!');
     process.exit(0);
   } catch (error) {
