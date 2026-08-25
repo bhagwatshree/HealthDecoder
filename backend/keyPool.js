@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import db from './db.js';
 import { decrypt } from './auth.js';
+import { count, detail, observe } from './metrics.js';
 
 // How many AI "issuances" (see resolveKeysForUser below) a free-tier user gets per day
 // before they must add their own Gemini key. This is OUR OWN cap — separate from
@@ -67,10 +68,26 @@ async function reserveGeminiKey(id) {
       [keyHash(key), minuteBucket, GEMINI_RPM_LIMIT]
     );
     if (result.rows.length > 0) {
+      // Dimensioned per key so the graph shows how evenly the pool is actually being used. The
+      // sticky hash spreads callers across keys, but a handful of heavy users can still pin one
+      // key at its RPM cap while the rest idle - that shows up here as a lopsided split long
+      // before it shows up as a user-visible 503. KeyIndex is bounded by pool size, so this stays
+      // cheap; see the cardinality warning in metrics.js.
+      detail('GeminiKeyReserved', 1, { KeyIndex: String(keyIndex) });
+      // How many requests this key has already used of its minute, as a raw observation rather
+      // than a running total - a per-reservation depth is only meaningful under Maximum/Average,
+      // and summing depths across a period would produce a number that means nothing at all.
+      // Maximum approaching GEMINI_RPM_LIMIT is the early warning that the pool is about to start
+      // serving 503s, visible while there is still headroom to add a key.
+      observe('GeminiKeyMinuteDepth', result.rows[0].request_count, 'Count');
       sweepOldMinuteBuckets();
       return { key, keyIndex, rateLimited: false };
     }
   }
+  // Every key in the pool is at its per-minute cap. The caller gets a 503 and is told to retry,
+  // so this is real user-visible degradation, not just bookkeeping - it means the pool needs
+  // another key (or GEMINI_RPM_LIMIT is set below what the keys' plan actually allows).
+  count('GeminiKeyPoolSaturated');
   sweepOldMinuteBuckets();
   return { key: null, rateLimited: true };
 }

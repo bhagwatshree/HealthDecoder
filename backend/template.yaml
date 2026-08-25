@@ -66,6 +66,123 @@ Parameters:
     NoEcho: true
     Default: ''
 
+  # ── Monitoring ────────────────────────────────────────────────────────────────────────────
+  MonitoringMode:
+    Type: String
+    Description: >-
+      'active' creates the alarms and the monitor function and emits metrics. 'sleep' tears the
+      alarms and monitor down and stops the API function emitting, costing nothing at all - the
+      SNS topic and dashboard stay (both free) so the confirmed email subscription survives and
+      the test period's graphs stay readable. Alarms are billed per alarm that EXISTS, not per
+      alarm that fires, so sleeping has to actually delete them rather than just silence the data.
+      Switching back to 'active' is one redeploy.
+
+      Defaults to 'sleep' deliberately. A deploy that omits this parameter should never be the
+      thing that starts a bill, and if CloudFormation ever applies the default instead of carrying
+      the stack's previous value forward, the safe direction to fail is off. Waking monitoring is
+      therefore always an explicit act: pick 'active' in the Actions tab, or pass
+      MONITORING_MODE=active locally.
+    AllowedValues: ['active', 'sleep']
+    Default: sleep
+  AlertEmail:
+    Type: String
+    Description: >-
+      Address every alarm notifies. AWS emails a confirmation link on first deploy and sends
+      nothing until it is clicked, so an unconfirmed address means silent alarms. Leave blank to
+      create the topic without a subscriber and attach one later.
+    Default: ''
+  MetricsNamespace:
+    Type: String
+    Description: CloudWatch namespace for the custom metrics emitted by metrics.js.
+    Default: HealthDecoder
+  MetricsDetail:
+    Type: String
+    Description: >-
+      '1' publishes the per-key / per-reason / per-scope breakdown metrics, '0' publishes only the
+      undimensioned totals. Alarms watch the totals either way, so '0' costs diagnostic detail and
+      never coverage - it is the lever to pull if the custom-metric bill looks high.
+    AllowedValues: ['0', '1']
+    Default: '1'
+  NeonApiKey:
+    Type: String
+    Description: >-
+      Neon API key (Neon Console > Account settings > API keys), used read-only by the monitor
+      function to poll project consumption. Blank disables Neon monitoring; the table-growth
+      metrics still publish.
+    NoEcho: true
+    Default: ''
+  NeonProjectId:
+    Type: String
+    Description: Neon project id (Neon Console > Settings > General), paired with NeonApiKey.
+    Default: ''
+  NeonStorageLimitBytes:
+    Type: String
+    Description: >-
+      Your Neon plan's storage allowance, in bytes. The alarm watches percentage-of-this, not raw
+      bytes, so a plan change means editing this one number instead of every threshold. Default is
+      the free plan's 0.5 GiB.
+    Default: '536870912'
+  NeonComputeHoursLimit:
+    Type: String
+    Description: >-
+      Your Neon plan's monthly compute-hour allowance. Default is the free plan's ~191.9 hours.
+      Check your own plan in the Neon console - this is not read from the API.
+    Default: '191.9'
+  MonitorScheduleExpression:
+    Type: String
+    Description: >-
+      How often the monitor polls Neon and table sizes. Neon's consumption figures update on the
+      order of minutes and none of these alarms need faster resolution than an hour, so the default
+      keeps both the Neon API calls and the Lambda invocations negligible.
+    Default: rate(1 hour)
+  GeminiHourlySpendUsd:
+    Type: String
+    Description: >-
+      Alarm when estimated Gemini spend exceeds this in a single hour. Catches a runaway loop or a
+      scripted caller the same hour it starts, rather than on the monthly invoice.
+    Default: '0.50'
+  GeminiDailySpendUsd:
+    Type: String
+    Description: >-
+      Alarm when estimated Gemini spend exceeds this in 24 hours. Catches a slow bleed that never
+      trips the hourly threshold.
+    Default: '2.00'
+  SarvamDailySpendUsd:
+    Type: String
+    Description: >-
+      Alarm when estimated Sarvam spend exceeds this in 24 hours. Sarvam is billed per page (doc
+      digitization) and per 10k characters (translate/TTS); see pricing.js.
+    Default: '1.00'
+  InvocationBurstPer5Min:
+    Type: String
+    Description: >-
+      Alarm when the API function is invoked more than this many times in 5 minutes - a bot or
+      scripted caller, well before it becomes a spend or throttling problem. 200/5min is roughly
+      0.7 req/s sustained; raise it once real traffic approaches that.
+    Default: '200'
+  ApiGateway4xxPer5Min:
+    Type: String
+    Description: >-
+      Alarm when API Gateway returns more than this many 4xx in 5 minutes. A flood of client errors
+      is usually someone probing endpoints or replaying a broken token, not real users.
+    Default: '30'
+  OtpVerificationsPer5Min:
+    Type: String
+    Description: >-
+      Alarm when phone-OTP verifications exceed this in 5 minutes. Each one is a billed SMS, so
+      volume here IS cost - 15/5min sustained would be ~130k/month against a 10k/month free tier.
+    Default: '15'
+
+Conditions:
+  # Only attach a subscription when an address was actually supplied - an empty-string Endpoint
+  # is a deploy-time failure, not a no-op.
+  HasAlertEmail: !Not [!Equals [!Ref AlertEmail, '']]
+  # Gates every billable monitoring resource. What is deliberately NOT gated: the SNS topic (an
+  # idle topic is free, and destroying it would force the email subscription to be confirmed again
+  # on every wake) and the dashboard (1 of 3 free, and CloudWatch keeps metric data for 15 months,
+  # so the graphs from a test run stay readable long after the alarms are gone).
+  MonitoringActive: !Equals [!Ref MonitoringMode, 'active']
+
 Resources:
   MedicalScannerFunction:
     Type: AWS::Serverless::Function
@@ -85,6 +202,13 @@ Resources:
           FIREBASE_SERVICE_ACCOUNT_JSON: !Ref FirebaseServiceAccountJson
           GOOGLE_CLIENT_ID: !Ref GoogleClientId
           GOOGLE_CLIENT_SECRET: !Ref GoogleClientSecret
+          METRICS_NAMESPACE: !Ref MetricsNamespace
+          METRICS_DETAIL: !Ref MetricsDetail
+          # '0' makes metrics.js a no-op, so no EMF is written and no custom metric receives data.
+          # Custom metrics bill only in months they receive data, so this is what takes the metric
+          # half of the bill to zero. Env-var only: no redeploy of code, and the request path keeps
+          # behaving identically either way.
+          METRICS_ENABLED: !If [MonitoringActive, '1', '0']
           NODE_ENV: production
       Events:
         # Catch-all: every HTTP method on every path goes to Express
@@ -124,6 +248,771 @@ Resources:
           # esbuild shim: ESM on Lambda needs __filename / __dirname / require
           - js=import { createRequire as __createRequire } from 'module'; import { fileURLToPath as __fileURLToPath } from 'url'; import { dirname as __dirname_fn } from 'path'; const require = __createRequire(import.meta.url); const __filename = __fileURLToPath(import.meta.url); const __dirname = __dirname_fn(__filename);
 
+  # ── Monitoring ────────────────────────────────────────────────────────────────────────────
+  # Everything below exists because the two things most able to cost real money or break the app
+  # overnight - Gemini key usage and the Neon database - are both invisible to CloudWatch by
+  # default. Gemini's accounting lives in Postgres tables, and Neon is not an AWS resource at all,
+  # so AWS publishes no metrics for it. metrics.js emits the first as EMF from the request path;
+  # MonitorFunction polls the second on a schedule. The alarms then watch both.
+
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: HealthDecoder alerts
+
+  AlertEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlertEmail
+    Properties:
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+      TopicArn: !Ref AlertTopic
+
+  # Polls Neon's consumption API and the hot tables' size / sweep health. Separate from the API
+  # function because it is a scheduled gauge reader, not a request handler: it wants its own
+  # (much smaller) memory and timeout, its own log group to read, and an error here must not
+  # appear in the API function's error rate - the alarm on that is meant to mean "user requests
+  # are failing".
+  MonitorFunction:
+    Type: AWS::Serverless::Function
+    # Gated as a whole resource rather than just disabling its schedule: conditioning the function
+    # away removes the EventBridge rule, the invocations, the Neon API polling and the log group in
+    # one move, and avoids putting an intrinsic inside a SAM event property, where the transform is
+    # fussier. Nothing else references it - MonitorStalledAlarm watches the MonitorRuns metric, not
+    # the function - so it detaches cleanly.
+    Condition: MonitoringActive
+    Properties:
+      Handler: monitor.handler
+      CodeUri: .
+      Description: Publishes Neon quota and table-growth metrics to CloudWatch
+      Timeout: 60
+      MemorySize: 256
+      Environment:
+        Variables:
+          DATABASE_URL: !Ref DatabaseUrl
+          NEON_API_KEY: !Ref NeonApiKey
+          NEON_PROJECT_ID: !Ref NeonProjectId
+          NEON_STORAGE_LIMIT_BYTES: !Ref NeonStorageLimitBytes
+          NEON_COMPUTE_HOURS_LIMIT: !Ref NeonComputeHoursLimit
+          METRICS_NAMESPACE: !Ref MetricsNamespace
+          NODE_ENV: production
+      Events:
+        # Type: Schedule (EventBridge rule + a resource-based policy on the function) rather than
+        # ScheduleV2 (EventBridge Scheduler), which would additionally need its own IAM execution
+        # role created and passed. For a once-an-hour trigger the newer service buys nothing here
+        # and costs an extra permission the deploy role would have to be granted.
+        Schedule:
+          Type: Schedule
+          Properties:
+            ScheduleExpression: !Ref MonitorScheduleExpression
+            Description: Hourly Neon quota and table-growth metric publication
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - monitor.js
+        Banner:
+          - js=import { createRequire as __createRequire } from 'module'; import { fileURLToPath as __fileURLToPath } from 'url'; import { dirname as __dirname_fn } from 'path'; const require = __createRequire(import.meta.url); const __filename = __fileURLToPath(import.meta.url); const __dirname = __dirname_fn(__filename);
+
+  # ── Lambda / API health (AWS's own metrics, no instrumentation needed) ─────────────────────
+
+  LambdaErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-lambda-errors'
+      AlarmDescription: API function is throwing. Check the function log group for the stack trace.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref MedicalScannerFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      # No invocations in a window is not an error - it is 3am.
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+  LambdaThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-lambda-throttles'
+      AlarmDescription: >-
+        Concurrency limit reached - requests are being rejected before they run. Either genuine
+        load or a retry storm; check GeminiCalls and IpRateLimited to tell which.
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref MedicalScannerFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  # 100s of the 120s ceiling. A scan that reaches this is about to be killed mid-Gemini-call,
+  # which bills for the tokens and returns the user nothing - worth knowing before the timeouts
+  # start rather than after.
+  LambdaNearTimeoutAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-lambda-near-timeout'
+      AlarmDescription: An invocation ran within 20s of the 120s timeout.
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref MedicalScannerFunction
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 100000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  ApiGateway5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-apigw-5xx'
+      AlarmDescription: >-
+        API Gateway is returning 5xx. Note this covers only the HttpApi routes - AI proxy traffic
+        goes through the Function URL, which has no API Gateway metrics; watch LambdaErrors for that.
+      Namespace: AWS/ApiGateway
+      MetricName: 5xx
+      Dimensions:
+        - Name: ApiId
+          Value: !Ref ServerlessHttpApi
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  # Invocation volume, as distinct from errors or throttling. Folded in from the standalone
+  # aws/cloudwatch-fraud-alarms.yaml that used to live in the HealthDecoderAdmin repo: it monitored
+  # THIS backend's Lambda and API Gateway from another stack, needed this stack's identifiers passed
+  # in by hand, duplicated the lambda-errors alarm below, and stood up a competing SNS topic. This
+  # and the 4xx alarm were the two ideas in it that weren't already covered here.
+  #
+  # Unlike ApiGateway4xxFloodAlarm, this counts invocations through EVERY entry point, so it also
+  # covers the Function URL the AI proxy uses - which has no API Gateway metrics at all.
+  LambdaInvocationBurstAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-lambda-invocation-burst'
+      AlarmDescription: >-
+        Invocation volume spiked - possible bot or scripted caller. Cross-check GeminiCalls (is it
+        driving paid work?) and IpRateLimited (is it one network?) to tell abuse from real traffic.
+      Namespace: AWS/Lambda
+      MetricName: Invocations
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref MedicalScannerFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: !Ref InvocationBurstPer5Min
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  # NOTE: the metric is '4xx', not '4XXError'. The latter is the REST API (v1) name; HTTP APIs
+  # publish '4xx'/'5xx'. The template this was folded in from used '4XXError' against an HttpApi
+  # id, so its version of this alarm could never have fired.
+  #
+  # HttpApi routes only. The AI proxy's own 4xx responses (429 on quota, 403 on attestation) go
+  # through the Function URL and are invisible here - AiQuotaExceededAlarm and
+  # AttestationRejectedAlarm are what cover those.
+  ApiGateway4xxFloodAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-apigw-4xx-flood'
+      AlarmDescription: >-
+        A flood of 4xx from API Gateway - usually endpoint probing or a replayed/expired token,
+        rather than real users.
+      Namespace: AWS/ApiGateway
+      MetricName: 4xx
+      Dimensions:
+        - Name: ApiId
+          Value: !Ref ServerlessHttpApi
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: !Ref ApiGateway4xxPer5Min
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  # ── Sarvam and phone OTP: the other two billable providers ────────────────────────────────
+  # Both were previously unmonitored. The fraud template reached at these with CloudWatch Logs
+  # metric filters ('[time, provider="sarvam", ...]', '[time, status="OTP_SENT", ...]'), which could
+  # never have matched - those patterns need space-delimited log fields, and this backend only ever
+  # writes those provider names into a database row. Instrumented in usageTracker.js instead, at the
+  # same place the billing ledger is written, so the metric cannot drift from the charge.
+
+  SarvamDailySpendAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-sarvam-daily-spend'
+      AlarmDescription: Estimated Sarvam spend over 24h exceeded the threshold.
+      Namespace: !Ref MetricsNamespace
+      MetricName: SarvamCostUsd
+      Dimensions:
+        - Name: Service
+          Value: backend
+      Statistic: Sum
+      Period: 86400
+      EvaluationPeriods: 1
+      Threshold: !Ref SarvamDailySpendUsd
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  # Volume, not errors: every verification is a billed SMS, so this is a cost alarm wearing an
+  # abuse alarm's clothes. Deliberately separate from the auth-scope IP rate limiter, which caps one
+  # network at a time - OTP flooding spread thin across many IPs slips under that and still bills.
+  OtpVolumeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-otp-volume'
+      AlarmDescription: >-
+        Phone-OTP verification volume spiked. Each one is a billed SMS (10k/month free), so sustained
+        volume here is a direct bill. Check IpRateLimitedByScope=auth to see if it is one network.
+      Namespace: !Ref MetricsNamespace
+      MetricName: OtpVerifications
+      Dimensions:
+        - Name: Service
+          Value: backend
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: !Ref OtpVerificationsPer5Min
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  # ── Gemini key usage and spend ────────────────────────────────────────────────────────────
+
+  GeminiHourlySpendAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-gemini-hourly-spend'
+      AlarmDescription: >-
+        Estimated Gemini spend in one hour exceeded the threshold. Estimated from pricing.js list
+        prices against reported token counts - close enough to act on, not an invoice.
+      Namespace: !Ref MetricsNamespace
+      MetricName: GeminiCostUsd
+      Dimensions:
+        - Name: Service
+          Value: backend
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: !Ref GeminiHourlySpendUsd
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  GeminiDailySpendAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-gemini-daily-spend'
+      AlarmDescription: Estimated Gemini spend over 24h exceeded the threshold.
+      Namespace: !Ref MetricsNamespace
+      MetricName: GeminiCostUsd
+      Dimensions:
+        - Name: Service
+          Value: backend
+      Statistic: Sum
+      # 86400 is the largest period a CloudWatch alarm accepts, which is exactly the window wanted.
+      Period: 86400
+      EvaluationPeriods: 1
+      Threshold: !Ref GeminiDailySpendUsd
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  GeminiErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-gemini-errors'
+      AlarmDescription: >-
+        Gemini calls are failing. Usually an expired or revoked pooled key, or Google-side quota
+        rejection - check the function log for the provider's own error text.
+      Namespace: !Ref MetricsNamespace
+      MetricName: GeminiErrors
+      Dimensions:
+        - Name: Service
+          Value: backend
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  # Every pooled key was at its per-minute cap and a user got a 503. One is worth knowing about:
+  # it means the pool has no headroom left at peak, and the fix (add a key to GEMINI_API_KEYS) is
+  # a secret update, not a code change.
+  GeminiKeyPoolSaturatedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-gemini-pool-saturated'
+      AlarmDescription: >-
+        Every Gemini key in the pool hit its RPM cap in the same minute; callers were served 503.
+        Add a key to GEMINI_API_KEYS, or raise GEMINI_RPM_LIMIT if the keys' plan actually allows more.
+      Namespace: !Ref MetricsNamespace
+      MetricName: GeminiKeyPoolSaturated
+      Dimensions:
+        - Name: Service
+          Value: backend
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  AiQuotaExceededAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-ai-quota-exceeded'
+      AlarmDescription: >-
+        An unusual number of callers hit the daily free-tier cap. A handful a day is the free tier
+        working; a spike is either the app retrying in a loop or someone driving the API from a script.
+      Namespace: !Ref MetricsNamespace
+      MetricName: AiQuotaExceeded
+      Dimensions:
+        - Name: Service
+          Value: backend
+      Statistic: Sum
+      Period: 900
+      EvaluationPeriods: 1
+      Threshold: 20
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  # ── Abuse signals ─────────────────────────────────────────────────────────────────────────
+
+  IpRateLimitedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-ip-rate-limited'
+      AlarmDescription: >-
+        Sustained per-IP rate limiting on /api/device/register or /api/auth/*. Check the
+        IpRateLimitedByScope breakdown: device-register means someone minting installs, auth
+        means credential stuffing.
+      Namespace: !Ref MetricsNamespace
+      MetricName: IpRateLimited
+      Dimensions:
+        - Name: Service
+          Value: backend
+      Statistic: Sum
+      Period: 900
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  # The rate limiter fails open on a database error, by design - a Neon blip shouldn't take the
+  # API down. But that leaves the cap silently unenforced, which is precisely the state that must
+  # not go unnoticed, so any occurrence alarms.
+  IpRateLimitFailedOpenAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-ip-rate-limit-failed-open'
+      AlarmDescription: >-
+        The per-IP rate limiter could not reach the database and allowed requests through
+        unchecked. Registration and auth endpoints are currently uncapped.
+      Namespace: !Ref MetricsNamespace
+      MetricName: IpRateLimitFailedOpen
+      Dimensions:
+        - Name: Service
+          Value: backend
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  AttestationRejectedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-attestation-rejected'
+      AlarmDescription: >-
+        Play Integrity rejected an unusual number of registrations. Check the
+        AttestationRejectedByReason breakdown - app_UNRECOGNIZED means a repackaged APK, while
+        token_expired or nonce_mismatch in volume usually means our own bug.
+      Namespace: !Ref MetricsNamespace
+      MetricName: AttestationRejected
+      Dimensions:
+        - Name: Service
+          Value: backend
+      Statistic: Sum
+      Period: 900
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  # ── Database health (emitted from db.js - Neon publishes nothing to AWS) ───────────────────
+
+  DbQueryErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-db-query-errors'
+      AlarmDescription: Queries are failing against Neon.
+      Namespace: !Ref MetricsNamespace
+      MetricName: DbQueryErrors
+      Dimensions:
+        - Name: Service
+          Value: backend
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  DbConnectionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-db-connection-errors'
+      AlarmDescription: >-
+        Pooled connections to Neon are erroring. A couple around an autosuspend wake is normal;
+        a sustained stream is not.
+      Namespace: !Ref MetricsNamespace
+      MetricName: DbConnectionErrors
+      Dimensions:
+        - Name: Service
+          Value: backend
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  # Average over 15 minutes rather than a maximum: a single slow query is a cold Neon compute
+  # waking up, which is expected and self-resolving. A sustained average this high means the
+  # database is the bottleneck for every request.
+  DbLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-db-latency'
+      AlarmDescription: Average Neon query latency stayed above 500ms for 15 minutes.
+      Namespace: !Ref MetricsNamespace
+      MetricName: DbQueryLatencyMs
+      Dimensions:
+        - Name: Service
+          Value: backend
+      Statistic: Average
+      Period: 900
+      EvaluationPeriods: 1
+      Threshold: 500
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  # ── Neon quota and table growth (from MonitorFunction) ────────────────────────────────────
+
+  NeonStorageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-neon-storage'
+      AlarmDescription: >-
+        Neon storage is above 80% of NeonStorageLimitBytes. Running out breaks every write at once.
+        Check the TableBytes breakdown for which table is growing.
+      Namespace: !Ref MetricsNamespace
+      MetricName: NeonStoragePercentOfLimit
+      Dimensions:
+        - Name: Service
+          Value: neon
+      Statistic: Maximum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      # missing, not breaching: the monitor going dark is MonitorStalledAlarm's job to report,
+      # and having both fire for one cause makes the page harder to read, not easier.
+      TreatMissingData: missing
+      AlarmActions: [!Ref AlertTopic]
+
+  NeonComputeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-neon-compute-hours'
+      AlarmDescription: >-
+        Neon compute hours are above 80% of the monthly allowance. Exhausting them suspends the
+        database until the billing period rolls over.
+      Namespace: !Ref MetricsNamespace
+      MetricName: NeonComputePercentOfLimit
+      Dimensions:
+        - Name: Service
+          Value: neon
+      Statistic: Maximum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: missing
+      AlarmActions: [!Ref AlertTopic]
+
+  # gemini_key_minute_usage and ip_rate_limit are pruned opportunistically on 2% of the calls that
+  # touch them. These two alarms are what makes that design safe: rows older than each sweep's own
+  # horizon should not exist, so any meaningful number of them says the sweep has stopped and the
+  # table is now growing without bound.
+  GeminiKeyUsageSweepAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-sweep-gemini-key-usage'
+      AlarmDescription: >-
+        gemini_key_minute_usage holds rows older than its 10-minute horizon - the opportunistic
+        sweep in keyPool.js has stopped working and the table is growing unbounded.
+      Namespace: !Ref MetricsNamespace
+      MetricName: TableStaleRows
+      Dimensions:
+        - Name: Service
+          Value: neon
+        - Name: Table
+          Value: gemini_key_minute_usage
+      Statistic: Maximum
+      Period: 3600
+      EvaluationPeriods: 2
+      Threshold: 1000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: missing
+      AlarmActions: [!Ref AlertTopic]
+
+  IpRateLimitSweepAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-sweep-ip-rate-limit'
+      AlarmDescription: >-
+        ip_rate_limit holds rows older than its 3-hour horizon - the opportunistic sweep in
+        rateLimiter.js has stopped working.
+      Namespace: !Ref MetricsNamespace
+      MetricName: TableStaleRows
+      Dimensions:
+        - Name: Service
+          Value: neon
+        - Name: Table
+          Value: ip_rate_limit
+      Statistic: Maximum
+      Period: 3600
+      EvaluationPeriods: 2
+      Threshold: 1000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: missing
+      AlarmActions: [!Ref AlertTopic]
+
+  # The one alarm that watches the watcher. Every Neon and table alarm above treats missing data as
+  # 'missing', so a dead monitor would silently disable all of them - this is what notices. Three
+  # consecutive hourly periods absorbs normal EventBridge drift without flapping.
+  MonitorStalledAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: MonitoringActive
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-monitor-stalled'
+      AlarmDescription: >-
+        The monitor function has not reported for three hours, so the Neon quota and table-growth
+        alarms are blind. Check the MonitorFunction log group and its schedule.
+      Namespace: !Ref MetricsNamespace
+      MetricName: MonitorRuns
+      Dimensions:
+        - Name: Service
+          Value: neon
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 3
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      # The whole point: absence IS the failure being detected.
+      TreatMissingData: breaching
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+  MonitoringDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub '${AWS::StackName}-monitoring'
+      # SEARCH() expands to one line per dimension value, so adding a Gemini key or a new
+      # attestation-failure reason appears on the graph with no template change. SEARCH is
+      # dashboard-only - alarms cannot use it, which is why the alarmed metrics above are all
+      # published as undimensioned totals as well.
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric", "x": 0, "y": 0, "width": 12, "height": 6,
+              "properties": {
+                "title": "Estimated spend by provider (USD/hour)",
+                "region": "${AWS::Region}",
+                "stat": "Sum", "period": 3600,
+                "metrics": [
+                  [ "${MetricsNamespace}", "GeminiCostUsd", "Service", "backend" ],
+                  [ ".", "SarvamCostUsd", ".", "." ]
+                ],
+                "annotations": { "horizontal": [
+                  { "label": "hourly alarm", "value": ${GeminiHourlySpendUsd} }
+                ] }
+              }
+            },
+            {
+              "type": "metric", "x": 12, "y": 0, "width": 12, "height": 6,
+              "properties": {
+                "title": "Gemini calls, errors and refusals",
+                "region": "${AWS::Region}",
+                "stat": "Sum", "period": 300,
+                "metrics": [
+                  [ "${MetricsNamespace}", "GeminiCalls", "Service", "backend" ],
+                  [ ".", "GeminiErrors", ".", "." ],
+                  [ ".", "GeminiKeyPoolSaturated", ".", "." ],
+                  [ ".", "AiQuotaExceeded", ".", "." ]
+                ]
+              }
+            },
+            {
+              "type": "metric", "x": 0, "y": 6, "width": 12, "height": 6,
+              "properties": {
+                "title": "Pooled key usage by key index, and RPM headroom",
+                "region": "${AWS::Region}",
+                "metrics": [
+                  [ { "expression": "SEARCH('{${MetricsNamespace},KeyIndex,Service} MetricName=\"GeminiKeyReserved\"', 'Sum', 300)", "id": "keys" } ],
+                  [ "${MetricsNamespace}", "GeminiKeyMinuteDepth", "Service", "backend", { "stat": "Maximum", "yAxis": "right", "label": "deepest minute (vs GEMINI_RPM_LIMIT)" } ]
+                ]
+              }
+            },
+            {
+              "type": "metric", "x": 12, "y": 6, "width": 12, "height": 6,
+              "properties": {
+                "title": "Gemini tokens",
+                "region": "${AWS::Region}",
+                "stat": "Sum", "period": 3600,
+                "metrics": [
+                  [ "${MetricsNamespace}", "GeminiInputTokens", "Service", "backend" ],
+                  [ ".", "GeminiOutputTokens", ".", "." ]
+                ]
+              }
+            },
+            {
+              "type": "metric", "x": 0, "y": 12, "width": 12, "height": 6,
+              "properties": {
+                "title": "Neon quota (% of plan limit)",
+                "region": "${AWS::Region}",
+                "stat": "Maximum", "period": 3600,
+                "yAxis": { "left": { "min": 0, "max": 100 } },
+                "metrics": [
+                  [ "${MetricsNamespace}", "NeonStoragePercentOfLimit", "Service", "neon" ],
+                  [ ".", "NeonComputePercentOfLimit", ".", "." ]
+                ],
+                "annotations": { "horizontal": [ { "label": "alarm", "value": 80 } ] }
+              }
+            },
+            {
+              "type": "metric", "x": 12, "y": 12, "width": 12, "height": 6,
+              "properties": {
+                "title": "Database health",
+                "region": "${AWS::Region}",
+                "period": 300,
+                "metrics": [
+                  [ "${MetricsNamespace}", "DbQueryLatencyMs", "Service", "backend", { "stat": "Average" } ],
+                  [ "...", { "stat": "Maximum" } ],
+                  [ ".", "DbQueryErrors", ".", ".", { "stat": "Sum", "yAxis": "right" } ],
+                  [ ".", "DbConnectionErrors", ".", ".", { "stat": "Sum", "yAxis": "right" } ]
+                ]
+              }
+            },
+            {
+              "type": "metric", "x": 0, "y": 18, "width": 12, "height": 6,
+              "properties": {
+                "title": "Table size (bytes)",
+                "region": "${AWS::Region}",
+                "metrics": [
+                  [ { "expression": "SEARCH('{${MetricsNamespace},Service,Table} MetricName=\"TableBytes\"', 'Maximum', 3600)", "id": "tables" } ]
+                ]
+              }
+            },
+            {
+              "type": "metric", "x": 12, "y": 18, "width": 12, "height": 6,
+              "properties": {
+                "title": "Abuse signals",
+                "region": "${AWS::Region}",
+                "stat": "Sum", "period": 900,
+                "metrics": [
+                  [ "${MetricsNamespace}", "IpRateLimited", "Service", "backend" ],
+                  [ ".", "IpRateLimitFailedOpen", ".", "." ],
+                  [ ".", "AttestationRejected", ".", "." ],
+                  [ ".", "OtpVerifications", ".", "." ],
+                  [ "AWS/ApiGateway", "4xx", "ApiId", "${ServerlessHttpApi}", { "label": "API Gateway 4xx" } ]
+                ]
+              }
+            },
+            {
+              "type": "metric", "x": 0, "y": 24, "width": 24, "height": 6,
+              "properties": {
+                "title": "Lambda",
+                "region": "${AWS::Region}",
+                "period": 300,
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${MedicalScannerFunction}", { "stat": "Sum" } ],
+                  [ ".", "Errors", ".", ".", { "stat": "Sum" } ],
+                  [ ".", "Throttles", ".", ".", { "stat": "Sum" } ],
+                  [ ".", "Duration", ".", ".", { "stat": "Maximum", "yAxis": "right" } ],
+                  [ ".", "ConcurrentExecutions", ".", ".", { "stat": "Maximum", "yAxis": "right" } ]
+                ]
+              }
+            }
+          ]
+        }
+
 Outputs:
   ApiUrl:
     Description: API Gateway endpoint URL — set this as DEFAULT_SERVER_URL in the Android app
@@ -133,3 +1022,11 @@ Outputs:
       Lambda Function URL (bypasses API Gateway's 30s integration timeout) — set this as the
       Android app's AI proxy base URL (BackendAiClient / DeviceIdentity), NOT DEFAULT_SERVER_URL.
     Value: !GetAtt MedicalScannerFunctionUrl.FunctionUrl
+  AlertTopicArn:
+    Description: >-
+      SNS topic every alarm publishes to. Subscribe more endpoints here (Slack via Chatbot, a
+      second address, SMS) without touching the alarms.
+    Value: !Ref AlertTopic
+  DashboardUrl:
+    Description: CloudWatch dashboard with the Gemini, Neon and Lambda graphs.
+    Value: !Sub 'https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${AWS::StackName}-monitoring'

@@ -7,7 +7,17 @@ on:
   push:
     branches: [master]
     paths: ['backend/**']
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      monitoring_mode:
+        description: 'CloudWatch monitoring (alarms + Neon monitor). "unchanged" keeps whatever the stack has.'
+        type: choice
+        required: false
+        default: unchanged
+        options:
+          - unchanged
+          - active
+          - sleep
 
 # Cancel an in-flight run if a new one starts on the same branch — avoids two deploys racing.
 concurrency:
@@ -73,6 +83,26 @@ jobs:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           FREE_TIER_DAILY_LIMIT: ${{ secrets.FREE_TIER_DAILY_LIMIT }}
+          # Monitoring (all optional — gen-samconfig.js omits any that are unset, so CloudFormation
+          # keeps the stack's existing value rather than blanking it). ALERT_EMAIL is the one worth
+          # setting first: without a subscriber the alarms still evaluate, but notify nobody.
+          #
+          # MONITORING_MODE resolves to '' on a normal push and on a dispatch left at "unchanged",
+          # so ordinary deploys never flip monitoring on or off by accident — only an explicit
+          # choice in the Actions tab does. Chosen over a repo secret because it isn't a secret and
+          # because waking monitoring should be two clicks, not a settings edit.
+          MONITORING_MODE: ${{ github.event.inputs.monitoring_mode != 'unchanged' && github.event.inputs.monitoring_mode || '' }}
+          ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+          NEON_STORAGE_LIMIT_BYTES: ${{ secrets.NEON_STORAGE_LIMIT_BYTES }}
+          NEON_COMPUTE_HOURS_LIMIT: ${{ secrets.NEON_COMPUTE_HOURS_LIMIT }}
+          GEMINI_HOURLY_SPEND_USD: ${{ secrets.GEMINI_HOURLY_SPEND_USD }}
+          GEMINI_DAILY_SPEND_USD: ${{ secrets.GEMINI_DAILY_SPEND_USD }}
+          SARVAM_DAILY_SPEND_USD: ${{ secrets.SARVAM_DAILY_SPEND_USD }}
+          INVOCATION_BURST_PER_5MIN: ${{ secrets.INVOCATION_BURST_PER_5MIN }}
+          APIGW_4XX_PER_5MIN: ${{ secrets.APIGW_4XX_PER_5MIN }}
+          OTP_VERIFICATIONS_PER_5MIN: ${{ secrets.OTP_VERIFICATIONS_PER_5MIN }}
         run: node scripts/gen-samconfig.js
       - run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
       - name: Run DB migrations

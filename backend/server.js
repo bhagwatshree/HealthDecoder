@@ -5,6 +5,7 @@ import db from './db.js';
 import { verifyDeviceAttestation, attestationStatus } from './attestation.js';
 import { hashPassword, verifyPassword, signToken, requireAuth, encrypt, decrypt, publicUser, verifyPhoneIdToken, isPhoneAuthConfigured, verifyGoogleSignInIdToken, isGoogleAuthConfigured, signDeviceToken, requireDeviceOrUser } from './auth.js';
 import { ipRateLimit } from './rateLimiter.js';
+import { count, detail } from './metrics.js';
 import crypto from 'crypto';
 
 import { resolveKeysForUser, peekAssignmentForUser, resolveKeysForDevice, getOrCreateDevice, isKnownDevice } from './keyPool.js';
@@ -784,6 +785,14 @@ app.post('/api/device/register', deviceRegisterIpLimit, async (req, res) => {
         // platform is unvalidated client input — stringify rather than interpolate raw, so a
         // crafted value can't inject newlines/control characters into the log stream.
         console.warn(`Device attestation rejected (platform=${JSON.stringify(platform)}): ${result.reason}`);
+        // Undimensioned total for the alarm (alarms can't aggregate across dimension values),
+        // plus a breakdown by reason for reading afterwards. `reason` is a fixed vocabulary from
+        // attestation.js (nonce_mismatch, app_UNRECOGNIZED, token_expired, ...) - bounded, and
+        // never client-controlled text, so it is safe in a dimension. Which reason dominates is
+        // the whole diagnosis: a wave of app_UNRECOGNIZED is someone running a repackaged APK,
+        // while a wave of token_expired is usually our own bug.
+        count('AttestationRejected');
+        detail('AttestationRejectedByReason', 1, { Reason: String(result.reason || 'unknown') });
         return res.status(403).json({
           error: 'This app installation could not be verified. Please reinstall from the official store.',
         });
@@ -929,6 +938,12 @@ app.post('/api/ai/generate', requireDeviceOrUser, async (req, res) => {
     }
     if (resolved.quotaExceeded || !resolved.geminiKey) {
       releaseAiRequest(requestHash);
+      // Counted here rather than at keyPool's several quotaExceeded return sites because this is
+      // the one place both the user and the anonymous-device paths converge on an actual refusal.
+      // A few of these a day is the free tier working as designed; a sudden spike is either the
+      // app retrying in a loop or someone driving the API from a script, and both are worth
+      // knowing about the same hour they start.
+      count('AiQuotaExceeded');
       return res.status(429).json({
         error: 'Daily free analysis limit reached. Try again tomorrow, or add your own Gemini key in Settings.',
       });

@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import db from './db.js';
 import { costGeminiUsd, costSarvamUsd, costFirebaseVerifyUsd } from './pricing.js';
+import { count, detail, observe, sum } from './metrics.js';
 
 const als = new AsyncLocalStorage();
 
@@ -39,26 +40,40 @@ async function flushEvents(events) {
   }
 }
 
-/** Wraps `ai.models.generateContent(params)`, timing it and logging tokens + estimated cost. */
+/** Wraps `ai.models.generateContent(params)`, timing it and logging tokens + estimated cost.
+ *
+ *  The api_usage_events row written by `record` is the durable, per-caller billing ledger and
+ *  stays the source of truth for reconciliation. The CloudWatch metrics alongside it serve the
+ *  other need: something has to notice a runaway spend WHILE it is happening, and a Postgres
+ *  table nobody is querying at 3am cannot page anyone. Same numbers, different job. */
 export async function trackGemini(ai, params) {
   const start = Date.now();
-  let success = true;
   try {
     const response = await ai.models.generateContent(params);
     const usage = response.usageMetadata || {};
+    const latencyMs = Date.now() - start;
+    const costUsd = costGeminiUsd(params.model, usage.promptTokenCount, usage.candidatesTokenCount);
     record({
       provider: 'gemini',
       model: params.model,
       inputTokens: usage.promptTokenCount,
       outputTokens: usage.candidatesTokenCount,
-      latencyMs: Date.now() - start,
-      costUsd: costGeminiUsd(params.model, usage.promptTokenCount, usage.candidatesTokenCount),
+      latencyMs,
+      costUsd,
       success: true,
     });
+    count('GeminiCalls');
+    sum('GeminiCostUsd', costUsd, 'None');
+    count('GeminiInputTokens', usage.promptTokenCount || 0);
+    count('GeminiOutputTokens', usage.candidatesTokenCount || 0);
+    observe('GeminiLatencyMs', latencyMs);
     return response;
   } catch (error) {
-    success = false;
-    record({ provider: 'gemini', model: params.model, latencyMs: Date.now() - start, costUsd: 0, success: false });
+    const latencyMs = Date.now() - start;
+    record({ provider: 'gemini', model: params.model, latencyMs, costUsd: 0, success: false });
+    count('GeminiCalls');
+    count('GeminiErrors');
+    observe('GeminiLatencyMs', latencyMs);
     throw error;
   }
 }
@@ -72,17 +87,33 @@ export async function trackSarvam(sarvamOp, meta, fn) {
   const start = Date.now();
   try {
     const result = await fn();
+    const latencyMs = Date.now() - start;
+    const costUsd = costSarvamUsd(sarvamOp, meta);
     record({
       provider: 'sarvam',
       model: sarvamOp,
       units: meta.chars ?? meta.pages ?? null,
-      latencyMs: Date.now() - start,
-      costUsd: costSarvamUsd(sarvamOp, meta),
+      latencyMs,
+      costUsd,
       success: true,
     });
+    // Sarvam is a billable provider (per page for doc digitization, per 10k characters for
+    // translate/TTS - see pricing.js) and had no live monitoring at all, only the api_usage_events
+    // ledger. Mirrors trackGemini exactly, for the same reason: a table nobody queries at 3am
+    // cannot notice a runaway spend while it is still running.
+    count('SarvamCalls');
+    sum('SarvamCostUsd', costUsd, 'None');
+    observe('SarvamLatencyMs', latencyMs);
+    // Which operation is driving the bill. Bounded vocabulary ('translate' | 'tts' |
+    // 'doc-digitization' | 'chat'), so it is safe as a dimension.
+    detail('SarvamCallsByOp', 1, { Operation: String(sarvamOp) });
     return result;
   } catch (error) {
-    record({ provider: 'sarvam', model: sarvamOp, latencyMs: Date.now() - start, costUsd: 0, success: false });
+    const latencyMs = Date.now() - start;
+    record({ provider: 'sarvam', model: sarvamOp, latencyMs, costUsd: 0, success: false });
+    count('SarvamCalls');
+    count('SarvamErrors');
+    observe('SarvamLatencyMs', latencyMs);
     throw error;
   }
 }
@@ -96,4 +127,11 @@ export function trackFirebaseVerify(userId, success) {
      VALUES ($1, 'firebase', 'otp-verify', 1, $2, $3)`,
     [userId || null, success ? costFirebaseVerifyUsd() : 0, success]
   ).catch((err) => console.error('Failed to write usage event:', err.message));
+
+  // Every verification is a billed SMS ($0.01 at the India rate, 10k/month free) - so unlike most
+  // counters here, volume IS the cost. Worth alarming on in its own right rather than inferring it
+  // from the auth-scope IP limiter: that limiter caps a single network, while OTP flooding spread
+  // across many IPs would slip under it entirely and still run up a real bill.
+  count('OtpVerifications');
+  if (!success) count('OtpVerifyFailures');
 }

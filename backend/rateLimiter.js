@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import db from './db.js';
+import { count, detail } from './metrics.js';
 
 // Postgres-backed per-IP rate limiting for sensitive, unauthenticated endpoints
 // (/api/device/register, /api/auth/*). A Lambda invocation has no memory of the last one, so an
@@ -67,10 +68,23 @@ export function ipRateLimit(scope, getLimit) {
     try {
       const allowed = await reserve(scope, req.ip, limit);
       if (!allowed) {
+        // An undimensioned total for the alarm to watch (CloudWatch alarms need a fixed dimension
+        // set, and cannot aggregate across dimension values), plus a per-scope breakdown for
+        // reading the graph afterwards. The two scopes mean very different things: device-register
+        // blocks are someone minting installs, auth blocks are credential stuffing. Never
+        // dimension by IP - see metrics.js on cardinality, and note this module deliberately
+        // doesn't retain reversible IPs in the first place.
+        count('IpRateLimited');
+        detail('IpRateLimitedByScope', 1, { Scope: scope });
         return res.status(429).json({ error: 'Too many requests from this network. Please try again later.' });
       }
       next();
     } catch (error) {
+      // Failing open is the right call (see above), but it means the cap is silently not being
+      // enforced - which is exactly the state that must not go unnoticed, since it converts a
+      // database blip into an open door on the endpoints this protects. The log line below
+      // carries the scope, so this counter doesn't need to.
+      count('IpRateLimitFailedOpen');
       console.error(`Rate limit check failed for ${scope}:`, error?.message || error);
       next();
     }
