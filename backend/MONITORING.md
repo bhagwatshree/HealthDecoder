@@ -108,6 +108,25 @@ coverage.
 **Prices are AWS list prices for us-east-1 and are not verified against the pricing page.** Same
 caveat as [`pricing.js`](pricing.js), which tracks provider list prices with a "last verified" date.
 
+## Tuning thresholds
+
+Every threshold is a CloudFormation parameter with a default, so retuning one is a deploy input
+rather than a code change. Set the matching env var for a local deploy
+(`DB_LATENCY_MS_THRESHOLD=3000 npm run gen-samconfig && sam deploy`); to drive it from CI, add a
+line to the workflow's env block. See `optionalParamMap` in [`scripts/gen-samconfig.js`](scripts/gen-samconfig.js)
+for the full env-var-to-parameter mapping.
+
+Four alarms keep a hardcoded threshold of `1` — throttles, key-pool saturation, rate-limiter
+fail-open, and monitor-stalled. For those, "any occurrence at all" *is* the condition, so there is
+nothing meaningful to tune.
+
+**Low traffic cuts both ways.** At a few requests an hour, abuse tripwires can sit high because
+organic traffic will never approach them — but error *counts* are easy to trip on a handful of
+events that mean nothing, and equally easy to miss when a real outage produces too few requests to
+reach the threshold. Two defaults are already raised for this: `DbLatencyMsThreshold` (2000ms) and
+`DbConnectionErrorsPer5Min` (6), because Neon autosuspends when idle and almost every request here
+wakes a cold compute. Lower both once steady traffic makes the average meaningful.
+
 ## The alarms
 
 Thresholds are set tight, to catch abuse and runaway spend early rather than quietly.

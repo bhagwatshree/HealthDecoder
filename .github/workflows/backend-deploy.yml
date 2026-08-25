@@ -105,6 +105,33 @@ jobs:
           OTP_VERIFICATIONS_PER_5MIN: ${{ secrets.OTP_VERIFICATIONS_PER_5MIN }}
         run: node scripts/gen-samconfig.js
       - run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
+
+      # MonitorStalledAlarm treats missing data as breaching — absence of a monitor report IS the
+      # failure it exists to detect. That makes it fire the instant it is created, because the
+      # EventBridge schedule won't run the monitor for up to an hour and there is no such thing as
+      # a CloudWatch grace period. One invocation here puts a MonitorRuns datapoint in the current
+      # period, which is enough to keep the alarm out of ALARM (its 3-of-3 requirement can't be met
+      # once one period has data) and doubles as a smoke test that the monitor actually works.
+      #
+      # Best-effort on purpose: if the deploy role lacks lambda:InvokeFunction the only consequence
+      # is one spurious alarm email per wake, which is not worth failing an otherwise good deploy.
+      - name: Seed monitor metrics
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          MODE=$(aws cloudformation describe-stacks --stack-name medical-scanner \
+            --query "Stacks[0].Parameters[?ParameterKey=='MonitoringMode'].ParameterValue" --output text)
+          if [ "$MODE" != "active" ]; then
+            echo "MonitoringMode=$MODE — no monitor function to seed."
+            exit 0
+          fi
+          FN=$(aws cloudformation describe-stack-resource --stack-name medical-scanner \
+            --logical-resource-id MonitorFunction \
+            --query 'StackResourceDetail.PhysicalResourceId' --output text)
+          echo "Invoking $FN to seed MonitorRuns..."
+          aws lambda invoke --function-name "$FN" --payload '{}' \
+            --cli-binary-format raw-in-base64-out /tmp/seed.json >/dev/null
+          echo "monitor returned: $(cat /tmp/seed.json)"
       - name: Run DB migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

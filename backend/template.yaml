@@ -166,6 +166,72 @@ Parameters:
       volume here IS cost - 15/5min sustained would be ~130k/month against a 10k/month free tier.
     Default: '15'
 
+  # ── Alarm thresholds ──────────────────────────────────────────────────────────────────────
+  # Every threshold is a parameter so it can be retuned from a deploy input instead of a code
+  # change. Traffic here is a few requests an hour, which cuts both ways: abuse tripwires can sit
+  # high because organic traffic will never approach them, while anything counting errors is easy
+  # to trip on a handful of events that mean nothing.
+  LambdaErrorsPer5Min:
+    Type: String
+    Description: API function errors in 5 minutes before alarming.
+    Default: '5'
+  ApiGateway5xxPer5Min:
+    Type: String
+    Description: API Gateway 5xx in 5 minutes before alarming (HttpApi routes only).
+    Default: '5'
+  LambdaNearTimeoutMs:
+    Type: String
+    Description: >-
+      Alarm when an invocation runs longer than this. 100000 is 100s of the 120s ceiling - a scan
+      reaching it is about to be killed mid-Gemini-call, billing for tokens and returning nothing.
+    Default: '100000'
+  GeminiErrorsPer5Min:
+    Type: String
+    Description: Failed Gemini calls in 5 minutes before alarming.
+    Default: '5'
+  AiQuotaExceededPer15Min:
+    Type: String
+    Description: Daily-cap refusals (HTTP 429) in 15 minutes before alarming.
+    Default: '20'
+  IpRateLimitedPer15Min:
+    Type: String
+    Description: Per-IP rate-limit blocks in 15 minutes before alarming.
+    Default: '10'
+  AttestationRejectedPer15Min:
+    Type: String
+    Description: Play Integrity rejections in 15 minutes before alarming.
+    Default: '10'
+  DbQueryErrorsPer5Min:
+    Type: String
+    Description: Failed Neon queries in 5 minutes before alarming.
+    Default: '5'
+  DbConnectionErrorsPer5Min:
+    Type: String
+    Description: >-
+      Pooled-connection errors in 5 minutes before alarming. Raised from 3 to 6: Neon autosuspends
+      when idle, and at a few requests an hour almost every request wakes it, so dropped idle
+      connections are routine here rather than a symptom.
+    Default: '6'
+  DbLatencyMsThreshold:
+    Type: String
+    Description: >-
+      Alarm when average query latency over 15 minutes exceeds this. Raised from 500ms to 2000ms
+      for the same reason as DbConnectionErrorsPer5Min - a cold Neon compute takes seconds to wake,
+      and with only a handful of queries in the window one cold start dominates the average. Lower
+      it once steady traffic makes the average meaningful.
+    Default: '2000'
+  NeonQuotaPercent:
+    Type: String
+    Description: Alarm when Neon storage or compute exceeds this percentage of the plan allowance.
+    Default: '80'
+  SweepStaleRowsThreshold:
+    Type: String
+    Description: >-
+      Rows past a swept table's own retention horizon before alarming. These tables are pruned on
+      2% of the calls that touch them, so at low traffic a few hundred stale rows is the sweep
+      simply not having run yet, not the sweep being broken.
+    Default: '1000'
+
 Conditions:
   # Only attach a subscription when an address was actually supplied - an empty-string Endpoint
   # is a deploy-time failure, not a no-op.
@@ -346,7 +412,7 @@ Resources:
       Statistic: Sum
       Period: 300
       EvaluationPeriods: 1
-      Threshold: 5
+      Threshold: !Ref LambdaErrorsPer5Min
       ComparisonOperator: GreaterThanOrEqualToThreshold
       # No invocations in a window is not an error - it is 3am.
       TreatMissingData: notBreaching
@@ -391,7 +457,7 @@ Resources:
       Statistic: Maximum
       Period: 300
       EvaluationPeriods: 1
-      Threshold: 100000
+      Threshold: !Ref LambdaNearTimeoutMs
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: notBreaching
       AlarmActions: [!Ref AlertTopic]
@@ -412,7 +478,7 @@ Resources:
       Statistic: Sum
       Period: 300
       EvaluationPeriods: 1
-      Threshold: 5
+      Threshold: !Ref ApiGateway5xxPer5Min
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
       AlarmActions: [!Ref AlertTopic]
@@ -583,7 +649,7 @@ Resources:
       Statistic: Sum
       Period: 300
       EvaluationPeriods: 1
-      Threshold: 5
+      Threshold: !Ref GeminiErrorsPer5Min
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
       AlarmActions: [!Ref AlertTopic]
@@ -628,7 +694,7 @@ Resources:
       Statistic: Sum
       Period: 900
       EvaluationPeriods: 1
-      Threshold: 20
+      Threshold: !Ref AiQuotaExceededPer15Min
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
       AlarmActions: [!Ref AlertTopic]
@@ -652,7 +718,7 @@ Resources:
       Statistic: Sum
       Period: 900
       EvaluationPeriods: 1
-      Threshold: 10
+      Threshold: !Ref IpRateLimitedPer15Min
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
       AlarmActions: [!Ref AlertTopic]
@@ -698,7 +764,7 @@ Resources:
       Statistic: Sum
       Period: 900
       EvaluationPeriods: 1
-      Threshold: 10
+      Threshold: !Ref AttestationRejectedPer15Min
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
       AlarmActions: [!Ref AlertTopic]
@@ -719,7 +785,7 @@ Resources:
       Statistic: Sum
       Period: 300
       EvaluationPeriods: 1
-      Threshold: 5
+      Threshold: !Ref DbQueryErrorsPer5Min
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
       AlarmActions: [!Ref AlertTopic]
@@ -740,7 +806,7 @@ Resources:
       Statistic: Sum
       Period: 300
       EvaluationPeriods: 1
-      Threshold: 3
+      Threshold: !Ref DbConnectionErrorsPer5Min
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
       AlarmActions: [!Ref AlertTopic]
@@ -762,7 +828,7 @@ Resources:
       Statistic: Average
       Period: 900
       EvaluationPeriods: 1
-      Threshold: 500
+      Threshold: !Ref DbLatencyMsThreshold
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: notBreaching
       AlarmActions: [!Ref AlertTopic]
@@ -785,7 +851,7 @@ Resources:
       Statistic: Maximum
       Period: 3600
       EvaluationPeriods: 1
-      Threshold: 80
+      Threshold: !Ref NeonQuotaPercent
       ComparisonOperator: GreaterThanThreshold
       # missing, not breaching: the monitor going dark is MonitorStalledAlarm's job to report,
       # and having both fire for one cause makes the page harder to read, not easier.
@@ -808,7 +874,7 @@ Resources:
       Statistic: Maximum
       Period: 3600
       EvaluationPeriods: 1
-      Threshold: 80
+      Threshold: !Ref NeonQuotaPercent
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: missing
       AlarmActions: [!Ref AlertTopic]
@@ -835,7 +901,7 @@ Resources:
       Statistic: Maximum
       Period: 3600
       EvaluationPeriods: 2
-      Threshold: 1000
+      Threshold: !Ref SweepStaleRowsThreshold
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: missing
       AlarmActions: [!Ref AlertTopic]
@@ -858,7 +924,7 @@ Resources:
       Statistic: Maximum
       Period: 3600
       EvaluationPeriods: 2
-      Threshold: 1000
+      Threshold: !Ref SweepStaleRowsThreshold
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: missing
       AlarmActions: [!Ref AlertTopic]

@@ -39,6 +39,21 @@ const optionalParamMap = {
   APIGW_4XX_PER_5MIN: 'ApiGateway4xxPer5Min',
   OTP_VERIFICATIONS_PER_5MIN: 'OtpVerificationsPer5Min',
   METRICS_DETAIL: 'MetricsDetail',
+  // Alarm thresholds. Every one is a template parameter with a sensible default, so these exist to
+  // retune a threshold from a deploy input rather than a code change. Set one in the shell for a
+  // local deploy; to drive it from CI, add a matching line to the workflow's env block.
+  LAMBDA_ERRORS_PER_5MIN: 'LambdaErrorsPer5Min',
+  APIGW_5XX_PER_5MIN: 'ApiGateway5xxPer5Min',
+  LAMBDA_NEAR_TIMEOUT_MS: 'LambdaNearTimeoutMs',
+  GEMINI_ERRORS_PER_5MIN: 'GeminiErrorsPer5Min',
+  AI_QUOTA_EXCEEDED_PER_15MIN: 'AiQuotaExceededPer15Min',
+  IP_RATE_LIMITED_PER_15MIN: 'IpRateLimitedPer15Min',
+  ATTESTATION_REJECTED_PER_15MIN: 'AttestationRejectedPer15Min',
+  DB_QUERY_ERRORS_PER_5MIN: 'DbQueryErrorsPer5Min',
+  DB_CONNECTION_ERRORS_PER_5MIN: 'DbConnectionErrorsPer5Min',
+  DB_LATENCY_MS_THRESHOLD: 'DbLatencyMsThreshold',
+  NEON_QUOTA_PERCENT: 'NeonQuotaPercent',
+  SWEEP_STALE_ROWS_THRESHOLD: 'SweepStaleRowsThreshold',
 };
 
 const missing = Object.keys(paramMap).filter((k) => process.env[k] === undefined);
