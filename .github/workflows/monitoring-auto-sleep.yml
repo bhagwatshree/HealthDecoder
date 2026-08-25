@@ -1,0 +1,107 @@
+name: Monitoring auto-sleep
+
+# Safety net for the "wake monitoring, test it, put it back" cycle. An alarm set left switched on
+# and forgotten is a bill that grows quietly, so the close is scheduled at the same time as the
+# open rather than trusted to memory.
+#
+# Fires once on 27 Aug at 03:17 UTC (08:47 IST) — the morning after a 25th/26th test window — and
+# is also manually dispatchable to close early.
+#
+# NOTE: a `schedule:` cron has no concept of "once". This will fire again on 27 Aug next year, so
+# delete this file (or the schedule block) after the test window closes. Firing again is harmless —
+# it only re-asserts sleep — but a mystery workflow run a year from now is not worth the confusion.
+#
+# Scheduled workflows only run from the default branch, so this must be on master to fire at all.
+
+on:
+  schedule:
+    - cron: '17 3 27 8 *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: monitoring-mode
+  cancel-in-progress: false
+
+jobs:
+  sleep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::405114130882:role/github-actions-medical-scanner-deploy
+          aws-region: us-east-1
+
+      # Flipping MonitoringMode is a parameter change against the template CloudFormation already
+      # holds — no checkout, no npm ci, no `sam build`, and no secrets. Every other parameter is
+      # carried forward with UsePreviousValue, which is also the only way to leave the NoEcho ones
+      # (DATABASE_URL, the Gemini keys, JWT_SECRET...) untouched: they cannot be read back to
+      # re-send, and sending a blank would wipe them.
+      #
+      # create-change-set + execute-change-set rather than update-stack: the deploy role is scoped
+      # to the changeset actions and deliberately has no cloudformation:UpdateStack.
+      - name: Set MonitoringMode=sleep
+        run: |
+          set -euo pipefail
+          STACK=medical-scanner
+          CS="auto-sleep-$(date +%Y%m%d%H%M%S)"
+
+          # Build the parameter list from what the stack currently has, so a parameter added to the
+          # template later doesn't need this file edited too.
+          PARAMS=$(aws cloudformation describe-stacks --stack-name "$STACK" \
+            --query 'Stacks[0].Parameters[].ParameterKey' --output text \
+            | tr '\t' '\n' \
+            | while read -r k; do
+                if [ "$k" = "MonitoringMode" ]; then
+                  echo "ParameterKey=MonitoringMode,ParameterValue=sleep"
+                else
+                  echo "ParameterKey=$k,UsePreviousValue=true"
+                fi
+              done)
+
+          CURRENT=$(aws cloudformation describe-stacks --stack-name "$STACK" \
+            --query "Stacks[0].Parameters[?ParameterKey=='MonitoringMode'].ParameterValue" --output text)
+          echo "MonitoringMode is currently: ${CURRENT:-<absent>}"
+
+          # Absent means the monitoring template was never deployed, so there is nothing switched on
+          # to switch off. Without this guard the change-set below would contain no changes at all,
+          # come back FAILED, and fail this workflow with something far less obvious than the truth.
+          if [ -z "$CURRENT" ]; then
+            echo "Stack has no MonitoringMode parameter — monitoring was never deployed. Nothing to do."
+            exit 0
+          fi
+          if [ "$CURRENT" = "sleep" ]; then
+            echo "Already asleep — nothing to do."
+            exit 0
+          fi
+
+          # shellcheck disable=SC2086
+          aws cloudformation create-change-set \
+            --stack-name "$STACK" \
+            --change-set-name "$CS" \
+            --use-previous-template \
+            --capabilities CAPABILITY_IAM \
+            --parameters $PARAMS
+
+          aws cloudformation wait change-set-create-complete \
+            --stack-name "$STACK" --change-set-name "$CS"
+
+          aws cloudformation execute-change-set \
+            --stack-name "$STACK" --change-set-name "$CS"
+
+          aws cloudformation wait stack-update-complete --stack-name "$STACK"
+          echo "MonitoringMode is now: $(aws cloudformation describe-stacks --stack-name "$STACK" \
+            --query "Stacks[0].Parameters[?ParameterKey=='MonitoringMode'].ParameterValue" --output text)"
+
+      # Proves the teardown actually happened rather than just reporting a successful stack update:
+      # the alarms are the thing that bills, so their absence is the result worth asserting.
+      - name: Confirm the alarms are gone
+        run: |
+          set -euo pipefail
+          LEFT=$(aws cloudwatch describe-alarms --alarm-name-prefix medical-scanner \
+            --query 'length(MetricAlarms)' --output text)
+          echo "medical-scanner alarms remaining: $LEFT"
+          test "$LEFT" = "0"
