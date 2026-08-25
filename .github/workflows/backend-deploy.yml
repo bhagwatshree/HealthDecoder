@@ -125,9 +125,15 @@ jobs:
             echo "MonitoringMode=$MODE — no monitor function to seed."
             exit 0
           fi
-          FN=$(aws cloudformation describe-stack-resource --stack-name medical-scanner \
-            --logical-resource-id MonitorFunction \
-            --query 'StackResourceDetail.PhysicalResourceId' --output text)
+          # list-stack-resources, not describe-stack-resource: the deploy role is granted the
+          # former and not the latter, and this needs no privilege the deploy didn't already use.
+          FN=$(aws cloudformation list-stack-resources --stack-name medical-scanner \
+            --query "StackResourceSummaries[?LogicalResourceId=='MonitorFunction'].PhysicalResourceId" \
+            --output text)
+          if [ -z "$FN" ]; then
+            echo "MonitorFunction not found in the stack — nothing to seed."
+            exit 0
+          fi
           echo "Invoking $FN to seed MonitorRuns..."
           aws lambda invoke --function-name "$FN" --payload '{}' \
             --cli-binary-format raw-in-base64-out /tmp/seed.json >/dev/null
