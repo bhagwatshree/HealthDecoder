@@ -280,6 +280,14 @@ Resources:
       Description: Publishes Neon quota and table-growth metrics to CloudWatch
       Timeout: 60
       MemorySize: 256
+      # Overrides the nodejs20.x in Globals. Lambda disabled CREATION of nodejs20.x functions on
+      # 2026-06-01 (updates to existing ones still go through, which is why the API function keeps
+      # deploying) - and this is a brand-new function, so it would be refused. Nothing here needs
+      # the older runtime: monitor.js uses only fetch and AbortSignal.timeout, both long-stable.
+      #
+      # The API function is still on nodejs20.x and is living on borrowed time. Bumping it is a
+      # separate change that deserves its own deploy and a smoke test, not a silent ride-along here.
+      Runtime: nodejs24.x
       Environment:
         Variables:
           DATABASE_URL: !Ref DatabaseUrl
@@ -294,16 +302,21 @@ Resources:
         # ScheduleV2 (EventBridge Scheduler), which would additionally need its own IAM execution
         # role created and passed. For a once-an-hour trigger the newer service buys nothing here
         # and costs an extra permission the deploy role would have to be granted.
-        Schedule:
+        HourlyPoll:
           Type: Schedule
           Properties:
-            # Literal, not !Ref a parameter. SAM's transform validates this property before
-            # intrinsics are resolved, so a Ref here fails the whole changeset with the actively
-            # misleading "property ScheduleExpression not defined for resource of type Schedule".
-            # Hourly is the right cadence anyway and nothing needs to tune it per deploy: Neon's
-            # consumption figures move on the order of minutes, and the slowest alarm watching this
-            # data evaluates over 3 hours.
-            ScheduleExpression: rate(1 hour)
+            # The property is `Schedule`, NOT `ScheduleExpression`. ScheduleExpression belongs to
+            # Type: ScheduleV2 (and to the raw AWS::Events::Rule underneath); Type: Schedule spells
+            # the same thing `Schedule`. Getting it wrong fails the whole changeset with
+            # "property ScheduleExpression not defined for resource of type Schedule", which reads
+            # like the property is missing rather than misnamed. `sam validate` catches it in a
+            # second, so run that before pushing anything that touches an event source.
+            #
+            # Hourly, and deliberately not a template parameter: Neon's consumption figures move on
+            # the order of minutes and the slowest alarm reading this data evaluates over 3 hours,
+            # so there is nothing for a per-deploy override to buy.
+            Schedule: rate(1 hour)
+            Description: Hourly Neon quota and table-growth metric publication
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
