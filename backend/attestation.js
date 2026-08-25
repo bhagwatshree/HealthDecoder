@@ -16,6 +16,13 @@ import { GoogleAuth } from 'google-auth-library';
  * deliberate later step, only after attesting clients have shipped and been adopted — flipping it
  * first would strand every installed app.
  *
+ * A SECOND, PERMANENT backstop for the same concern lives in server.js, not here: POST
+ * /api/device/register only calls into this file for a deviceId it has never seen before
+ * (isKnownDevice in keyPool.js). An already-registered device keeps working no matter when it
+ * re-registers — expired token, reinstall, an old build that predates attestation entirely —
+ * because enforcement's job is to stop a script minting NEW callers, not to retroactively lock
+ * out installs that predate the flag.
+ *
  * Every flag below is read lazily (inside a function), not captured into a module-level const at
  * import time. attestation.js is imported by server.js BEFORE server.js calls dotenv.config(), so
  * a top-level `const X = process.env.X` would freeze at "unset" even when the .env value is

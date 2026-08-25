@@ -108,6 +108,16 @@ async function incrementUsage(userId) {
 // These mirror peekUsage/incrementUsage exactly, but against the `devices` table keyed by the
 // client-generated device_id, so the AI proxy can still meter/pool a key per install.
 
+/** True if this deviceId already has a row — i.e. it registered before this call, regardless of
+ *  how long ago. Backs the attestation grandfather clause in POST /api/device/register: a device
+ *  we've already seen keeps working even if it re-registers (expired token, reinstall, whatever)
+ *  after ATTESTATION_ENFORCE_ANDROID is turned on, since enforcement exists to stop a script
+ *  minting NEW callers, not to retroactively lock out installs that predate the flag. */
+export async function isKnownDevice(deviceId) {
+  const result = await db.query('SELECT 1 FROM devices WHERE device_id = $1', [deviceId]);
+  return result.rowCount > 0;
+}
+
 /** Inserts the device on first contact (idempotent) and returns its row id (used to attribute
  *  api_usage_events.device_id). Safe to call on every request — cheap upsert, just bumps last_seen_at. */
 export async function getOrCreateDevice(deviceId) {

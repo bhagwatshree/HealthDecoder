@@ -7,7 +7,7 @@ import { hashPassword, verifyPassword, signToken, requireAuth, encrypt, decrypt,
 import { ipRateLimit } from './rateLimiter.js';
 import crypto from 'crypto';
 
-import { resolveKeysForUser, peekAssignmentForUser, resolveKeysForDevice, getOrCreateDevice } from './keyPool.js';
+import { resolveKeysForUser, peekAssignmentForUser, resolveKeysForDevice, getOrCreateDevice, isKnownDevice } from './keyPool.js';
 import { trackFirebaseVerify, trackGemini, runWithUsageContext } from './usageTracker.js';
 import { GoogleGenAI } from '@google/genai';
 import jwt from 'jsonwebtoken';
@@ -770,17 +770,24 @@ app.post('/api/device/register', deviceRegisterIpLimit, async (req, res) => {
       return res.status(400).json({ error: 'A valid deviceId is required.' });
     }
 
-    // Attestation proves this is a genuine build of our app on a real Android device. OFF by
-    // default: an unattested client is allowed through unchanged until the flag is set, so
-    // enabling it can never strand already-installed apps that don't send one yet.
-    const result = await verifyDeviceAttestation({ platform, deviceId, attestation });
-    if (!result.ok) {
-      // platform is unvalidated client input — stringify rather than interpolate raw, so a
-      // crafted value can't inject newlines/control characters into the log stream.
-      console.warn(`Device attestation rejected (platform=${JSON.stringify(platform)}): ${result.reason}`);
-      return res.status(403).json({
-        error: 'This app installation could not be verified. Please reinstall from the official store.',
-      });
+    // GRANDFATHER CLAUSE: a deviceId already in the table registered before this call — under an
+    // old app build, before attestation existed at all, or simply before ATTESTATION_ENFORCE_ANDROID
+    // was turned on — and skips the check entirely, no matter when or why it's re-registering
+    // (expired 365-day token, reinstall, cleared app data). Enforcement exists to stop a script
+    // minting NEW callers; it is not meant to retroactively strand every already-installed app the
+    // moment the flag flips, which is exactly the failure mode the "ship attesting clients, wait for
+    // adoption, THEN enforce" rollout plan below tries to avoid. A brand-new deviceId still gets the
+    // full check.
+    if (!(await isKnownDevice(deviceId))) {
+      const result = await verifyDeviceAttestation({ platform, deviceId, attestation });
+      if (!result.ok) {
+        // platform is unvalidated client input — stringify rather than interpolate raw, so a
+        // crafted value can't inject newlines/control characters into the log stream.
+        console.warn(`Device attestation rejected (platform=${JSON.stringify(platform)}): ${result.reason}`);
+        return res.status(403).json({
+          error: 'This app installation could not be verified. Please reinstall from the official store.',
+        });
+      }
     }
 
     await getOrCreateDevice(deviceId);
