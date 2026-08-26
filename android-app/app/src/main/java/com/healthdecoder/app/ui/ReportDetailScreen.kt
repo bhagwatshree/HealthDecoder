@@ -162,13 +162,6 @@ fun ReportDetailScreen(
                     editRawText = fetchedReport.extractedText ?: ""
                     editMedications.clear()
                     editMedications.addAll(fetchedReport.medications)
-
-                    // The comparison and insights cards are built on demand rather than at scan
-                    // time, so opening a report is what pays for them — and only once. The report
-                    // above is already on screen while this runs; the cards appear when ready.
-                    runCatching { LocalRepository.ensureEnrichment(context, reportId) }
-                        .getOrNull()?.let { report = it }
-                    documentSiblingCount = runCatching { LocalRepository.documentSiblings(context, reportId).size }.getOrDefault(1)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -176,6 +169,15 @@ fun ReportDetailScreen(
             } finally {
                 isLoading = false
             }
+        }
+        // The comparison and insights cards are built on demand rather than at scan time, so
+        // opening a report is what pays for them — and only once. Runs via BackgroundTasks
+        // (outlives this screen) rather than the block above, so backing out of Report Details
+        // quickly after opening it doesn't cancel the AI call mid-flight — it still gets saved,
+        // and shows next time this report is opened even if not this time.
+        com.healthdecoder.app.local.BackgroundTasks.launch {
+            runCatching { LocalRepository.ensureEnrichment(context, reportId) }.getOrNull()?.let { report = it }
+            documentSiblingCount = runCatching { LocalRepository.documentSiblings(context, reportId).size }.getOrDefault(1)
         }
     }
 

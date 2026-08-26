@@ -35,6 +35,7 @@ import com.healthdecoder.app.local.LocalRepository
 import com.healthdecoder.app.local.LocalStore
 import com.healthdecoder.app.local.MaintenanceScheduler
 import com.healthdecoder.app.local.SecureKeyManager
+import com.healthdecoder.app.local.TransferScheduler
 import com.healthdecoder.app.model.MedicalReport
 import com.healthdecoder.app.network.NetworkModule
 import com.healthdecoder.app.ui.components.AppBottomNavBar
@@ -85,6 +86,9 @@ fun SettingsScreen(
     var showDeleteAllDialog by remember { mutableStateOf(false) }
     var deleteAllResult by remember { mutableStateOf<String?>(null) }
     var deletingAll by remember { mutableStateOf(false) }
+    // Only for the restore flow's own early failure (before RestoreScheduler takes over) — the
+    // actual backup EXPORT result now lives in TransferScheduler.backupResult (see its display
+    // site below, which shows whichever fired most recently).
     var backupResult by remember { mutableStateOf<String?>(null) }
     var dupCandidates by remember { mutableStateOf<List<MedicalReport>>(emptyList()) }
     var showDupDialog by remember { mutableStateOf(false) }
@@ -92,8 +96,8 @@ fun SettingsScreen(
     var dupScanning by remember { mutableStateOf(false) }
     var cloudFolderLabel by remember { mutableStateOf(SafCloudUploader.getBackupFolderLabel(context)) }
     var pendingSyncCount by remember { mutableStateOf(BackupSync.pendingCount(context)) }
-    var syncing by remember { mutableStateOf(false) }
-    var transferResult by remember { mutableStateOf<String?>(null) }
+    // Only for runMerge()'s own busy state now — export/import's busy+result live in
+    // TransferScheduler (see its display sites below), which survives navigating away mid-run.
     var transferBusy by remember { mutableStateOf(false) }
     var patients by remember { mutableStateOf<List<String>>(emptyList()) }
     var exportPatient by remember { mutableStateOf<String?>(null) } // null = all patients
@@ -150,28 +154,20 @@ fun SettingsScreen(
         if (uri != null) {
             SafCloudUploader.setBackupFolderUri(context, uri)
             cloudFolderLabel = SafCloudUploader.getBackupFolderLabel(context)
-            coroutineScope.launch {
-                syncing = true
-                withContext(Dispatchers.IO) { BackupSync.syncPending(context) }
-                pendingSyncCount = BackupSync.pendingCount(context)
-                syncing = false
-            }
+            // Runs via TransferScheduler — outlives this screen, same reasoning as export/import.
+            TransferScheduler.syncNow(context) { pendingSyncCount = BackupSync.pendingCount(context) }
         }
     }
 
-    // Export a backup zip to any folder the user picks (Google Drive / OneDrive / local).
+    // Export a backup zip to any folder the user picks (Google Drive / OneDrive / local). Runs
+    // via TransferScheduler (outlives this screen) rather than this composable's own
+    // coroutineScope — see its doc comment, same reasoning as RestoreScheduler for restore.
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
-        if (uri != null) coroutineScope.launch {
+        if (uri != null) {
             val passwordToUse = if (protectBackupWithPassword) backupPasswordInput else null
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    val zip = BackupManager.createLocalBackup(context, passwordToUse) ?: return@runCatching "Nothing to back up yet — scan a report first."
-                    context.contentResolver.openOutputStream(uri)?.use { out -> zip.inputStream().use { it.copyTo(out) } }
-                    "Backup exported successfully."
-                }.getOrElse { "Export failed: ${it.message}" }
+            TransferScheduler.exportBackupTo(context, uri, passwordToUse) { result ->
+                android.widget.Toast.makeText(context, result, android.widget.Toast.LENGTH_LONG).show()
             }
-            backupResult = result
-            android.widget.Toast.makeText(context, result, android.widget.Toast.LENGTH_LONG).show()
             backupPasswordInput = ""
             backupPasswordConfirmInput = ""
         }
@@ -225,49 +221,26 @@ fun SettingsScreen(
     }
 
     fun runExport() {
-        coroutineScope.launch {
-            transferBusy = true
-            transferResult = runCatching {
-                val file = LocalRepository.exportData(context, exportPatient, exportDelta, exportFrom.trim(), exportTo.trim())
-                if (file == null) "Nothing to export for that selection." else {
-                    val uri = androidx.core.content.FileProvider.getUriForFile(
-                        context, "${context.packageName}.fileprovider", file
-                    )
-                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                        type = "application/zip"
-                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    context.startActivity(android.content.Intent.createChooser(send, "Share export"))
-                    "Export ready — choose where to send it."
-                }
-            }.getOrElse { e ->
-                e.printStackTrace()
-                "Export failed. Please try again."
+        // Runs via TransferScheduler — outlives this screen, same as backup export above.
+        TransferScheduler.exportPortable(context, exportPatient, exportDelta, exportFrom.trim(), exportTo.trim()) { file ->
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context, "${context.packageName}.fileprovider", file
+            )
+            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "application/zip"
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            transferBusy = false
+            context.startActivity(android.content.Intent.createChooser(send, "Share export"))
         }
     }
 
     val portableImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) coroutineScope.launch {
-            transferBusy = true
-            transferResult = withContext(Dispatchers.IO) {
-                runCatching {
-                    val res = LocalRepository.importData(context, uri)
-                    buildString {
-                        append("Added ${res.added}")
-                        if (res.updated > 0) append(", updated ${res.updated}")
-                        append(" report(s)")
-                        if (res.patients.isNotEmpty()) append(" • ${res.patients.joinToString()}")
-                    }
-                }.getOrElse { e ->
-                    e.printStackTrace()
-                    "Import failed. Please check the file and try again."
-                }
+        if (uri != null) {
+            // Runs via TransferScheduler — outlives this screen, same as export above.
+            TransferScheduler.importPortable(context, uri) {
+                patients = LocalRepository.listPatients(context)
             }
-            patients = LocalRepository.listPatients(context)
-            transferBusy = false
         }
     }
 
@@ -486,15 +459,15 @@ fun SettingsScreen(
                         )
                     }
 
-                    transferResult?.let { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
+                    TransferScheduler.transferResult?.let { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { runExport() }, enabled = !transferBusy, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
-                            if (transferBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                        Button(onClick = { runExport() }, enabled = !TransferScheduler.transferBusy, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
+                            if (TransferScheduler.transferBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                             else { Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tr("Export")) }
                         }
-                        OutlinedButton(onClick = { portableImportLauncher.launch(arrayOf("*/*")) }, enabled = !transferBusy, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
-                            if (transferBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        OutlinedButton(onClick = { portableImportLauncher.launch(arrayOf("*/*")) }, enabled = !TransferScheduler.transferBusy, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
+                            if (TransferScheduler.transferBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                             else { Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tr("Import")) }
                         }
                     }
@@ -720,17 +693,20 @@ fun SettingsScreen(
                         )
                     }
 
-                    backupResult?.let { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
+                    (TransferScheduler.backupResult ?: backupResult)?.let { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = {
                                 val stamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
                                 exportLauncher.launch("medical-backup-$stamp.zip")
                             },
-                            enabled = !protectBackupWithPassword || (backupPasswordInput.isNotBlank() && !passwordsMismatch),
+                            enabled = !TransferScheduler.backupBusy && (!protectBackupWithPassword || (backupPasswordInput.isNotBlank() && !passwordsMismatch)),
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
-                        ) { Text(tr("Export Backup")) }
+                        ) {
+                            if (TransferScheduler.backupBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                            else Text(tr("Export Backup"))
+                        }
                         OutlinedButton(
                             onClick = { importLauncher.launch(arrayOf("*/*")) },
                             enabled = !restoreBusy && !RestoreScheduler.isBusy,
@@ -826,7 +802,7 @@ fun SettingsScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(text = cloudFolderLabel ?: "", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                 val statusText = when {
-                                    syncing -> "Syncing…"
+                                    TransferScheduler.syncBusy -> "Syncing…"
                                     pendingSyncCount > 0 -> "$pendingSyncCount backup(s) pending sync"
                                     else -> "All backups synced ✓"
                                 }
@@ -836,14 +812,10 @@ fun SettingsScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = {
-                                    coroutineScope.launch {
-                                        syncing = true
-                                        withContext(Dispatchers.IO) { BackupSync.syncPending(context) }
-                                        pendingSyncCount = BackupSync.pendingCount(context)
-                                        syncing = false
-                                    }
+                                    // Runs via TransferScheduler — outlives this screen.
+                                    TransferScheduler.syncNow(context) { pendingSyncCount = BackupSync.pendingCount(context) }
                                 },
-                                enabled = !syncing && pendingSyncCount > 0,
+                                enabled = !TransferScheduler.syncBusy && pendingSyncCount > 0,
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(12.dp)
                             ) { Text(tr("Sync Now")) }
