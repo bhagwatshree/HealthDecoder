@@ -61,6 +61,11 @@ object UnitConverter {
             "micromol/l" -> "umol/l"
             "miu/l", "uu/ml", "uiu/l" -> "uiu/ml"  // TSH: µIU/mL ≡ mIU/L ≡ µU/mL (1:1)
             "percent", "percentage", "pct" -> "%"
+            // Prothrombin Time etc. — labs print "Sec", "Secs", "Second(s)" interchangeably for
+            // the exact same unit; without this a report using one spelling and the standard-unit
+            // report using another look like two unconvertible units and the point gets silently
+            // dropped from the trend chart instead of plotted.
+            "sec", "secs", "second", "seconds" -> "sec"
             // Cell counts — thousands-per-µL scale (same number as 10⁹/L)
             "10^3/ul", "10e3/ul", "x10^3/ul", "10x3/ul", "thou/ul", "k/ul", "10^3/cumm" -> "10^3/ul"
             "10^9/l", "x10^9/l", "10e9/l" -> "10^9/l"

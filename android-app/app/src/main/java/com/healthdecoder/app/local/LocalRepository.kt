@@ -529,6 +529,14 @@ object LocalRepository {
         val category = existing.reportCategory ?: "other"
         val scanType = if (category == "prescription" || existing.reportType == "Prescription") "prescription" else "report"
         val extraction = OcrEngine.scan(context, pages, "", scanType, category, operation = "reprocess")
+
+        // This row might be one panel of a multi-panel document (see reprocessSiblings' matching
+        // doc comment for the full reasoning) — if this scan came back with no per-section
+        // breakdown at all while the document is known to have more than one panel, applying the
+        // all-panels-flattened-into-one merged() fallback here would silently mix another panel's
+        // parameters into this row instead of refreshing it. Leave it untouched instead.
+        if (extraction.reports.isEmpty() && documentSiblings(context, id).size > 1) return@withContext existing
+
         val sections = extraction.reports.ifEmpty { listOf(extraction.merged()) }
         val section = bestMatchingSection(sections, existing, category)
 
@@ -613,7 +621,14 @@ object LocalRepository {
         var processed = 0
         for ((index, group) in groups.withIndex()) {
             onProgress(index, groups.size)
-            processed += reprocessSiblings(context, group).size
+            // One document choking (a quota error, a huge page count timing out) shouldn't abort
+            // every document after it in the range — that silently left later documents (which
+            // could easily be the ones the user actually cares about) never even attempted.
+            try {
+                processed += reprocessSiblings(context, group).size
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
         onProgress(groups.size, groups.size)
         afterWrite(context)
@@ -642,13 +657,32 @@ object LocalRepository {
         val docCategory = primary.reportCategory ?: "other"
         val scanType = if (docCategory == "prescription" || primary.reportType == "Prescription") "prescription" else "report"
         val extraction = OcrEngine.scan(context, pages, "", scanType, docCategory, operation = "reprocess")
+
+        // A multi-panel document (siblings.size > 1) needs the AI to have actually segmented this
+        // pass into that many distinct sections. When it didn't — extraction.reports came back
+        // empty, meaning [extraction.merged()] would be ONE section holding every panel's
+        // parameters flattened into one list — applying that to any single sibling doesn't refresh
+        // it, it CONTAMINATES it with every other panel's values under its title (this is exactly
+        // how a "Prothrombin Time (PT) & INR" row ended up also holding Haemoglobin, RBC Count...
+        // and vice versa). Bail out and leave every sibling exactly as it was rather than guess.
+        if (siblings.size > 1 && extraction.reports.isEmpty()) return siblings
+
         val pool = (extraction.reports.ifEmpty { listOf(extraction.merged()) }).toMutableList()
 
         val results = mutableListOf<MedicalReport>()
         for (existing in siblings) {
             if (pool.isEmpty()) { results += existing; continue }
             val existingType = (existing.reportType ?: "").trim().lowercase()
-            val best = pool.maxByOrNull { sectionTypeScore(it, existingType) } ?: pool.first()
+            val best = pool.maxByOrNull { sectionTypeScore(it, existingType) }
+            // No candidate shares any real type similarity with this row (every score is 0, i.e.
+            // "no info either way") — for a multi-panel document that means the pool has been
+            // exhausted of anything plausibly belonging to this sibling, so leave it untouched
+            // rather than force-assign an unrelated leftover section (the same contamination risk
+            // as the empty-extraction case above, just partial instead of total).
+            if (best == null || (siblings.size > 1 && sectionTypeScore(best, existingType) <= 0)) {
+                results += existing
+                continue
+            }
             pool.remove(best)
             results += applyReprocessedSection(context, existing, best, existing.reportCategory ?: docCategory, scanType)
         }
