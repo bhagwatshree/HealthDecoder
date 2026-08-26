@@ -45,6 +45,12 @@ fun RecordsScreen(
     // "my prescriptions" otherwise has to read past a wall of lab panels to find them.
     var selectedKind by remember { mutableStateOf<DashboardEngine.RecordKind?>(null) }
     var ftsMatchIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // Bulk reprocess: re-runs AI extraction on every document (one call per document, all its
+    // sections included) whose reports fall in the currently selected period — for backfilling
+    // values an older/weaker extraction pass missed, without reprocessing one section at a time.
+    var showBulkReprocessDialog by remember { mutableStateOf(false) }
+    var isBulkReprocessing by remember { mutableStateOf(false) }
+    var bulkReprocessProgress by remember { mutableStateOf(0 to 0) }
 
     LaunchedEffect(searchQuery) {
         if (searchQuery.isBlank()) {
@@ -179,6 +185,58 @@ fun RecordsScreen(
                         shape = RoundedCornerShape(20.dp)
                     )
                 }
+            }
+
+            val currentPeriodLabel = periods.firstOrNull { it.first == selectedPeriod }?.second ?: tr("All Time")
+            TextButton(
+                onClick = { showBulkReprocessDialog = true },
+                enabled = !isBulkReprocessing,
+                modifier = Modifier.padding(horizontal = 12.dp)
+            ) {
+                if (isBulkReprocessing) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(tr("Reprocessing %d of %d documents…").format(bulkReprocessProgress.first, bulkReprocessProgress.second), fontSize = 12.sp)
+                } else {
+                    Icon(imageVector = Icons.Default.Autorenew, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(tr("Reprocess all reports in \"%s\"").format(currentPeriodLabel), fontSize = 12.sp)
+                }
+            }
+            if (showBulkReprocessDialog) {
+                AlertDialog(
+                    onDismissRequest = { showBulkReprocessDialog = false },
+                    title = { Text(tr("Reprocess all reports in \"%s\"?").format(currentPeriodLabel)) },
+                    text = { Text(tr("Re-runs AI analysis on every document in this range — one AI call per document, covering every section within it (e.g. a Haemogram + PT/INR + Biochemistry panel refreshes together). Useful after an app update improves extraction, so older scans pick up values they missed the first time. This can use a meaningful amount of your API quota depending on how many documents fall in this range.")) },
+                    confirmButton = {
+                        Button(onClick = {
+                            showBulkReprocessDialog = false
+                            coroutineScope.launch {
+                                isBulkReprocessing = true
+                                bulkReprocessProgress = 0 to 0
+                                errorMessage = ""
+                                try {
+                                    com.healthdecoder.app.local.LocalRepository.reprocessInRange(context, selectedPeriod) { done, total ->
+                                        bulkReprocessProgress = done to total
+                                    }
+                                    loadDashboard()
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                    errorMessage = "Failed to reprocess reports in this range."
+                                } finally {
+                                    isBulkReprocessing = false
+                                }
+                            }
+                        }) {
+                            Text(tr("Reprocess"))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showBulkReprocessDialog = false }) {
+                            Text(tr("Cancel"))
+                        }
+                    }
+                )
             }
             Spacer(modifier = Modifier.height(8.dp))
 

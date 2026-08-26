@@ -530,8 +530,144 @@ object LocalRepository {
         val scanType = if (category == "prescription" || existing.reportType == "Prescription") "prescription" else "report"
         val extraction = OcrEngine.scan(context, pages, "", scanType, category, operation = "reprocess")
         val sections = extraction.reports.ifEmpty { listOf(extraction.merged()) }
-        val section = sections.firstOrNull { DateResolver.resolve(it, category) == existing.reportDate } ?: sections.first()
+        val section = bestMatchingSection(sections, existing, category)
 
+        val updated = applyReprocessedSection(context, existing, section, category, scanType)
+        afterWrite(context)
+        updated
+    }
+
+    /**
+     * Which freshly-extracted section [existing] should be refreshed with. A multi-panel document
+     * (Haemogram + PT/INR + Biochemistry...) has every one of its sections stamped with the SAME
+     * printed date, so matching purely by date — as this used to — picks whichever section happens
+     * to come first for that date, not necessarily the one [existing] actually is. That silently
+     * overwrote reports: reprocessing the "Prothrombin Time (PT) & INR" section of a document could
+     * grab the Haemogram section instead, replacing its PT/INR values with CBC values under the
+     * PT/INR title. Match by report TYPE first — the actual identity of which panel this row is —
+     * and only fall back to date (then first-of-scan) when nothing shares any type similarity, e.g.
+     * a single-report document whose AI-given name simply changed wording between scans.
+     */
+    private fun bestMatchingSection(sections: List<ScanExtraction>, existing: MedicalReport, category: String): ScanExtraction {
+        if (sections.size <= 1) return sections.first()
+        val existingType = (existing.reportType ?: "").trim().lowercase()
+        val typeMatch = sections.filter { sectionTypeScore(it, existingType) > 0 }.maxByOrNull { sectionTypeScore(it, existingType) }
+        return typeMatch
+            ?: sections.firstOrNull { DateResolver.resolve(it, category) == existing.reportDate }
+            ?: sections.first()
+    }
+
+    /** How closely [section]'s own printed type matches [existingType] (already lowercased). */
+    private fun sectionTypeScore(section: ScanExtraction, existingType: String): Int {
+        val sectionType = (section.reportName?.takeIf { it.isNotBlank() } ?: section.reportType ?: "").trim().lowercase()
+        return when {
+            sectionType.isEmpty() || existingType.isEmpty() -> -1
+            sectionType == existingType -> 3
+            sectionType.contains(existingType) || existingType.contains(sectionType) -> 2
+            else -> 0
+        }
+    }
+
+    /**
+     * Re-runs OCR/AI ONCE against a document's shared source pages and applies the result to
+     * EVERY sibling report row saved from that same scan — e.g. a Haemogram + PT/INR +
+     * Biochemistry panel that were split into separate rows at scan time (see
+     * [DashboardEngine.groupBySourceDocument]). [reprocessReport] only ever touches the one row
+     * it's given, so a document with several panels needed one tap per panel to fully refresh;
+     * this refreshes the whole document in one AI call instead of re-scanning it once per sibling.
+     */
+    /** The sibling report rows saved from the same source document as [reportId], [reportId]'s own
+     *  row included — for the UI to know whether "reprocess the whole document" is offering more
+     *  than the single row [reprocessReport] already covers. */
+    suspend fun documentSiblings(context: Context, reportId: String): List<MedicalReport> = withContext(Dispatchers.IO) {
+        val existing = LocalStore.getReport(context, reportId) ?: return@withContext emptyList()
+        DashboardEngine.groupBySourceDocument(LocalStore.getReports(context))
+            .firstOrNull { group -> group.any { it.id == existing.id } } ?: listOf(existing)
+    }
+
+    suspend fun reprocessDocumentGroup(context: Context, reportId: String): List<MedicalReport> = withContext(Dispatchers.IO) {
+        val existing = LocalStore.getReport(context, reportId) ?: return@withContext emptyList()
+        val siblings = DashboardEngine.groupBySourceDocument(LocalStore.getReports(context))
+            .firstOrNull { group -> group.any { it.id == existing.id } } ?: listOf(existing)
+        val updated = reprocessSiblings(context, siblings)
+        afterWrite(context)
+        updated
+    }
+
+    /**
+     * Bulk counterpart to [reprocessDocumentGroup]: re-extracts every distinct source document
+     * (grouped the same way Records/Trends group them) with at least one report in [period] —
+     * the same "1m"/"3m"/"6m"/"1y"/"2y"/null("all") vocabulary the Records period chips use.
+     * One AI call per document, not per report row.
+     */
+    suspend fun reprocessInRange(
+        context: Context,
+        period: String?,
+        patientName: String? = null,
+        onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
+    ): Int = withContext(Dispatchers.IO) {
+        val all = LocalStore.getReports(context).let { reports ->
+            if (patientName == null) reports else reports.filter { it.patientName.equals(patientName, ignoreCase = true) }
+        }
+        val groups = DashboardEngine.groupBySourceDocument(filterByPeriod(all, period))
+        var processed = 0
+        for ((index, group) in groups.withIndex()) {
+            onProgress(index, groups.size)
+            processed += reprocessSiblings(context, group).size
+        }
+        onProgress(groups.size, groups.size)
+        afterWrite(context)
+        processed
+    }
+
+    /**
+     * Shared implementation behind [reprocessDocumentGroup] and [reprocessInRange]: one OCR/AI
+     * call against the pages [siblings] all share, then each returned section matched back to
+     * whichever sibling it belongs to. Matching is by report TYPE, not date — a multi-panel
+     * document's siblings virtually always carry the SAME printed date, so date alone (the rule
+     * [reprocessReport] uses for a single, already-known row) would collapse every sibling onto
+     * the first section instead of pairing each with its own panel. Callers run [afterWrite]
+     * themselves once, after their own whole batch.
+     */
+    private suspend fun reprocessSiblings(context: Context, siblings: List<MedicalReport>): List<MedicalReport> {
+        if (siblings.isEmpty()) return emptyList()
+        val primary = siblings.first()
+        val pages = primary.imagePaths.mapNotNull { path ->
+            val file = File(path)
+            if (!file.exists()) return@mapNotNull null
+            file.readBytes() to mimeForPath(path)
+        }
+        if (pages.isEmpty()) return siblings
+
+        val docCategory = primary.reportCategory ?: "other"
+        val scanType = if (docCategory == "prescription" || primary.reportType == "Prescription") "prescription" else "report"
+        val extraction = OcrEngine.scan(context, pages, "", scanType, docCategory, operation = "reprocess")
+        val pool = (extraction.reports.ifEmpty { listOf(extraction.merged()) }).toMutableList()
+
+        val results = mutableListOf<MedicalReport>()
+        for (existing in siblings) {
+            if (pool.isEmpty()) { results += existing; continue }
+            val existingType = (existing.reportType ?: "").trim().lowercase()
+            val best = pool.maxByOrNull { sectionTypeScore(it, existingType) } ?: pool.first()
+            pool.remove(best)
+            results += applyReprocessedSection(context, existing, best, existing.reportCategory ?: docCategory, scanType)
+        }
+        return results
+    }
+
+    /**
+     * Applies one already-extracted [section] to [existing] and persists it, refreshing
+     * everything derived from it (follow-ups, pending tests, medicine reminders, cached
+     * analysis). Does NOT call [afterWrite] — callers batching several of these into one
+     * reprocess run do that once for the whole batch.
+     */
+    private suspend fun applyReprocessedSection(
+        context: Context,
+        existing: MedicalReport,
+        section: ScanExtraction,
+        category: String,
+        scanType: String
+    ): MedicalReport {
         // A report saved by OcrEngine's localFallback() never had its document actually read —
         // its date/type/category were guessed from which scan tab was open, not the content, and
         // its comments are just that placeholder. Now that a real analysis succeeded, all of
@@ -589,10 +725,9 @@ object LocalRepository {
         autoResolvePending(context, updated)
         for (m in updated.medications) if (m.name.isNotBlank())
             MedicineScheduleStore.clearDismissed(context, m.name, updated.patientName ?: "")
-        Log.i("ScanDiag", "REPROCESSED id=$id meds=${updated.medications.size} followUps=${section.followUps.size}")
-        detailedCacheFile(context, id).delete() // invalidate cached detailed analysis
-        afterWrite(context)
-        updated
+        Log.i("ScanDiag", "REPROCESSED id=${existing.id} meds=${updated.medications.size} followUps=${section.followUps.size}")
+        detailedCacheFile(context, existing.id).delete() // invalidate cached detailed analysis
+        return updated
     }
 
     /**

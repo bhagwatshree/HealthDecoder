@@ -17,7 +17,10 @@ interface ReportDao {
     @Query("SELECT * FROM reports ORDER BY COALESCE(reportDate, createdAt) DESC")
     fun getAll(): List<MedicalReport>
 
-    @Query("SELECT * FROM reports WHERE userEmail = :userEmail OR (userEmail IS NULL AND :userEmail = '') ORDER BY COALESCE(reportDate, createdAt) DESC")
+    // userEmail IS NULL is always included (not just when :userEmail is blank) — those are
+    // reports scanned before this device had a signed-in user, and must stay visible once one
+    // signs in rather than silently dropping out of every query and every trend/graph built from it.
+    @Query("SELECT * FROM reports WHERE userEmail = :userEmail OR userEmail IS NULL ORDER BY COALESCE(reportDate, createdAt) DESC")
     fun getAllFiltered(userEmail: String): List<MedicalReport>
 
     @Query("SELECT * FROM reports WHERE id = :id LIMIT 1")
@@ -37,7 +40,7 @@ interface ReportDao {
 
     @Query(
         """SELECT id, patientName, reportDate, reportType, reportCategory, imagePath, createdAt
-           FROM reports WHERE userEmail = :userEmail OR (userEmail IS NULL AND :userEmail = '')
+           FROM reports WHERE userEmail = :userEmail OR userEmail IS NULL
            ORDER BY COALESCE(reportDate, createdAt) DESC"""
     )
     fun getSummariesFiltered(userEmail: String): List<ReportSummary>
@@ -46,7 +49,7 @@ interface ReportDao {
     @Query(
         """SELECT r.id, r.patientName, r.reportDate, r.reportType, r.reportCategory, r.imagePath, r.createdAt
            FROM reports r JOIN reports_fts fts ON r.rowid = fts.rowid
-           WHERE (r.userEmail = :userEmail OR (r.userEmail IS NULL AND :userEmail = ''))
+           WHERE (r.userEmail = :userEmail OR r.userEmail IS NULL)
              AND reports_fts MATCH :ftsQuery
            ORDER BY COALESCE(r.reportDate, r.createdAt) DESC"""
     )
@@ -67,14 +70,14 @@ interface ReportDao {
     fun countOtherReportsUsingPath(path: String, excludeId: String): Int
 
     /** id + page hashes of every report, for exact duplicate-file detection. */
-    @Query("SELECT id, pageHashes FROM reports WHERE userEmail = :userEmail OR (userEmail IS NULL AND :userEmail = '')")
+    @Query("SELECT id, pageHashes FROM reports WHERE userEmail = :userEmail OR userEmail IS NULL")
     fun getAllPageHashesFiltered(userEmail: String): List<ReportHashRow>
 
     /** Candidate reports for content-level duplicate detection. */
     @Query(
         """SELECT * FROM reports
            WHERE patientName = :patient COLLATE NOCASE AND reportDate = :date AND reportCategory = :category
-             AND (userEmail = :userEmail OR (userEmail IS NULL AND :userEmail = ''))"""
+             AND (userEmail = :userEmail OR userEmail IS NULL)"""
     )
     fun findByPatientDateCategory(patient: String, date: String, category: String, userEmail: String): List<MedicalReport>
 
@@ -83,7 +86,7 @@ interface ReportDao {
         """SELECT * FROM reports
            WHERE id != :excludeId AND patientName = :patient AND reportCategory = :category
              AND COALESCE(reportDate, '') < :beforeDate
-             AND (userEmail = :userEmail OR (userEmail IS NULL AND :userEmail = ''))
+             AND (userEmail = :userEmail OR userEmail IS NULL)
            ORDER BY COALESCE(reportDate, createdAt) DESC LIMIT 1"""
     )
     fun findPrevious(patient: String, category: String, beforeDate: String, excludeId: String, userEmail: String): MedicalReport?

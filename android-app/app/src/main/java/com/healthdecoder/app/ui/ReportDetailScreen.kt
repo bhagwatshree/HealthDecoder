@@ -83,6 +83,11 @@ fun ReportDetailScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showReprocessDialog by remember { mutableStateOf(false) }
     var isReprocessing by remember { mutableStateOf(false) }
+    // Other report rows saved from the same source document (e.g. a Haemogram + PT/INR +
+    // Biochemistry panel split into separate rows at scan time) — lets the reprocess dialog
+    // offer refreshing all of them together instead of only this one section.
+    var documentSiblingCount by remember { mutableStateOf(1) }
+    var reprocessWholeDocument by remember { mutableStateOf(false) }
     var showFullImageDialog by remember { mutableStateOf(false) }
     var medicineSheetName by remember { mutableStateOf<String?>(null) }
     var fullImagePath by remember { mutableStateOf<String?>(null) }
@@ -160,6 +165,7 @@ fun ReportDetailScreen(
                     // above is already on screen while this runs; the cards appear when ready.
                     runCatching { LocalRepository.ensureEnrichment(context, reportId) }
                         .getOrNull()?.let { report = it }
+                    documentSiblingCount = runCatching { LocalRepository.documentSiblings(context, reportId).size }.getOrDefault(1)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -1530,7 +1536,25 @@ fun ReportDetailScreen(
                 AlertDialog(
                     onDismissRequest = { showReprocessDialog = false },
                     title = { Text(tr("Reprocess this report?")) },
-                    text = { Text(tr("This re-runs AI analysis on the originally scanned image and refreshes the extracted test values, medicines and insights below. Useful if the earlier scan came back incomplete (e.g. the API was briefly unavailable). It may use some of your API quota.")) },
+                    text = {
+                        Column {
+                            Text(tr("This re-runs AI analysis on the originally scanned image and refreshes the extracted test values, medicines and insights below. Useful if the earlier scan came back incomplete (e.g. the API was briefly unavailable). It may use some of your API quota."))
+                            // Only shown when this section came from a multi-panel scan (e.g. a
+                            // Haemogram + PT/INR + Biochemistry document split into separate
+                            // sections) — lets one reprocess refresh every section at once instead
+                            // of needing a separate tap per section.
+                            if (documentSiblingCount > 1) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.clickable { reprocessWholeDocument = !reprocessWholeDocument }
+                                ) {
+                                    Checkbox(checked = reprocessWholeDocument, onCheckedChange = { reprocessWholeDocument = it })
+                                    Text(tr("Also reprocess the other %d sections of this document").format(documentSiblingCount - 1))
+                                }
+                            }
+                        }
+                    },
                     confirmButton = {
                         Button(onClick = {
                             showReprocessDialog = false
@@ -1538,14 +1562,22 @@ fun ReportDetailScreen(
                                 isReprocessing = true
                                 errorMessage = ""
                                 try {
-                                    val updated = LocalRepository.reprocessReport(context, reportId)
-                                    if (updated != null) report = updated
-                                    else errorMessage = "Couldn't reprocess: report or its scanned image is missing."
+                                    if (reprocessWholeDocument) {
+                                        val updated = LocalRepository.reprocessDocumentGroup(context, reportId)
+                                        val thisOne = updated.firstOrNull { it.id == reportId }
+                                        if (thisOne != null) report = thisOne
+                                        else errorMessage = "Couldn't reprocess: report or its scanned image is missing."
+                                    } else {
+                                        val updated = LocalRepository.reprocessReport(context, reportId)
+                                        if (updated != null) report = updated
+                                        else errorMessage = "Couldn't reprocess: report or its scanned image is missing."
+                                    }
                                 } catch (e: Exception) {
                                     e.printStackTrace()
                                     errorMessage = "Failed to reprocess this report."
                                 } finally {
                                     isReprocessing = false
+                                    reprocessWholeDocument = false
                                 }
                             }
                         }) {
