@@ -219,13 +219,25 @@ object LocalRepository {
                 continue
             }
 
+            // Dense multi-panel documents (10+ distinct panels in one scan) have been observed to
+            // come back with a panel's NAME correctly read but its VALUES actually belonging to an
+            // adjacent panel (e.g. "Thyroid Profile (T3, T4, TSH)" holding Haemoglobin/RBC values)
+            // — the AI losing track of which numbers belong under which header. There's no way to
+            // reliably prevent that extraction mistake, so surface it instead of saving it silently
+            // indistinguishable from a correct read: see [DashboardEngine.contentMismatchWarning].
+            val mismatch = DashboardEngine.contentMismatchWarning(sectionType, section.testResults?.parameters ?: emptyList())
+            val sectionComments = listOfNotNull(
+                mismatch?.let { "⚠ This section may be mislabeled — $it. Please verify against the original scan and reprocess if needed." },
+                section.comments?.takeIf { it.isNotBlank() }
+            ).joinToString("\n")
+
             var report = MedicalReport(
                 id = if (index == 0) bundleId else LocalStore.newId(),
                 patientName = patientName,
                 reportDate = reportDate,
                 reportType = sectionType,
                 extractedText = sectionText,
-                comments = section.comments ?: "",
+                comments = sectionComments,
                 medications = dedupeMedications(resolveMedicationDates(section.medications, reportDate)),
                 imagePath = imagePath,
                 imagePaths = imagePaths,
@@ -261,6 +273,7 @@ object LocalRepository {
             saved.add(report)
             Log.i("ScanDiag", "SAVED report id=${report.id} type=$sectionType category=$category " +
                 "patient=$patientName date=$reportDate meds=${report.medications.size} followUps=${section.followUps.size}")
+            if (mismatch != null) Log.w("ScanDiag", "CONTENT MISMATCH id=${report.id} type=$sectionType — $mismatch")
         }
 
         if (saved.isEmpty()) {
@@ -714,6 +727,12 @@ object LocalRepository {
         val correctedCategory = if (wasDegraded) classifyCategory(sectionType, section.reportType, category, scanType) else category
         val correctedDate = if (wasDegraded) (DateResolver.resolve(section, correctedCategory) ?: existing.reportDate) else existing.reportDate
 
+        // Same safety net as saveScan() applies at original scan time — reprocessing re-reads the
+        // document with a fresh AI call, which can make the same panel/adjacent-panel mix-up all
+        // over again. See DashboardEngine.contentMismatchWarning.
+        val mismatch = DashboardEngine.contentMismatchWarning(sectionType, section.testResults?.parameters ?: emptyList())
+        if (mismatch != null) Log.w("ScanDiag", "CONTENT MISMATCH id=${existing.id} type=$sectionType — $mismatch")
+
         // Parameters/medications aren't user-editable today, so overwriting them is safe;
         // comments/raw text ARE user-editable, so only fill those in if still blank (a degraded
         // report's placeholder comment doesn't count as real user content, so it's replaced too).
@@ -722,7 +741,11 @@ object LocalRepository {
             medications = dedupeMedications(resolveMedicationDates(
                 section.medications.ifEmpty { existing.medications }, correctedDate ?: today()
             )),
-            comments = if (wasDegraded) section.comments else (existing.comments?.takeIf { it.isNotBlank() } ?: section.comments),
+            comments = listOfNotNull(
+                mismatch?.let { "⚠ This section may be mislabeled — $it. Please verify against the original scan and reprocess if needed." },
+                (if (wasDegraded) section.comments else (existing.comments?.takeIf { it.isNotBlank() } ?: section.comments))
+                    ?.takeIf { it.isNotBlank() }
+            ).joinToString("\n"),
             extractedText = existing.extractedText?.takeIf { it.isNotBlank() } ?: section.rawText,
             // An upload-only report becomes a full, analyzed report once this succeeds. For a
             // report the AI detected a type/date for, adopt those too if the upload had placeholders.
@@ -798,6 +821,50 @@ object LocalRepository {
      *  them in one action instead of finding and re-opening each one individually. */
     suspend fun findDegradedReports(context: Context): List<MedicalReport> = withContext(Dispatchers.IO) {
         LocalStore.getReports(context).filter { it.comments?.trim() == OcrEngine.DEGRADED_MARKER }
+    }
+
+    /** Every already-saved report whose own values look like they belong to a different panel
+     *  than its title claims — see [DashboardEngine.contentMismatchWarning]. Existing reports
+     *  were saved before that check existed (or before a later reprocess re-triggered it without
+     *  the warning surviving, e.g. an edit that cleared comments), so this re-runs it against
+     *  what's already stored instead of only catching it on the next scan/reprocess. */
+    suspend fun findMislabeledReports(context: Context): List<Pair<MedicalReport, String>> = withContext(Dispatchers.IO) {
+        LocalStore.getReports(context).mapNotNull { r ->
+            DashboardEngine.contentMismatchWarning(r.reportType, r.testResults?.parameters ?: emptyList())
+                ?.let { r to it }
+        }
+    }
+
+    /** How many source documents [reprocessMislabeledReports] touched, and how many rows still
+     *  look mislabeled afterward — reprocessing can legitimately fail to fix one (the same AI
+     *  extraction limitation that caused it in the first place can recur), so this reports the
+     *  after-state rather than assuming success. */
+    data class MislabelFixResult(val documentsReprocessed: Int, val stillMislabeled: Int)
+
+    /**
+     * Finds every report flagged by [findMislabeledReports] and reprocesses the WHOLE document
+     * each one belongs to (not just the flagged row) — the mislabeling is a panel/adjacent-panel
+     * mix-up, so fixing only the row that happened to get flagged risks leaving its sibling
+     * (which likely has the swapped values) untouched. One AI call per affected document.
+     */
+    suspend fun reprocessMislabeledReports(
+        context: Context,
+        onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
+    ): MislabelFixResult = withContext(Dispatchers.IO) {
+        val flaggedIds = findMislabeledReports(context).map { it.first.id }.toSet()
+        val groups = DashboardEngine.groupBySourceDocument(LocalStore.getReports(context))
+            .filter { group -> group.any { it.id in flaggedIds } }
+        for ((index, group) in groups.withIndex()) {
+            onProgress(index, groups.size)
+            try {
+                reprocessSiblings(context, group)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        onProgress(groups.size, groups.size)
+        afterWrite(context)
+        MislabelFixResult(documentsReprocessed = groups.size, stillMislabeled = findMislabeledReports(context).size)
     }
 
     /** Result of [fixDegradedReports]: how many were corrected, and how many are still stuck

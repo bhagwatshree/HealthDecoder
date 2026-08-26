@@ -126,6 +126,7 @@ fun SettingsScreen(
     var restoreBusy by remember { mutableStateOf(false) }
     var degradedCount by remember { mutableStateOf(0) }
     var atRiskCount by remember { mutableStateOf(0) }
+    var mislabeledCount by remember { mutableStateOf(0) }
     // fixDegradedBusy/Progress/Result and recoverBusy/Progress/Result now live in
     // MaintenanceScheduler, not here — see its doc comment for why (surviving navigation away
     // from this screen mid-run, both the coroutine itself and the progress state it reports).
@@ -146,6 +147,7 @@ fun SettingsScreen(
     LaunchedEffect(Unit) { degradedCount = LocalRepository.findDegradedReports(context).size }
     LaunchedEffect(Unit) { hasAutoBackupPassword = SecureKeyManager.getBackupPassword(context) != null }
     LaunchedEffect(Unit) { atRiskCount = LocalRepository.findAtRiskBundles(context).size }
+    LaunchedEffect(Unit) { mislabeledCount = LocalRepository.findMislabeledReports(context).size }
 
     // SAF folder picker: user picks a cloud-synced folder (Drive / OneDrive / Dropbox / local)
     val folderPickerLauncher = rememberLauncherForActivityResult(
@@ -628,6 +630,64 @@ fun SettingsScreen(
                                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onError)
                             } else {
                                 Text(trFormat("Check Now (%1\$d)", atRiskCount), color = MaterialTheme.colorScheme.onError)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Dense multi-panel documents (10+ distinct panels in one scan) can come back with a
+            // panel's name correctly read but its values actually belonging to an adjacent panel
+            // (e.g. "Thyroid Profile" holding Haemoglobin/RBC values) — the AI losing track of
+            // which numbers belong under which header. Only shown when something's actually flagged.
+            if (mislabeledCount > 0) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = tr("Check for Mislabeled Sections"),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            text = trFormat("%1\$d section(s) have values that look like they belong to a different panel than their title says (this happens on dense, many-panel documents) — e.g. a \"Thyroid Profile\" row holding blood-count values instead. Reprocessing re-reads the whole document each affected row came from, not just the flagged row.", mislabeledCount),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        if (MaintenanceScheduler.mislabelBusy) {
+                            Text(
+                                trFormat(
+                                    "Reprocessing %1\$d of %2\$d document(s)…",
+                                    MaintenanceScheduler.mislabelProgress.first,
+                                    MaintenanceScheduler.mislabelProgress.second
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                        MaintenanceScheduler.mislabelResult?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
+                        }
+                        Button(
+                            onClick = {
+                                // Runs in a scope that outlives this screen — see MaintenanceScheduler.
+                                MaintenanceScheduler.runFixMislabeled(context) {
+                                    mislabeledCount = LocalRepository.findMislabeledReports(context).size
+                                }
+                            },
+                            enabled = !MaintenanceScheduler.mislabelBusy,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            if (MaintenanceScheduler.mislabelBusy) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onError)
+                            } else {
+                                Text(trFormat("Reprocess Affected Documents (%1\$d)", mislabeledCount), color = MaterialTheme.colorScheme.onError)
                             }
                         }
                     }

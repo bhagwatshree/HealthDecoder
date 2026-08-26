@@ -169,6 +169,63 @@ object DashboardEngine {
         TREND_CATEGORIES.firstOrNull { (_, members) -> members.contains(canonicalName) }?.first
             ?: CATEGORY_OTHER
 
+    // Keyword hints for guessing a section's broad category from its own printed NAME (as
+    // opposed to [categoryOf], which classifies from a PARAMETER's canonical name). Deliberately
+    // narrow, high-confidence phrases only — this exists to catch an obvious swap, not to
+    // classify every possible section title, so a name it doesn't recognize returns no opinion
+    // rather than a guess.
+    private val categoryNameHints: List<Pair<String, List<String>>> = listOf(
+        "Blood Count" to listOf("cbc", "haemogram", "hemogram", "complete blood", "blood count"),
+        "Coagulation (PT/INR)" to listOf(
+            "prothrombin", "coagulation", "fibrinogen", "d-dimer", "d dimer",
+            "pt/inr", "pt & inr", "pt and inr", "pt-inr"
+        ),
+        "Thyroid & Vitamins" to listOf(
+            "thyroid", "tsh", "t3,", "t3)", "t3 ", "t4,", "t4)", "t4 ", "vitamin d", "vitamin b12",
+            "ferritin", "tibc", "folate"
+        ),
+        "Kidney & Liver" to listOf(
+            "liver function", "lft", "hepatic", "kidney function", "renal function", "kft",
+            "bilirubin", "urea", "creatinine"
+        ),
+        "Diabetes" to listOf("hba1c", "glycated", "glycosylated", "glucose tolerance"),
+        "Heart & Cholesterol" to listOf("lipid profile", "cholesterol profile"),
+        "Electrolytes & Minerals" to listOf("electrolyte")
+    )
+
+    /** Best-guess broad category a section's own printed NAME claims to be, or null when nothing
+     *  in [categoryNameHints] recognizes it. */
+    private fun guessedCategoryFromName(sectionName: String): String? {
+        val n = " ${sectionName.lowercase()} "
+        return categoryNameHints.firstOrNull { (_, hints) -> hints.any { n.contains(it) } }?.first
+    }
+
+    /**
+     * Whether [parameters]' own dominant category clearly conflicts with what [sectionName]
+     * claims to be — catches the AI mis-attributing one panel's actual values to an adjacent
+     * panel's header, which has been observed on dense multi-panel documents (a section titled
+     * "Thyroid Profile (T3, T4, TSH)" coming back holding Haemoglobin/RBC values instead). Returns
+     * a short human-readable description of the conflict for a visible warning, or null when
+     * there's no clear conflict — including when there isn't enough signal either way. This is a
+     * safety net that turns a silent, plausible-looking corruption into a visible flag; it cannot
+     * catch every mislabeling (e.g. two panels from the SAME broad category swapped with each
+     * other), only ones crossing into a different recognized category.
+     */
+    fun contentMismatchWarning(sectionName: String?, parameters: List<TestParameter>): String? {
+        if (sectionName.isNullOrBlank() || parameters.size < 2) return null
+        val declared = guessedCategoryFromName(sectionName) ?: return null
+        val paramCategories = parameters.mapNotNull { p ->
+            categoryOf(canonicalParamName(p.name)).takeIf { it != CATEGORY_OTHER }
+        }
+        if (paramCategories.size < 2) return null
+        val (dominantCategory, dominantCount) = paramCategories.groupingBy { it }.eachCount()
+            .maxByOrNull { it.value } ?: return null
+        if (dominantCategory == declared) return null
+        // Require a clear majority (not just one stray parameter) before calling it a conflict.
+        if (dominantCount < paramCategories.size / 2 + 1) return null
+        return "labeled \"$sectionName\" but its own values look like $dominantCategory, not $declared"
+    }
+
     /** Test condition for a blood-sugar reading (Fasting / PP / Random), or "" if unspecified —
      *  shown per-point alongside the value since a fasting and a post-meal reading aren't
      *  directly comparable even though they share one trend line. */

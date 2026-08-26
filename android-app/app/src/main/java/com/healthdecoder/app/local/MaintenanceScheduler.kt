@@ -68,4 +68,31 @@ object MaintenanceScheduler {
             onDone()
         }
     }
+
+    var mislabelBusy by mutableStateOf(false)
+        private set
+    var mislabelProgress by mutableStateOf(0 to 0)
+        private set
+    var mislabelResult by mutableStateOf<String?>(null)
+        private set
+
+    fun runFixMislabeled(context: Context, onDone: suspend () -> Unit = {}) {
+        if (mislabelBusy) return
+        mislabelBusy = true
+        mislabelResult = null
+        val appContext = context.applicationContext
+        BackgroundTasks.launch {
+            val result = LocalRepository.reprocessMislabeledReports(appContext) { done, total ->
+                mislabelProgress = done to total
+            }
+            mislabelResult = if (result.stillMislabeled == 0) {
+                "Reprocessed ${result.documentsReprocessed} document(s) — all clear now."
+            } else {
+                "Reprocessed ${result.documentsReprocessed} document(s) — ${result.stillMislabeled} row(s) still look mislabeled " +
+                    "(the AI couldn't cleanly re-segment them again; try once more, or re-scan the original paper)."
+            }
+            mislabelBusy = false
+            onDone()
+        }
+    }
 }
