@@ -458,10 +458,24 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
     var minV = dataMin - pad
     var maxV = dataMax + pad
     // Pull in a band edge only if it's within ~half the data span of the data (so it's "just off
-    // screen"), never further — keeps the reference visible without flattening the data.
+    // screen"), never further — keeps the reference visible without flattening the data. That
+    // distance cap only guards against TWO competing edges squashing the scale between them; a
+    // report with just one bound (e.g. HbA1c's "<= 5.6 Non-Diabetic" — no printed lower bound) has
+    // no such risk, and is exactly the case where hiding it hurts most: a patient whose readings
+    // are consistently elevated only drifts further from that cutoff over time, never closer, so
+    // capping the distance would mean they can NEVER see how far above normal they are — always
+    // extend for a single-sided band instead of applying the near-only guard.
     val nearPull = (if (span0 == 0f) pad else span0) * 0.6f
-    bandLow?.let { if (it < minV && it >= dataMin - nearPull) minV = it - pad * 0.4f }
-    bandHigh?.let { if (it > maxV && it <= dataMax + nearPull) maxV = it + pad * 0.4f }
+    if (bandLow != null && bandHigh == null) {
+        if (bandLow < minV) minV = bandLow - pad * 0.4f
+        if (bandLow > maxV) maxV = bandLow + pad * 0.4f
+    } else if (bandHigh != null && bandLow == null) {
+        if (bandHigh > maxV) maxV = bandHigh + pad * 0.4f
+        if (bandHigh < minV) minV = bandHigh - pad * 0.4f
+    } else {
+        bandLow?.let { if (it < minV && it >= dataMin - nearPull) minV = it - pad * 0.4f }
+        bandHigh?.let { if (it > maxV && it <= dataMax + nearPull) maxV = it + pad * 0.4f }
+    }
     // Never show a negative axis for a naturally non-negative measurement.
     if (dataMin >= 0f) minV = minV.coerceAtLeast(0f)
     val range = (maxV - minV).let { if (it == 0f) 1f else it }

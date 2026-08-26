@@ -57,9 +57,13 @@ object UnitConverter {
         return when (cleaned) {
             "mg%", "mg/100ml", "mgs/dl", "mgs%", "mgpercent" -> "mg/dl"
             "gm%", "gm/dl", "gms/dl", "g%" -> "g/dl"
+            "gm/l" -> "g/l"
             "mcg/dl" -> "ug/dl"
             "micromol/l" -> "umol/l"
             "miu/l", "uu/ml", "uiu/l" -> "uiu/ml"  // TSH: µIU/mL ≡ mIU/L ≡ µU/mL (1:1)
+            // Vitamin B12 etc. — ng/L and pg/mL are the exact same value (ng=1000pg, L=1000mL),
+            // a dimensional identity rather than a test-specific factor, so it's safe to fold here.
+            "ng/l" -> "pg/ml"
             "percent", "percentage", "pct" -> "%"
             // Prothrombin Time etc. — labs print "Sec", "Secs", "Second(s)" interchangeably for
             // the exact same unit; without this a report using one spelling and the standard-unit
@@ -67,12 +71,14 @@ object UnitConverter {
             // dropped from the trend chart instead of plotted.
             "sec", "secs", "second", "seconds" -> "sec"
             // Cell counts — thousands-per-µL scale (same number as 10⁹/L)
-            "10^3/ul", "10e3/ul", "x10^3/ul", "10x3/ul", "thou/ul", "k/ul", "10^3/cumm" -> "10^3/ul"
+            "10^3/ul", "10e3/ul", "x10^3/ul", "10x3/ul", "thou/ul", "thou/cumm", "th/ul", "th/cumm",
+            "thousands/ul", "thousands/cumm", "k/ul", "k/cumm", "10^3/cumm" -> "10^3/ul"
             "10^9/l", "x10^9/l", "10e9/l" -> "10^9/l"
             // Cell counts — per-µL scale (e.g. 7500, 250000)
             "/ul", "cells/ul", "/cumm", "cells/cumm", "/mm3", "cells/mm3", "count/cumm" -> "/ul"
             // Indian platelet convention — lakhs (100,000) per µL / cumm
-            "lakhs/cumm", "lakh/cumm", "lakhs/ul", "lakh/ul", "lacs/cumm", "lac/cumm", "lakhs/mm3", "lakh/mm3" -> "lakh/ul"
+            "lakhs/cumm", "lakh/cumm", "lakhs/ul", "lakh/ul", "lacs/cumm", "lac/cumm",
+            "lacs/ul", "lac/ul", "lakhs/mm3", "lakh/mm3" -> "lakh/ul"
             else -> cleaned
         }
     }
