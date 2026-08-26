@@ -538,6 +538,51 @@ fun ReportDetailScreen(
                         }
                     }
 
+                    // Flags a panel/adjacent-panel mix-up (a title correctly read but its values
+                    // actually belonging to a different panel of the same document) — see
+                    // DashboardEngine.contentMismatchWarning. Placed right where the mismatched
+                    // data itself is shown, with a direct fix action, not just a passive note.
+                    val mismatchWarning = remember(currentReport.id, currentReport.testResults) {
+                        com.healthdecoder.app.ai.DashboardEngine.contentMismatchWarning(
+                            currentReport.reportType, currentReport.testResults?.parameters ?: emptyList()
+                        )
+                    }
+                    if (mismatchWarning != null) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                                    Text(
+                                        tr("This section may be mislabeled"),
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                                Text(
+                                    "This section is $mismatchWarning — a dense multi-panel scan can lose track of which values belong under which header. Reprocessing re-reads the whole document this section came from.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Button(
+                                    onClick = {
+                                        com.healthdecoder.app.local.ReprocessScheduler.runDocument(context, reportId) {
+                                            loadReportDetails()
+                                        }
+                                    },
+                                    enabled = !isReprocessing,
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                ) {
+                                    if (isReprocessing) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onError)
+                                    else Text(tr("Reprocess This Document"), color = MaterialTheme.colorScheme.onError)
+                                }
+                            }
+                        }
+                    }
+
                     // Clinical Insights & Trend Comparison Card
                     val comp = currentReport.comparisonResult
                     if (comp != null && comp.hasComparison) {

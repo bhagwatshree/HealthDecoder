@@ -544,8 +544,14 @@ object DashboardEngine {
         // multiple points on the same line (e.g. Hemoglobin vs MCH collapsing together).
         val paramMap = linkedMapOf<String, MutableList<TrendDataPoint>>()
         val seenPerReport = HashSet<String>()
+        // Computed once per report, not per parameter — same check as saveScan()/reprocessing use
+        // to flag a NEW mislabel, re-run here so an EXISTING one shows up on the chart too.
+        val mislabeledCache = HashMap<String, Boolean>()
         for (r in chrono) {
             val date = (r.reportDate ?: r.createdAt).split("T")[0]
+            val mislabeled = mislabeledCache.getOrPut(r.id) {
+                contentMismatchWarning(r.reportType, r.testResults?.parameters ?: emptyList()) != null
+            }
             for (p in r.testResults?.parameters ?: emptyList()) {
                 val canon = trendCategoryOf(p) ?: continue
                 if (!seenPerReport.add("$canon|${r.id}")) continue // already have this test for this report
@@ -581,7 +587,7 @@ object DashboardEngine {
                     refHigh = refHigh?.let { UnitConverter.convert(canon, it, rawUnit, unit) }
                 }
                 paramMap.getOrPut(canon) { mutableListOf() }.add(
-                    TrendDataPoint(date, value, unit, p.status ?: "", r.id, context, origValue, origUnit, converted, refLow, refHigh)
+                    TrendDataPoint(date, value, unit, p.status ?: "", r.id, context, origValue, origUnit, converted, refLow, refHigh, mislabeled)
                 )
             }
         }

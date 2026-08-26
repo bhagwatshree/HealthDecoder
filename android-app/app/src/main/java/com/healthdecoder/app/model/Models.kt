@@ -148,7 +148,11 @@ data class TrendDataPoint(
     // (possibly converted) unit as `value` above, so the chart can shade a normal-range band.
     // Null when the report stated no range, or a one-sided limit (e.g. "<200") leaves a bound open.
     @SerializedName("refLow") val refLow: Float? = null,
-    @SerializedName("refHigh") val refHigh: Float? = null
+    @SerializedName("refHigh") val refHigh: Float? = null,
+    // True when the report this point came from looks like it may hold a different panel's
+    // values than its own title claims (see DashboardEngine.contentMismatchWarning) — the chart
+    // flags the point instead of plotting it as if it were an ordinary, correctly-read reading.
+    @SerializedName("mislabeled") val mislabeled: Boolean = false
 )
 
 data class ParameterTrend(

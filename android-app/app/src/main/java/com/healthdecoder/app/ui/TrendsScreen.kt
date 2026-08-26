@@ -50,6 +50,9 @@ import kotlinx.coroutines.launch
 private val statusHigh = Color(0xFFC62828)
 private val statusLow = Color(0xFFE65100)
 private val statusNormal = Color(0xFF2E7D32)
+// Distinct from the clinical status colors above (this isn't saying the READING is abnormal,
+// it's saying the READING might not actually belong to this test at all).
+private val mislabeledColor = Color(0xFF6A1B9A)
 
 private fun parseNum(s: String): Float? {
     val m = Regex("-?\\d+(\\.\\d+)?").find(s) ?: return null
@@ -362,15 +365,23 @@ private fun TrendCard(trend: ParameterTrend, onPointClick: (TrendDataPoint) -> U
                 latest?.let {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "${it.value} ${it.unit}".trim() + (it.context.takeIf { c -> c.isNotBlank() }?.let { c -> " ($c)" } ?: ""),
+                            text = (if (it.mislabeled) "⚠ " else "") + "${it.value} ${it.unit}".trim() + (it.context.takeIf { c -> c.isNotBlank() }?.let { c -> " ($c)" } ?: ""),
                             fontWeight = FontWeight.Bold,
-                            color = statusColor(it.status, MaterialTheme.colorScheme.onSurface)
+                            color = if (it.mislabeled) mislabeledColor else statusColor(it.status, MaterialTheme.colorScheme.onSurface)
                         )
                         Icon(trendIcon, contentDescription = trend.trend, tint = trendColor, modifier = Modifier.size(18.dp))
                     }
                 }
             }
             // Latest status as a colored badge + plain-language line, so the number has meaning.
+            if (latest?.mislabeled == true) {
+                Text(
+                    text = tr("This reading may belong to a different panel of that report — tap it to check."),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = mislabeledColor,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             latest?.status?.takeIf { it.isNotBlank() }?.let { st ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     StatusBadge(st)
@@ -410,6 +421,15 @@ private fun TrendCard(trend: ParameterTrend, onPointClick: (TrendDataPoint) -> U
                     text = "⚠ Not shown on the chart (a different unit we can't safely convert to $stdUnit): $listed.",
                     style = MaterialTheme.typography.labelSmall,
                     color = statusLow,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            val mislabeledPoints = trend.dataPoints.filter { it.mislabeled }
+            if (mislabeledPoints.isNotEmpty()) {
+                Text(
+                    text = "⚠ ${mislabeledPoints.size} reading(s) (in purple) may actually belong to a different panel of that report, not ${trend.name} — tap one to open the report and reprocess it, or fix all flagged reports at once from Settings.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = mislabeledColor,
                     modifier = Modifier.padding(top = 2.dp)
                 )
             }
@@ -612,7 +632,7 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
             val minGap = with(density) { 46.dp.toPx() }
             val dotAlpha = ((progress - 0.5f) * 2f).coerceIn(0f, 1f)
             pos.forEach { (o, dp) ->
-                val c = statusColor(dp.status, primary)
+                val c = if (dp.mislabeled) mislabeledColor else statusColor(dp.status, primary)
                 drawCircle(color = c.copy(alpha = 0.18f * dotAlpha), radius = with(density) { 9.dp.toPx() }, center = o)
                 drawCircle(color = surface, radius = with(density) { 5.dp.toPx() } * dotAlpha, center = o)
                 drawCircle(color = c.copy(alpha = dotAlpha), radius = with(density) { 4.dp.toPx() } * dotAlpha, center = o)
@@ -621,6 +641,7 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
                     valuePaint.alpha = (255 * dotAlpha).toInt()
                     labelPaint.alpha = (255 * dotAlpha).toInt()
                     val pointLabel = buildString {
+                        if (dp.mislabeled) append("⚠ ")
                         append(dp.value)
                         if (dp.context.isNotBlank()) append(" (${dp.context.first()})")
                         if (dp.converted) append(" ↺")
