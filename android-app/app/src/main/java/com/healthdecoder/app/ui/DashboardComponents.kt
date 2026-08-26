@@ -713,11 +713,11 @@ fun ReportGroupCard(
     onReprocessed: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
     var showReprocessDialog by remember { mutableStateOf(false) }
-    var isReprocessing by remember { mutableStateOf(false) }
-
     val first = reports.first()
+    // Keyed by report id, not local remember{} — survives this card scrolling off-screen or the
+    // user leaving Records entirely (see ReprocessScheduler).
+    val isReprocessing = com.healthdecoder.app.local.ReprocessScheduler.isBusy(first.id)
     val sourceName = reports.firstNotNullOfOrNull { r -> r.sourceFiles.firstOrNull()?.name?.takeIf { it.isNotBlank() } }
 
     // The box is read by its OUTLINE, not by its fill. A tinted fill alone cannot work in both
@@ -775,21 +775,11 @@ fun ReportGroupCard(
                 AlertDialog(
                     onDismissRequest = { showReprocessDialog = false },
                     title = { Text(tr("Reprocess this document?")) },
-                    text = { Text(tr("Re-runs AI analysis on the originally scanned pages and refreshes all %d sections of this document together — %s.").format(reports.size, sourceName ?: tr("this document"))) },
+                    text = { Text(tr("Re-runs AI analysis on the originally scanned pages and refreshes all %d sections of this document together — %s. Keeps running even if you switch screens.").format(reports.size, sourceName ?: tr("this document"))) },
                     confirmButton = {
                         Button(onClick = {
                             showReprocessDialog = false
-                            coroutineScope.launch {
-                                isReprocessing = true
-                                try {
-                                    LocalRepository.reprocessDocumentGroup(context, first.id)
-                                    onReprocessed()
-                                } catch (e: Exception) {
-                                    e.printStackTrace()
-                                } finally {
-                                    isReprocessing = false
-                                }
-                            }
+                            com.healthdecoder.app.local.ReprocessScheduler.runDocument(context, first.id, onReprocessed)
                         }) {
                             Text(tr("Reprocess"))
                         }

@@ -48,9 +48,10 @@ fun RecordsScreen(
     // Bulk reprocess: re-runs AI extraction on every document (one call per document, all its
     // sections included) whose reports fall in the currently selected period — for backfilling
     // values an older/weaker extraction pass missed, without reprocessing one section at a time.
+    // Progress/busy state lives in ReprocessScheduler, not here — the actual run survives
+    // navigating away, and local remember{} state would otherwise look like it stopped whenever
+    // this screen leaves and re-enters composition even though it's still running underneath.
     var showBulkReprocessDialog by remember { mutableStateOf(false) }
-    var isBulkReprocessing by remember { mutableStateOf(false) }
-    var bulkReprocessProgress by remember { mutableStateOf(0 to 0) }
 
     LaunchedEffect(searchQuery) {
         if (searchQuery.isBlank()) {
@@ -190,13 +191,14 @@ fun RecordsScreen(
             val currentPeriodLabel = periods.firstOrNull { it.first == selectedPeriod }?.second ?: tr("All Time")
             TextButton(
                 onClick = { showBulkReprocessDialog = true },
-                enabled = !isBulkReprocessing,
+                enabled = !com.healthdecoder.app.local.ReprocessScheduler.bulkBusy,
                 modifier = Modifier.padding(horizontal = 12.dp)
             ) {
-                if (isBulkReprocessing) {
+                if (com.healthdecoder.app.local.ReprocessScheduler.bulkBusy) {
+                    val progress = com.healthdecoder.app.local.ReprocessScheduler.bulkProgress
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(tr("Reprocessing %d of %d documents…").format(bulkReprocessProgress.first, bulkReprocessProgress.second), fontSize = 12.sp)
+                    Text(tr("Reprocessing %d of %d documents…").format(progress.first, progress.second), fontSize = 12.sp)
                 } else {
                     Icon(imageVector = Icons.Default.Autorenew, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
@@ -207,26 +209,11 @@ fun RecordsScreen(
                 AlertDialog(
                     onDismissRequest = { showBulkReprocessDialog = false },
                     title = { Text(tr("Reprocess all reports in \"%s\"?").format(currentPeriodLabel)) },
-                    text = { Text(tr("Re-runs AI analysis on every document in this range — one AI call per document, covering every section within it (e.g. a Haemogram + PT/INR + Biochemistry panel refreshes together). Useful after an app update improves extraction, so older scans pick up values they missed the first time. This can use a meaningful amount of your API quota depending on how many documents fall in this range.")) },
+                    text = { Text(tr("Re-runs AI analysis on every document in this range — one AI call per document, covering every section within it (e.g. a Haemogram + PT/INR + Biochemistry panel refreshes together). Useful after an app update improves extraction, so older scans pick up values they missed the first time. This can use a meaningful amount of your API quota depending on how many documents fall in this range. Keeps running even if you switch screens.")) },
                     confirmButton = {
                         Button(onClick = {
                             showBulkReprocessDialog = false
-                            coroutineScope.launch {
-                                isBulkReprocessing = true
-                                bulkReprocessProgress = 0 to 0
-                                errorMessage = ""
-                                try {
-                                    com.healthdecoder.app.local.LocalRepository.reprocessInRange(context, selectedPeriod) { done, total ->
-                                        bulkReprocessProgress = done to total
-                                    }
-                                    loadDashboard()
-                                } catch (e: Exception) {
-                                    e.printStackTrace()
-                                    errorMessage = "Failed to reprocess reports in this range."
-                                } finally {
-                                    isBulkReprocessing = false
-                                }
-                            }
+                            com.healthdecoder.app.local.ReprocessScheduler.runBulk(context, selectedPeriod) { loadDashboard() }
                         }) {
                             Text(tr("Reprocess"))
                         }

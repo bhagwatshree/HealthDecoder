@@ -82,7 +82,10 @@ fun ReportDetailScreen(
     var rawTextExpanded by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showReprocessDialog by remember { mutableStateOf(false) }
-    var isReprocessing by remember { mutableStateOf(false) }
+    // Reflects ReprocessScheduler, not local state — a reprocess started here keeps running (and
+    // this spinner keeps showing, if you come back to this same report) even if you navigate away
+    // mid-run instead of getting silently cancelled.
+    val isReprocessing = com.healthdecoder.app.local.ReprocessScheduler.isBusy(reportId)
     // Other report rows saved from the same source document (e.g. a Haemogram + PT/INR +
     // Biochemistry panel split into separate rows at scan time) — lets the reprocess dialog
     // offer refreshing all of them together instead of only this one section.
@@ -1558,26 +1561,20 @@ fun ReportDetailScreen(
                     confirmButton = {
                         Button(onClick = {
                             showReprocessDialog = false
-                            coroutineScope.launch {
-                                isReprocessing = true
-                                errorMessage = ""
-                                try {
-                                    if (reprocessWholeDocument) {
-                                        val updated = LocalRepository.reprocessDocumentGroup(context, reportId)
-                                        val thisOne = updated.firstOrNull { it.id == reportId }
-                                        if (thisOne != null) report = thisOne
-                                        else errorMessage = "Couldn't reprocess: report or its scanned image is missing."
-                                    } else {
-                                        val updated = LocalRepository.reprocessReport(context, reportId)
-                                        if (updated != null) report = updated
-                                        else errorMessage = "Couldn't reprocess: report or its scanned image is missing."
-                                    }
-                                } catch (e: Exception) {
-                                    e.printStackTrace()
-                                    errorMessage = "Failed to reprocess this report."
-                                } finally {
-                                    isReprocessing = false
-                                    reprocessWholeDocument = false
+                            val wholeDoc = reprocessWholeDocument
+                            reprocessWholeDocument = false
+                            // Runs via ReprocessScheduler (outlives this screen) rather than this
+                            // composable's own coroutineScope, so backing out of Report Details
+                            // mid-run doesn't cancel it — the report just picks up the refreshed
+                            // data next time it's opened, whether that's this same navigation or a
+                            // later one.
+                            if (wholeDoc) {
+                                com.healthdecoder.app.local.ReprocessScheduler.runDocument(context, reportId) {
+                                    loadReportDetails()
+                                }
+                            } else {
+                                com.healthdecoder.app.local.ReprocessScheduler.runSingleReport(context, reportId) { updated ->
+                                    if (updated != null) report = updated
                                 }
                             }
                         }) {
