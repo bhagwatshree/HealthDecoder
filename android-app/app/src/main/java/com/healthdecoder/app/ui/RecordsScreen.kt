@@ -358,7 +358,8 @@ fun RecordsScreen(
                                     } else {
                                         ReportGroupCard(
                                             reports = group,
-                                            onReportClick = { id -> onNavigateToDetail(id) }
+                                            onReportClick = { id -> onNavigateToDetail(id) },
+                                            onReprocessed = { loadDashboard() }
                                         )
                                     }
                                 }

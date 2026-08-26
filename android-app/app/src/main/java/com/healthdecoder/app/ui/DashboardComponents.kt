@@ -707,8 +707,16 @@ fun PendingTestCard(
 @Composable
 fun ReportGroupCard(
     reports: List<MedicalReport>,
-    onReportClick: (String) -> Unit
+    onReportClick: (String) -> Unit,
+    // Refreshes the caller's list after a successful whole-document reprocess. Optional so
+    // callers that don't offer reprocessing here (none currently) aren't forced to wire it.
+    onReprocessed: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var showReprocessDialog by remember { mutableStateOf(false) }
+    var isReprocessing by remember { mutableStateOf(false) }
+
     val first = reports.first()
     val sourceName = reports.firstNotNullOfOrNull { r -> r.sourceFiles.firstOrNull()?.name?.takeIf { it.isNotBlank() } }
 
@@ -729,25 +737,68 @@ fun ReportGroupCard(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = "Patient: ${first.patientName ?: "Unknown Patient"}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = first.reportDate ?: tr("No Date"),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = listOfNotNull(
-                        sourceName,
-                        "${reports.size} ${tr("reports from this document")}"
-                    ).joinToString(" · "),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Patient: ${first.patientName ?: "Unknown Patient"}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = first.reportDate ?: tr("No Date"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = listOfNotNull(
+                            sourceName,
+                            "${reports.size} ${tr("reports from this document")}"
+                        ).joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                // Reprocesses every panel of this document together (one AI call) without needing
+                // to open each panel individually and reprocess it on its own.
+                IconButton(onClick = { showReprocessDialog = true }, enabled = !isReprocessing) {
+                    if (isReprocessing) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    else Icon(imageVector = Icons.Default.Autorenew, contentDescription = tr("Reprocess this document"))
+                }
+            }
+
+            if (showReprocessDialog) {
+                AlertDialog(
+                    onDismissRequest = { showReprocessDialog = false },
+                    title = { Text(tr("Reprocess this document?")) },
+                    text = { Text(tr("Re-runs AI analysis on the originally scanned pages and refreshes all %d sections of this document together — %s.").format(reports.size, sourceName ?: tr("this document"))) },
+                    confirmButton = {
+                        Button(onClick = {
+                            showReprocessDialog = false
+                            coroutineScope.launch {
+                                isReprocessing = true
+                                try {
+                                    LocalRepository.reprocessDocumentGroup(context, first.id)
+                                    onReprocessed()
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                } finally {
+                                    isReprocessing = false
+                                }
+                            }
+                        }) {
+                            Text(tr("Reprocess"))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showReprocessDialog = false }) {
+                            Text(tr("Cancel"))
+                        }
+                    }
                 )
             }
 
