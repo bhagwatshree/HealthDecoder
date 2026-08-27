@@ -20,7 +20,7 @@ import com.healthdecoder.app.model.ProcessedEmail
  */
 @Database(
     entities = [MedicalReport::class, ReportFts::class, PendingTest::class, MedLogEntry::class, ProcessedEmail::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -63,6 +63,16 @@ abstract class MedicalDatabase : RoomDatabase() {
         val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `reports` ADD COLUMN `analyzed` INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
+        /** v6: `sourcePageIndices` — which of a document's shared `imagePaths` this particular
+         *  panel's content actually came from, so a single-row reprocess can resend just those
+         *  pages instead of the whole document. Empty for every pre-existing report (they fall
+         *  back to whole-document reprocessing, same as before this existed). */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `reports` ADD COLUMN `sourcePageIndices` TEXT NOT NULL DEFAULT '[]'")
             }
         }
     }

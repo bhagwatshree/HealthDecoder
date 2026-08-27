@@ -71,7 +71,7 @@ object LocalStore {
                 )
                     .openHelperFactory(factory)
                     .setJournalMode(RoomDatabase.JournalMode.TRUNCATE)
-                    .addMigrations(MedicalDatabase.MIGRATION_1_2, MedicalDatabase.MIGRATION_2_3, MedicalDatabase.MIGRATION_3_4, MedicalDatabase.MIGRATION_4_5)
+                    .addMigrations(MedicalDatabase.MIGRATION_1_2, MedicalDatabase.MIGRATION_2_3, MedicalDatabase.MIGRATION_3_4, MedicalDatabase.MIGRATION_4_5, MedicalDatabase.MIGRATION_5_6)
                     .build()
 
                 // Force open the database to verify passphrase decryption is correct
@@ -89,7 +89,7 @@ object LocalStore {
                 )
                     .openHelperFactory(factory)
                     .setJournalMode(RoomDatabase.JournalMode.TRUNCATE)
-                    .addMigrations(MedicalDatabase.MIGRATION_1_2, MedicalDatabase.MIGRATION_2_3, MedicalDatabase.MIGRATION_3_4, MedicalDatabase.MIGRATION_4_5)
+                    .addMigrations(MedicalDatabase.MIGRATION_1_2, MedicalDatabase.MIGRATION_2_3, MedicalDatabase.MIGRATION_3_4, MedicalDatabase.MIGRATION_4_5, MedicalDatabase.MIGRATION_5_6)
                     .build()
             }
 

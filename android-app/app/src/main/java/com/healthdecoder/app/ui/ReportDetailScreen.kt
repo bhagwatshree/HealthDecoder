@@ -91,6 +91,10 @@ fun ReportDetailScreen(
     // offer refreshing all of them together instead of only this one section.
     var documentSiblingCount by remember { mutableStateOf(1) }
     var reprocessWholeDocument by remember { mutableStateOf(false) }
+    // Whether this document has already used up its automatic mislabel-reprocess attempts (see
+    // AppSettings' cap) — stops the mismatch banner's button from being tapped indefinitely for a
+    // document the AI just can't cleanly re-segment.
+    var mislabelReprocessCapped by remember { mutableStateOf(false) }
     var showFullImageDialog by remember { mutableStateOf(false) }
     var medicineSheetName by remember { mutableStateOf<String?>(null) }
     var fullImagePath by remember { mutableStateOf<String?>(null) }
@@ -547,6 +551,11 @@ fun ReportDetailScreen(
                             currentReport.reportType, currentReport.testResults?.parameters ?: emptyList()
                         )
                     }
+                    LaunchedEffect(currentReport.id, mismatchWarning) {
+                        mislabelReprocessCapped = if (mismatchWarning != null) {
+                            LocalRepository.isMislabelReprocessCapped(context, currentReport.id)
+                        } else false
+                    }
                     if (mismatchWarning != null) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -567,17 +576,29 @@ fun ReportDetailScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
-                                Button(
-                                    onClick = {
-                                        com.healthdecoder.app.local.ReprocessScheduler.runDocument(context, reportId) {
-                                            loadReportDetails()
-                                        }
-                                    },
-                                    enabled = !isReprocessing,
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                                ) {
-                                    if (isReprocessing) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onError)
-                                    else Text(tr("Reprocess This Document"), color = MaterialTheme.colorScheme.onError)
+                                if (mislabelReprocessCapped) {
+                                    Text(
+                                        tr("Already reprocessed twice with no fix — the AI can't cleanly re-segment this document. Please verify and edit the values manually against the original document."),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                } else {
+                                    Button(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                LocalRepository.recordMislabelReprocessAttempt(context, reportId)
+                                            }
+                                            com.healthdecoder.app.local.ReprocessScheduler.runDocument(context, reportId) {
+                                                loadReportDetails()
+                                            }
+                                        },
+                                        enabled = !isReprocessing,
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                    ) {
+                                        if (isReprocessing) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onError)
+                                        else Text(tr("Reprocess This Document"), color = MaterialTheme.colorScheme.onError)
+                                    }
                                 }
                             }
                         }

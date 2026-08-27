@@ -223,6 +223,18 @@ data class MedicalReport(
     /** SHA-256 of each scanned page / imported file, used to detect duplicate scans. */
     @ColumnInfo(defaultValue = "'[]'")
     @SerializedName("page_hashes") val pageHashes: List<String> = emptyList(),
+    /**
+     * Which of [imagePaths] this specific panel's own content actually came from — indices into
+     * that same list, 0-based. A multi-panel document (Haemogram + PT/INR + Biochemistry) has
+     * every sibling row sharing the FULL [imagePaths] list; this narrows it down to just the
+     * page(s) that produced THIS row, so a single-row reprocess can resend only those pages
+     * instead of the whole document (cheaper, and no risk of pulling in an adjacent panel's
+     * values). Empty when unknown — pre-existing reports scanned before this existed, or a
+     * section the AI didn't report a page number for — and reprocessing then falls back to
+     * resending the whole document, exactly as it always has.
+     */
+    @ColumnInfo(defaultValue = "'[]'")
+    @SerializedName("source_page_indices") val sourcePageIndices: List<Int> = emptyList(),
     @SerializedName("user_email") val userEmail: String? = null,
     /**
      * False for a report the user only UPLOADED (stored the file, no AI analysis yet) to save

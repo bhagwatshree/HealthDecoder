@@ -85,11 +85,13 @@ object MaintenanceScheduler {
             val result = LocalRepository.reprocessMislabeledReports(appContext) { done, total ->
                 mislabelProgress = done to total
             }
-            mislabelResult = if (result.stillMislabeled == 0) {
-                "Reprocessed ${result.documentsReprocessed} document(s) — all clear now."
-            } else {
-                "Reprocessed ${result.documentsReprocessed} document(s) — ${result.stillMislabeled} row(s) still look mislabeled " +
-                    "(the AI couldn't cleanly re-segment them again; try once more, or re-scan the original paper)."
+            mislabelResult = buildString {
+                append("Reprocessed ${result.documentsReprocessed} document(s)")
+                append(if (result.stillMislabeled == 0) " — all clear now." else " — ${result.stillMislabeled} row(s) still look mislabeled.")
+                if (result.skippedAtCap > 0) {
+                    append(" ${result.skippedAtCap} document(s) already retried twice with no fix — ")
+                    append("please open that report and verify/edit it manually against the original document.")
+                }
             }
             mislabelBusy = false
             onDone()

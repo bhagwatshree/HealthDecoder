@@ -37,6 +37,7 @@ class Converters {
 
     private companion object {
         val STRING_LIST: Type = TypeToken.getParameterized(List::class.java, String::class.java).type
+        val INT_LIST: Type = TypeToken.getParameterized(List::class.java, Integer::class.java).type
         val MEDICATION_LIST: Type = TypeToken.getParameterized(List::class.java, Medication::class.java).type
         val SOURCE_FILE_LIST: Type = TypeToken.getParameterized(List::class.java, SourceFile::class.java).type
     }
@@ -57,6 +58,13 @@ class Converters {
 
     @TypeConverter
     fun jsonToStringList(json: String?): List<String> = fromJson<List<String>>(json, STRING_LIST) ?: emptyList()
+
+    // ── Int lists (e.g. a report's source page indices) ─────────────────────────
+    @TypeConverter
+    fun intListToJson(value: List<Int>?): String = gson.toJson(value ?: emptyList<Int>())
+
+    @TypeConverter
+    fun jsonToIntList(json: String?): List<Int> = fromJson<List<Int>>(json, INT_LIST) ?: emptyList()
 
     // ── Medications ───────────────────────────────────────────────────────────
     @TypeConverter

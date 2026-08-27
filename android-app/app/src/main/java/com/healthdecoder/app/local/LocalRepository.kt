@@ -247,7 +247,8 @@ object LocalRepository {
                 comparisonResult = null,
                 reportCategory = category,
                 healthInsights = null,
-                pageHashes = incomingHashes
+                pageHashes = incomingHashes,
+                sourcePageIndices = sourcePageIndices(section, imagePaths.size)
             )
 
             // Comparison and insights are NOT computed here. They are two further paid AI calls
@@ -529,10 +530,20 @@ object LocalRepository {
      * test parameters, medications and insights. Serves two cases: a first scan that came back
      * incomplete (e.g. the AI API was briefly unavailable), and analyzing an "upload only" report
      * on demand — either way it marks the report [MedicalReport.analyzed] = true.
+     *
+     * Sends ONLY [MedicalReport.sourcePageIndices] when they're known and a genuine subset of the
+     * document — cheaper (fewer page images = fewer tokens billed) and, for a multi-panel
+     * document, safer than the old behaviour of always resending every page: the AI literally
+     * never sees another panel's pages, so it cannot mix its values into this one. Falls back to
+     * resending the WHOLE document when the pages this row came from aren't known (reports scanned
+     * before this tracking existed) — exactly the old behaviour, unchanged for those.
      */
     suspend fun reprocessReport(context: Context, id: String, allowAi: Boolean = true): MedicalReport? = withContext(Dispatchers.IO) {
         val existing = LocalStore.getReport(context, id) ?: return@withContext null
-        val pages = existing.imagePaths.mapNotNull { path ->
+        val knownSubset = existing.sourcePageIndices.filter { it in existing.imagePaths.indices }
+        val targetIndices = knownSubset.takeIf { it.isNotEmpty() && it.size < existing.imagePaths.size }
+        val targetPaths = targetIndices?.map { existing.imagePaths[it] } ?: existing.imagePaths
+        val pages = targetPaths.mapNotNull { path ->
             val file = File(path)
             if (!file.exists()) return@mapNotNull null
             file.readBytes() to mimeForPath(path)
@@ -545,18 +556,30 @@ object LocalRepository {
 
         // This row might be one panel of a multi-panel document (see reprocessSiblings' matching
         // doc comment for the full reasoning) — if this scan came back with no per-section
-        // breakdown at all while the document is known to have more than one panel, applying the
-        // all-panels-flattened-into-one merged() fallback here would silently mix another panel's
-        // parameters into this row instead of refreshing it. Leave it untouched instead.
-        if (extraction.reports.isEmpty() && documentSiblings(context, id).size > 1) return@withContext existing
+        // breakdown at all while the FULL document was sent (targetIndices == null) and the
+        // document is known to have more than one panel, applying the all-panels-flattened-into-one
+        // merged() fallback here would silently mix another panel's parameters into this row
+        // instead of refreshing it. Leave it untouched instead. That risk doesn't apply when only
+        // this row's OWN pages were sent — the AI never saw any other panel's page to mix in.
+        if (extraction.reports.isEmpty() && targetIndices == null && documentSiblings(context, id).size > 1) {
+            return@withContext existing
+        }
 
         val sections = extraction.reports.ifEmpty { listOf(extraction.merged()) }
         val section = bestMatchingSection(sections, existing, category)
 
-        val updated = applyReprocessedSection(context, existing, section, category, scanType)
+        val updated = applyReprocessedSection(context, existing, section, category, scanType, sentPageIndices = targetIndices)
         afterWrite(context)
         updated
     }
+
+    /** Converts an AI extraction's 1-indexed [ScanExtraction.sourcePages] to 0-indexed positions
+     *  into a document's shared page list, dropping anything out of range (a defensive guard
+     *  against the AI miscounting pages). Empty input/output just means the page(s) this section
+     *  came from are unknown — reprocessing then falls back to resending the whole document,
+     *  exactly as it always has. See [MedicalReport.sourcePageIndices]. */
+    private fun sourcePageIndices(section: ScanExtraction, pageCount: Int): List<Int> =
+        section.sourcePages.map { it - 1 }.filter { it in 0 until pageCount }.distinct().sorted()
 
     /**
      * Which freshly-extracted section [existing] should be refreshed with. A multi-panel document
@@ -713,7 +736,13 @@ object LocalRepository {
         existing: MedicalReport,
         section: ScanExtraction,
         category: String,
-        scanType: String
+        scanType: String,
+        // Which 0-indexed positions in existing.imagePaths were actually SENT to the AI for this
+        // call — null means the whole document (the normal case: reprocessSiblings always sends
+        // every page). When only a subset was sent (see reprocessReport's targeted-page path),
+        // section.sourcePages comes back 1-indexed relative to THAT subset, not the full document,
+        // so it must be mapped through sentPageIndices rather than treated as a document-wide index.
+        sentPageIndices: List<Int>? = null
     ): MedicalReport {
         // A report saved by OcrEngine's localFallback() never had its document actually read —
         // its date/type/category were guessed from which scan tab was open, not the content, and
@@ -733,15 +762,51 @@ object LocalRepository {
         val mismatch = DashboardEngine.contentMismatchWarning(sectionType, section.testResults?.parameters ?: emptyList())
         if (mismatch != null) Log.w("ScanDiag", "CONTENT MISMATCH id=${existing.id} type=$sectionType — $mismatch")
 
+        // Reprocessing re-reads the WHOLE document with a fresh AI call, and that call can come
+        // back less complete than the extraction already on file — a real incident: a document's
+        // Blood Sugar reading was present, a later reprocess (triggered by an unrelated sibling
+        // panel being flagged mislabeled) came back without it, and the old value was silently
+        // discarded because parameters were unconditionally overwritten below. A row that was
+        // ALREADY correctly labeled (no mismatch of its own) has its previously-known parameters
+        // protected: anything the new extraction doesn't mention is kept rather than dropped. A
+        // row that WAS mislabeled trusts the fresh extraction fully instead — that's the whole
+        // point of reprocessing it, and resurrecting its old (wrong) values would defeat the fix.
+        val previousParams = existing.testResults?.parameters ?: emptyList()
+        val hadOwnMismatch = DashboardEngine.contentMismatchWarning(existing.reportType, previousParams) != null
+        val freshResults = section.testResults
+        var recoveredParams = emptyList<TestParameter>()
+        val mergedTestResults = when {
+            freshResults == null -> existing.testResults
+            hadOwnMismatch || previousParams.isEmpty() -> freshResults
+            else -> {
+                val newCanonicals = freshResults.parameters.map { DashboardEngine.canonicalParamName(it.name) }.toSet()
+                recoveredParams = previousParams.filter {
+                    it.value.isNotBlank() && DashboardEngine.canonicalParamName(it.name) !in newCanonicals
+                }
+                if (recoveredParams.isEmpty()) freshResults
+                else freshResults.copy(parameters = freshResults.parameters + recoveredParams)
+            }
+        }
+        if (recoveredParams.isNotEmpty()) {
+            Log.w(
+                "ScanDiag",
+                "REPROCESS KEPT ${recoveredParams.size} previously-recorded value(s) missing from the " +
+                    "new extraction id=${existing.id}: ${recoveredParams.joinToString { it.name }}"
+            )
+        }
+
         // Parameters/medications aren't user-editable today, so overwriting them is safe;
         // comments/raw text ARE user-editable, so only fill those in if still blank (a degraded
         // report's placeholder comment doesn't count as real user content, so it's replaced too).
         var updated = existing.copy(
-            testResults = section.testResults ?: existing.testResults,
+            testResults = mergedTestResults ?: existing.testResults,
             medications = dedupeMedications(resolveMedicationDates(
                 section.medications.ifEmpty { existing.medications }, correctedDate ?: today()
             )),
             comments = listOfNotNull(
+                recoveredParams.takeIf { it.isNotEmpty() }?.let {
+                    "⚠ Reprocessing didn't return ${it.size} previously recorded value(s) (${it.joinToString { p -> p.name }}) — kept the earlier reading(s); please verify against the original document."
+                },
                 mismatch?.let { "⚠ This section may be mislabeled — $it. Please verify against the original scan and reprocess if needed." },
                 (if (wasDegraded) section.comments else (existing.comments?.takeIf { it.isNotBlank() } ?: section.comments))
                     ?.takeIf { it.isNotBlank() }
@@ -752,7 +817,20 @@ object LocalRepository {
             analyzed = true,
             reportType = if (wasDegraded || existing.reportType == "Uploaded") sectionType else existing.reportType,
             reportCategory = correctedCategory,
-            reportDate = correctedDate
+            reportDate = correctedDate,
+            // Refresh which pages this row's content actually came from when the fresh extraction
+            // reported any — a reprocess is exactly when this is most likely to have been wrong or
+            // missing before. Keep the old value otherwise rather than blanking out a known-good
+            // subset just because this particular reprocess didn't return page numbers. When only a
+            // SUBSET of pages was sent (sentPageIndices != null), the AI's page numbers are relative
+            // to that subset and must be mapped back through it rather than the full document.
+            sourcePageIndices = section.sourcePages.takeIf { it.isNotEmpty() }
+                ?.let { pages ->
+                    if (sentPageIndices != null) pages.mapNotNull { sentPageIndices.getOrNull(it - 1) }.distinct().sorted()
+                    else sourcePageIndices(section, existing.imagePaths.size)
+                }
+                ?.takeIf { it.isNotEmpty() }
+                ?: existing.sourcePageIndices
         )
         // Comparison/insights are enrichment, not correctness, and each is a further paid AI call.
         // Re-reading the document has just invalidated whatever they previously said, so they are
@@ -835,17 +913,39 @@ object LocalRepository {
         }
     }
 
-    /** How many source documents [reprocessMislabeledReports] touched, and how many rows still
-     *  look mislabeled afterward — reprocessing can legitimately fail to fix one (the same AI
-     *  extraction limitation that caused it in the first place can recur), so this reports the
-     *  after-state rather than assuming success. */
-    data class MislabelFixResult(val documentsReprocessed: Int, val stillMislabeled: Int)
+    /** How many source documents [reprocessMislabeledReports] actually reprocessed, how many rows
+     *  still look mislabeled afterward — reprocessing can legitimately fail to fix one (the same
+     *  AI extraction limitation that caused it in the first place can recur), so this reports the
+     *  after-state rather than assuming success — and how many were left untouched because they'd
+     *  already hit [AppSettings.MISLABEL_REPROCESS_MAX_ATTEMPTS] tries with no fix. */
+    data class MislabelFixResult(val documentsReprocessed: Int, val stillMislabeled: Int, val skippedAtCap: Int = 0)
+
+    /** Whether [reportId]'s source document has already used up its automatic mislabel-reprocess
+     *  attempts (see [AppSettings]) — the UI uses this to stop offering "Reprocess" once retrying
+     *  has already failed twice for the same document, rather than let it be tapped forever. */
+    suspend fun isMislabelReprocessCapped(context: Context, reportId: String): Boolean = withContext(Dispatchers.IO) {
+        val report = LocalStore.getReport(context, reportId) ?: return@withContext false
+        AppSettings.isMislabelReprocessCapped(context, DashboardEngine.documentKey(report))
+    }
+
+    /** Records one mislabel-reprocess attempt against [reportId]'s source document. Called right
+     *  before a reprocess triggered BY the mislabeled-content banner/tool runs, so a run that never
+     *  completes (app killed mid-call) still counts — the risk of erring toward "counted an attempt
+     *  that didn't fully land" is far smaller than the original problem of unlimited free retries. */
+    suspend fun recordMislabelReprocessAttempt(context: Context, reportId: String) = withContext(Dispatchers.IO) {
+        val report = LocalStore.getReport(context, reportId) ?: return@withContext
+        AppSettings.recordMislabelReprocessAttempt(context, DashboardEngine.documentKey(report))
+    }
 
     /**
      * Finds every report flagged by [findMislabeledReports] and reprocesses the WHOLE document
      * each one belongs to (not just the flagged row) — the mislabeling is a panel/adjacent-panel
      * mix-up, so fixing only the row that happened to get flagged risks leaving its sibling
      * (which likely has the swapped values) untouched. One AI call per affected document.
+     *
+     * A document that has already been retried [AppSettings.MISLABEL_REPROCESS_MAX_ATTEMPTS] times
+     * without clearing is skipped rather than burning another AI call on a retry with no better
+     * odds than the last one — see [AppSettings]'s mislabel-reprocess-attempt-cap section.
      */
     suspend fun reprocessMislabeledReports(
         context: Context,
@@ -854,8 +954,17 @@ object LocalRepository {
         val flaggedIds = findMislabeledReports(context).map { it.first.id }.toSet()
         val groups = DashboardEngine.groupBySourceDocument(LocalStore.getReports(context))
             .filter { group -> group.any { it.id in flaggedIds } }
+        var skippedAtCap = 0
+        val attempted = mutableListOf<List<MedicalReport>>()
         for ((index, group) in groups.withIndex()) {
             onProgress(index, groups.size)
+            val docKey = DashboardEngine.documentKey(group.first())
+            if (AppSettings.isMislabelReprocessCapped(context, docKey)) {
+                skippedAtCap++
+                continue
+            }
+            AppSettings.recordMislabelReprocessAttempt(context, docKey)
+            attempted += group
             try {
                 reprocessSiblings(context, group)
             } catch (e: Exception) {
@@ -864,7 +973,21 @@ object LocalRepository {
         }
         onProgress(groups.size, groups.size)
         afterWrite(context)
-        MislabelFixResult(documentsReprocessed = groups.size, stillMislabeled = findMislabeledReports(context).size)
+        val stillMislabeled = findMislabeledReports(context)
+        // A document that came back clean doesn't need its attempt count anymore — if something
+        // ever flags it again later (a fresh, unrelated corruption) it should get its own two
+        // tries, not inherit an old exhausted count from a problem that's already fixed.
+        for (group in attempted) {
+            val docKey = DashboardEngine.documentKey(group.first())
+            if (stillMislabeled.none { (r, _) -> group.any { it.id == r.id } }) {
+                AppSettings.clearMislabelReprocessAttempts(context, docKey)
+            }
+        }
+        MislabelFixResult(
+            documentsReprocessed = attempted.size,
+            stillMislabeled = stillMislabeled.size,
+            skippedAtCap = skippedAtCap
+        )
     }
 
     /** Result of [fixDegradedReports]: how many were corrected, and how many are still stuck

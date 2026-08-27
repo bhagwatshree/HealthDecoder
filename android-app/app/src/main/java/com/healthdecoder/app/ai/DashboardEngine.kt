@@ -316,6 +316,23 @@ object DashboardEngine {
     }
 
     /**
+     * The identity of the source document [report] was extracted from — same patient plus the
+     * same shared set of stored page files. Used both to GROUP sibling panels ([groupBySourceDocument])
+     * and as a stable storage key for anything that needs to remember "we've already dealt with
+     * this document" across app runs (e.g. [AppSettings]' mislabel-reprocess attempt cap) — a
+     * report's own id changes if it's ever re-saved, but its source document's page set doesn't.
+     *
+     * A report with no stored pages (imported, restored, or manually entered) is keyed by its own
+     * id so it stands alone: keyed on empty paths, every such report would collapse into one
+     * meaningless group/key.
+     */
+    fun documentKey(report: MedicalReport): String {
+        val pages = report.imagePaths.filter { it.isNotBlank() }
+        return if (pages.isEmpty()) "report:${report.id}"
+            else "doc:${report.patientName.orEmpty().trim().lowercase()}|${pages.joinToString("|")}"
+    }
+
+    /**
      * Groups reports by the document they were extracted from, preserving the order they arrive in.
      *
      * One scanned PDF routinely yields several reports — a haemogram, a biochemistry panel, a
@@ -323,18 +340,13 @@ object DashboardEngine {
      * date, with nothing to say they came from the same page set until you open one. Reports from
      * one scan share their stored page files, which is what identifies the document here.
      *
-     * A report with no stored pages (imported, restored, or manually entered) is keyed by its own
-     * id so it stands alone: keyed on empty paths, every such report would collapse into one
-     * meaningless group. The patient is part of the key too, so the theoretical case of one
-     * document covering two people can't merge them.
+     * The patient is part of [documentKey] too, so the theoretical case of one document covering
+     * two people can't merge them.
      */
     fun groupBySourceDocument(reports: List<MedicalReport>): List<List<MedicalReport>> {
         val groups = LinkedHashMap<String, MutableList<MedicalReport>>()
         for (report in reports) {
-            val pages = report.imagePaths.filter { it.isNotBlank() }
-            val key = if (pages.isEmpty()) "report:${report.id}"
-                else "doc:${report.patientName.orEmpty().trim().lowercase()}|${pages.joinToString("|")}"
-            groups.getOrPut(key) { mutableListOf() }.add(report)
+            groups.getOrPut(documentKey(report)) { mutableListOf() }.add(report)
         }
         return groups.values.toList()
     }

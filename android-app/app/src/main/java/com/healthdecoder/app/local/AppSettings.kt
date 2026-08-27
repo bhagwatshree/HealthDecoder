@@ -199,6 +199,43 @@ object AppSettings {
         prefs(context).edit().putStringSet(KEY_CHECKED_RECOVERY_BUNDLES, current + bundleKey).apply()
     }
 
+    // ── Mislabeled-section reprocess attempt cap ────────────────────────────
+    // Reprocessing a mislabeled document is a real, billed AI call with no guarantee the retry
+    // segments any better than the last one — without a cap, a document the AI just can't cleanly
+    // re-segment gets reprocessed every time Settings/Report Detail is opened and the button is
+    // tapped, for no gain. Capped per SOURCE DOCUMENT (see DashboardEngine.documentKey) at
+    // MISLABEL_REPROCESS_MAX_ATTEMPTS; past that, the UI stops offering an automatic retry and
+    // asks for a manual look instead. Cleared the moment a document comes back clean (see
+    // LocalRepository.reprocessMislabeledReports) so a LATER, unrelated mislabeling on the same
+    // document gets its own fresh attempts rather than inheriting an old exhausted count.
+    private const val KEY_MISLABEL_REPROCESS_ATTEMPTS = "mislabel_reprocess_attempts"
+    const val MISLABEL_REPROCESS_MAX_ATTEMPTS = 2
+
+    private fun getMislabelReprocessAttemptsMap(context: Context): Map<String, Int> {
+        val json = prefs(context).getString(KEY_MISLABEL_REPROCESS_ATTEMPTS, null) ?: return emptyMap()
+        return runCatching {
+            gson.fromJson<Map<String, Int>>(json, object : TypeToken<Map<String, Int>>() {}.type)
+        }.getOrNull() ?: emptyMap()
+    }
+
+    fun mislabelReprocessAttempts(context: Context, documentKey: String): Int =
+        getMislabelReprocessAttemptsMap(context)[documentKey] ?: 0
+
+    fun isMislabelReprocessCapped(context: Context, documentKey: String): Boolean =
+        mislabelReprocessAttempts(context, documentKey) >= MISLABEL_REPROCESS_MAX_ATTEMPTS
+
+    fun recordMislabelReprocessAttempt(context: Context, documentKey: String) {
+        val current = getMislabelReprocessAttemptsMap(context)
+        val updated = current + (documentKey to (current[documentKey] ?: 0) + 1)
+        prefs(context).edit().putString(KEY_MISLABEL_REPROCESS_ATTEMPTS, gson.toJson(updated)).apply()
+    }
+
+    fun clearMislabelReprocessAttempts(context: Context, documentKey: String) {
+        val current = getMislabelReprocessAttemptsMap(context)
+        if (!current.containsKey(documentKey)) return
+        prefs(context).edit().putString(KEY_MISLABEL_REPROCESS_ATTEMPTS, gson.toJson(current - documentKey)).apply()
+    }
+
     // Minimum spacing between Gemini requests. The free tier allows ~20 requests/minute;
     // without pacing a bulk scan bursts past it and every call 429s. Set to 0 when a
     // paid API tier is used.

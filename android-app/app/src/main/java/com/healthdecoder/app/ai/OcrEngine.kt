@@ -50,7 +50,12 @@ data class ScanExtraction(
     @SerializedName("recommendedTests") val recommendedTests: List<RecommendedTest> = emptyList(),
     @SerializedName("followUps") val followUps: List<FollowUp> = emptyList(),
     @SerializedName("testResults") val testResults: TestResults? = null,
-    @SerializedName("rawText") val rawText: String? = null
+    @SerializedName("rawText") val rawText: String? = null,
+    // Which of the page IMAGES sent in this request (1-indexed, out of however many were sent —
+    // see buildPrompt's pagesNote) hold this report's own content. Chunk-relative as the AI
+    // returns it; scan() rewrites these to whole-document page numbers before they're stored (see
+    // MedicalReport.sourcePageIndices), since a chunked scan's page 1 isn't the document's page 1.
+    @SerializedName("sourcePages") val sourcePages: List<Int> = emptyList()
 )
 
 /**
@@ -80,7 +85,8 @@ data class MultiScanExtraction(
                 parameters = reports.flatMap { it.testResults?.parameters ?: emptyList() },
                 findings = reports.flatMap { it.testResults?.findings ?: emptyList() }
             ),
-            rawText = rawText ?: first.rawText
+            rawText = rawText ?: first.rawText,
+            sourcePages = reports.flatMap { it.sourcePages }.distinct().sorted()
         )
     }
 }
@@ -178,6 +184,7 @@ object OcrEngine {
         val results = mutableListOf<MultiScanExtraction>()
         val chunkTexts = mutableListOf<String>()
         var failedChunks = 0
+        var pageOffset = 0
         for ((index, chunk) in chunks.withIndex()) {
             // On-device OCR over THIS chunk's pages. Free (ML Kit, no network), and it now does
             // double duty: the accuracy hint below, AND the searchable transcription that the
@@ -187,7 +194,17 @@ object OcrEngine {
             val chunkText = prepared.text.ifBlank { if (index == 0) localOcrText else "" }
             chunkTexts.add(chunkText)
             val result = scanChunk(context, prepared.images, chunkText, scanType, reportCategory, index + 1, chunks.size, operation)
-            if (result != null) results.add(result) else failedChunks++
+            if (result != null) {
+                // The AI numbers sourcePages 1-indexed within THIS chunk's own images — rewrite to
+                // whole-document page numbers (matching MedicalReport.imagePaths' order) before
+                // this ever gets merged/stored, or "page 1" from chunk 2 would collide with chunk
+                // 1's real page 1.
+                val offset = pageOffset
+                results.add(result.copy(reports = result.reports.map { r ->
+                    r.copy(sourcePages = r.sourcePages.map { it + offset })
+                }))
+            } else failedChunks++
+            pageOffset += chunk.size
         }
         val fullText = chunkTexts.filter { it.isNotBlank() }.joinToString("\n\n").ifBlank { localOcrText }
         if (results.isEmpty()) return localFallback(fullText, scanType)
@@ -270,7 +287,8 @@ object OcrEngine {
                     rawText = listOfNotNull(
                         prev.rawText?.takeIf { it.isNotBlank() },
                         section.rawText?.takeIf { it.isNotBlank() }
-                    ).joinToString("\n\n")
+                    ).joinToString("\n\n"),
+                    sourcePages = (prev.sourcePages + section.sourcePages).distinct().sorted()
                 )
             }
         }
@@ -419,6 +437,11 @@ Also ensure that:
      value calculated/derived from another test, or a semi-quantitative dipstick result like
      "+", "++", "+++", "Negative", "Trace". False for every normal numeric lab result.
    (This list must stay in sync with DashboardEngine.KEY_PARAMETER_ORDER in the Android app.)
+7. "sourcePages": for EACH report entry, list the page image number(s) (1-indexed, counting the
+   $pageCount page image(s) attached to THIS request — the first image is page 1) that this
+   report's own content actually appears on. Most reports sit on one or two consecutive pages;
+   list every page it spans. This lets the app re-send just those pages later instead of the
+   whole document.
 
 The response MUST be a JSON object with this schema:
 {
@@ -444,7 +467,8 @@ The response MUST be a JSON object with this schema:
           }
         ],
         "findings": [ "" ]
-      }
+      },
+      "sourcePages": [1]
     }
   ]
 }
@@ -495,10 +519,13 @@ Return ONLY raw JSON. No markdown code fences, no extra text.
                 if (recognised == null) { prepared.add(bytes to mime); continue }
                 recognised.text.takeIf { it.isNotBlank() }?.let { texts.add(it) }
 
-                // Cover identity regions before this page leaves the device. A page with nothing
-                // to redact is forwarded byte-for-byte, so it never pays JPEG generation loss on
-                // a document the model must read small printed values from.
-                val redacted = PiiRedactor.redactedCopy(bmp, recognised)
+                // Cover identity regions AND ad/promo filler before this page leaves the device —
+                // the latter saves nothing in privacy terms but cuts tokens the model would
+                // otherwise spend reading (and correctly ignoring) a lab chain's app-download
+                // banner or discount code. A page with nothing to redact is forwarded byte-for-byte,
+                // so it never pays JPEG generation loss on a document the model must read small
+                // printed values from.
+                val redacted = PiiRedactor.redactedCopyForUpload(bmp, recognised)
                 if (redacted == null) {
                     prepared.add(bytes to mime)
                 } else {
