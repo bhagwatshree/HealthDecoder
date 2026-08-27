@@ -162,7 +162,14 @@ object ExportManager {
         // runtime, which used to crash immediately below with a bare NPE on the very next
         // iteration ("Attempt to invoke interface method ... iterator() on a null object
         // reference") instead of a message that says what's actually wrong.
-        val safeReports = rawPayload.reports ?: emptyList()
+        //
+        // The same hole exists one level down: a report from an export made before a field was
+        // added to MedicalReport (e.g. pageHashes/sourcePageIndices) has no matching JSON key, so
+        // Gson leaves that field null too despite its non-nullable type and `= emptyList()`
+        // default — that default only applies when the constructor actually runs, which Gson's
+        // reflection-based instantiation never does. .sanitized() patches exactly those fields so
+        // the .copy() calls below don't crash on the compiler's non-null parameter check.
+        val safeReports = (rawPayload.reports ?: emptyList()).map { it.sanitized() }
         val safeFamily = rawPayload.family ?: emptyList()
 
         // Second layer of the same guard as export(): even if a stray file predating that fix (or
@@ -216,6 +223,20 @@ object ExportManager {
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
+
+    /** See the comment at safeReports' call site: patches every non-nullable MedicalReport field
+     *  that Gson can leave null when deserializing an export made before that field existed. */
+    private fun MedicalReport.sanitized(): MedicalReport = copy(
+        id = id ?: java.util.UUID.randomUUID().toString(),
+        medications = medications ?: emptyList(),
+        imagePath = imagePath ?: "",
+        imagePaths = imagePaths ?: emptyList(),
+        sourceFiles = sourceFiles ?: emptyList(),
+        createdAt = createdAt ?: nowIso(),
+        pageHashes = pageHashes ?: emptyList(),
+        sourcePageIndices = sourcePageIndices ?: emptyList()
+    )
+
     private fun String.baseName(): String = if (isBlank()) this else File(this).name
 
     private fun ZipOutputStream.putFile(entryName: String, file: File) {
