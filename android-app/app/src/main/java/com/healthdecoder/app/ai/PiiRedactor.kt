@@ -116,24 +116,41 @@ object PiiRedactor {
      * copy, avoiding a pointless round of JPEG generation loss on a page the model has to read
      * small printed digits from.
      */
-    fun redactedCopy(source: Bitmap, recognised: Text): Bitmap? {
+    fun redactedCopy(source: Bitmap, recognised: Text): Bitmap? =
+        redact(source, recognised, includeAds = false)
+
+    /**
+     * Same as [redactedCopy], but also paints out lines [AdRedactor] recognizes as marketing
+     * filler (app-download banners, social handles, QR-code prompts, discount codes) — used on
+     * the main scan path (see [OcrEngine.localOcrPages]) to cut both identity data AND wasted
+     * tokens from what's uploaded. Kept as a separate entry point rather than folding into
+     * [redactedCopy] itself: [redactImageForUpload] (Smart Health Lens' single-frame path) only
+     * ever needs PII coverage, not ad-stripping.
+     */
+    fun redactedCopyForUpload(source: Bitmap, recognised: Text): Bitmap? =
+        redact(source, recognised, includeAds = true)
+
+    private fun redact(source: Bitmap, recognised: Text, includeAds: Boolean): Bitmap? {
         val pageHeight = source.height.takeIf { it > 0 } ?: return null
         val boxes = mutableListOf<Rect>()
-        var covered = 0
+        var piiCount = 0
+        var adCount = 0
 
         for (block in recognised.textBlocks) {
             for (line in block.lines) {
                 val box = line.boundingBox ?: continue
-                if (!shouldRedact(line.text, box.top.toFloat() / pageHeight)) continue
+                val isPii = shouldRedact(line.text, box.top.toFloat() / pageHeight)
+                val isAd = includeAds && AdRedactor.shouldRedact(line.text)
+                if (!isPii && !isAd) continue
+                if (isPii) piiCount++ else adCount++
                 // Pad slightly: ML Kit's box hugs the glyphs, leaving ascenders/descenders and
                 // anti-aliased edges legible at the boundary.
                 boxes.add(Rect(box.left - 4, box.top - 4, box.right + 4, box.bottom + 4))
-                covered++
             }
         }
         if (boxes.isEmpty()) return null
 
-        Log.i("ScanDiag", "REDACTED $covered line(s) of identity data before upload")
+        Log.i("ScanDiag", "REDACTED $piiCount identity line(s), $adCount ad/promo line(s) before upload")
         val out = runCatching { source.copy(Bitmap.Config.ARGB_8888, true) }.getOrNull() ?: return null
         val canvas = Canvas(out)
         val paint = Paint().apply { color = Color.BLACK; style = Paint.Style.FILL }
