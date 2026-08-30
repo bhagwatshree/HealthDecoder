@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Health Decoder — Privacy Policy &amp; Terms</title>
+<meta name="description" content="Privacy Policy and Terms &amp; Conditions for the Health Decoder app.">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #f5f7f8;
+    --surface: #ffffff;
+    --surface-2: #eaeff1;
+    --text: #182229;
+    --text-muted: #55636c;
+    --border: #dde3e6;
+    --accent: #1d6b7a;
+    --accent-strong: #124b57;
+    --warning-bg: #fff6e4;
+    --warning-border: #c98a1c;
+    --warning-text: #6b4a0e;
+    --focus: #1d6b7a;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10161a;
+      --surface: #171f24;
+      --surface-2: #1e282e;
+      --text: #e7edf0;
+      --text-muted: #9fb0b8;
+      --border: #2a363c;
+      --accent: #5fc2d1;
+      --accent-strong: #8fd9e4;
+      --warning-bg: #2a2110;
+      --warning-border: #c98a1c;
+      --warning-text: #f0cb84;
+      --focus: #5fc2d1;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--accent-strong); }
+  a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .masthead {
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .masthead-inner {
+    max-width: 76rem;
+    margin: 0 auto;
+    padding: 1.75rem 1.75rem 0;
+  }
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    margin: 0 0 1.25rem;
+  }
+  .brand-mark {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-weight: 700;
+    font-size: 1.35rem;
+    letter-spacing: -0.01em;
+  }
+  .brand-sub {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--text-muted);
+  }
+
+  .tabs { display: flex; gap: 0.25rem; }
+  .tab {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 0.92rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 0.75rem 0.25rem;
+    margin-right: 1.5rem;
+    cursor: pointer;
+  }
+  .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+
+  .layout {
+    max-width: 76rem;
+    margin: 0 auto;
+    padding: 2.5rem 1.75rem 5rem;
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr);
+    gap: 3rem;
+    align-items: start;
+  }
+
+  .toc { position: sticky; top: 2rem; }
+  .toc-label {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--text-muted);
+    margin: 0 0 0.75rem;
+  }
+  .toc ol { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--border); }
+  .toc a {
+    display: block;
+    font-size: 0.86rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    padding: 0.4rem 0 0.4rem 0.9rem;
+    margin-left: -1px;
+    border-left: 1px solid transparent;
+  }
+  .toc a:hover { color: var(--text); }
+
+  .doc h1 {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: clamp(1.7rem, 1.3rem + 1.4vw, 2.3rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.4rem;
+    text-wrap: balance;
+  }
+  .doc-meta {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin: 0 0 2.25rem;
+  }
+
+  section.clause { max-width: 42rem; margin: 0 0 2.1rem; scroll-margin-top: 1.5rem; }
+  section.clause h2 {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin: 0 0 0.55rem;
+    text-wrap: balance;
+  }
+  section.clause p { margin: 0 0 0.85rem; color: var(--text); }
+  section.clause p:last-child { margin-bottom: 0; }
+
+  .notice {
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
+    border-radius: 10px;
+    padding: 1.3rem 1.4rem;
+    max-width: 42rem;
+    margin: 0 0 2.1rem;
+    scroll-margin-top: 1.5rem;
+  }
+  .notice-head { display: flex; align-items: center; gap: 0.55rem; margin: 0 0 0.7rem; }
+  .notice-head svg { flex: none; }
+  .notice h2 {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--warning-text);
+  }
+  .notice p { color: var(--warning-text); margin: 0 0 0.85rem; }
+  .notice p:last-child { margin-bottom: 0; }
+  .notice strong { font-weight: 700; }
+
+  footer { border-top: 1px solid var(--border); background: var(--surface); }
+  .footer-inner {
+    max-width: 76rem;
+    margin: 0 auto;
+    padding: 1.5rem 1.75rem;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+  }
+
+  [hidden] { display: none !important; }
+
+  @media (max-width: 720px) {
+    .layout { grid-template-columns: 1fr; gap: 1.5rem; }
+    .toc { position: static; }
+    .toc ol { columns: 2; column-gap: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <p class="brand">
+      <span class="brand-mark">Health Decoder</span>
+      <span class="brand-sub">Legal</span>
+    </p>
+    <div class="tabs" role="tablist" aria-label="Legal documents">
+      <button class="tab" id="tab-privacy" role="tab" aria-selected="true" aria-controls="doc-privacy">Privacy Policy</button>
+      <button class="tab" id="tab-terms" role="tab" aria-selected="false" aria-controls="doc-terms">Terms &amp; Conditions</button>
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+  <nav class="toc" id="toc" aria-label="Sections">
+    <p class="toc-label">On this page</p>
+    <ol id="toc-list"></ol>
+  </nav>
+
+  <article class="doc" id="doc-privacy">
+    <h1>Privacy Policy</h1>
+    <p class="doc-meta">Last updated: August 2026</p>
+
+    <section class="clause" id="p-scope">
+      <h2>What this policy covers</h2>
+      <p>This Privacy Policy explains what Health Decoder ("the app", "we") collects, why, and how it's stored, when you scan medical reports, create an account, or use any other feature of the app. Health Decoder is built to keep as much of your medical data on your own device as possible, and to be explicit about the few things that leave it.</p>
+    </section>
+
+    <section class="clause" id="p-provided">
+      <h2>Information you provide</h2>
+      <p>Account details — first/last name, date of birth, gender, and either an email+password or a phone number verified by a one-time SMS code. If you choose "Continue with Google", we receive your Google account's name and email via Firebase Authentication to identify you — we never see your Google password.</p>
+      <p>Medical reports — the images/PDFs you scan or import, and the text, test results, medications, and AI-generated interpretation extracted from them. This is the core data the app exists to handle.</p>
+    </section>
+
+    <section class="clause" id="p-automatic">
+      <h2>Information collected automatically</h2>
+      <p>A random per-install device identifier (not tied to your name unless you sign in), used solely to apply the free daily usage limit fairly across installs. Basic app usage needed for the app to function (e.g. which screen you're on) is not sent anywhere — it stays on your device.</p>
+    </section>
+
+    <section class="clause" id="p-processing">
+      <h2>How your data is processed</h2>
+      <p>Scanned report images and extracted text are sent to Google's Gemini AI and, for Indic-language OCR/text-to-speech, Sarvam AI, solely to interpret your report and answer questions you ask about it. These providers process the request and, per their own terms, do not use it to train models on your data through this app's integration. We do not sell your medical data to anyone, for any purpose.</p>
+    </section>
+
+    <section class="clause" id="p-storage">
+      <h2>Where your data is stored</h2>
+      <p>On your device: your reports, images, and account cache are stored in a local database encrypted with SQLCipher (AES-256), keyed by a random passphrase generated on your device and never sent to us.</p>
+      <p>On our servers: if you create an account, your profile and reports (so you can restore them on a new device) are stored on our backend, encrypted at rest where the data is sensitive (API keys, tokens). Backend infrastructure runs on AWS; the database is Neon, in the same region as our servers.</p>
+    </section>
+
+    <section class="clause" id="p-gmail">
+      <h2>Optional Gmail linking</h2>
+      <p>If you explicitly enable "Link Google Account" for automatic report detection, the app requests read-only access to your Gmail inbox (the gmail.readonly scope) to find medical report attachments. This is entirely opt-in, off by default, and can be revoked at any time from Settings or from your Google Account's third-party access page. We only read messages looking for report attachments; we do not read, store, or otherwise use the content of unrelated emails.</p>
+    </section>
+
+    <section class="clause" id="p-backup">
+      <h2>Backup and export</h2>
+      <p>The in-app backup/export/"Transfer Records" features write a file directly to a location you choose (local storage, or a Drive/OneDrive folder you pick via Android's own file picker) — that file goes straight from your device to your chosen destination; it does not pass through our servers.</p>
+    </section>
+
+    <section class="clause" id="p-location">
+      <h2>Location (Discovery feature)</h2>
+      <p>If you use the Discovery tab to search for nearby hospitals, labs, or doctors, your device's location is sent, at the time of that search only, to the public UHI (Unified Health Interface) network to return relevant results. Location is not stored or logged by us beyond that single request.</p>
+    </section>
+
+    <section class="clause" id="p-controls">
+      <h2>Your controls</h2>
+      <p>You can delete a single report from within the app at any time. Settings → "Delete Everything" permanently erases every report, medicine, pending test, and image on this device and, if you're signed in, on our servers. This cannot be undone. You can also unlink your Google account or Gmail access at any time from Settings.</p>
+    </section>
+
+    <section class="clause" id="p-children">
+      <h2>Children's privacy</h2>
+      <p>Health Decoder is not directed at children. If you are creating a family member's profile for a child, you are doing so as their parent/guardian, and you are responsible for that data.</p>
+    </section>
+
+    <section class="clause" id="p-changes">
+      <h2>Changes to this policy</h2>
+      <p>If this policy changes in a way that affects how your data is handled, we'll surface that in the app rather than silently updating this page.</p>
+    </section>
+
+    <section class="clause" id="p-contact">
+      <h2>Contact</h2>
+      <p>Questions about this policy or your data: <a href="mailto:support@healthdecoder.app">support@healthdecoder.app</a></p>
+    </section>
+  </article>
+
+  <article class="doc" id="doc-terms" hidden>
+    <h1>Terms &amp; Conditions</h1>
+    <p class="doc-meta">Last updated: August 2026</p>
+
+    <section class="notice" id="t-notice">
+      <div class="notice-head">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 3 1 21h22L12 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+          <path d="M12 9.5v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <circle cx="12" cy="17.3" r="1" fill="currentColor"/>
+        </svg>
+        <h2>Not medical advice — read this first</h2>
+      </div>
+      <p>Health Decoder uses AI (large language models, currently Google Gemini and Sarvam AI) to read and summarize medical reports. AI-generated interpretations, extracted values, specialist suggestions, and answers in Chat can be <strong>incomplete, out of date, or wrong</strong>. The app does not practice medicine, does not diagnose any condition, and cannot and does not tell you what you should or should not do about your health. Nothing in this app is a substitute for the judgment of a qualified doctor or other healthcare professional who has examined you.</p>
+      <p>Always verify every extracted number and every statement against your original report. Always consult a qualified healthcare professional before making any medical decision, starting or stopping any medication, or acting on anything shown in this app. If you believe you are experiencing a medical emergency, call your local emergency number or go to the nearest emergency room immediately — do not use this app instead.</p>
+    </section>
+
+    <section class="clause" id="t-accept">
+      <h2>Accepting these terms</h2>
+      <p>By creating an account or using Health Decoder, you agree to these Terms &amp; Conditions and to the Privacy Policy. If you don't agree, please don't use the app.</p>
+    </section>
+
+    <section class="clause" id="t-who">
+      <h2>Who can use this app</h2>
+      <p>You must be able to form a binding agreement to use Health Decoder with your own account. A parent or guardian may create and manage a family member's profile on their behalf.</p>
+    </section>
+
+    <section class="clause" id="t-account">
+      <h2>Your account</h2>
+      <p>You're responsible for keeping your login credentials confidential and for anything done under your account. Tell us if you believe your account has been accessed without your permission.</p>
+    </section>
+
+    <section class="clause" id="t-freetier">
+      <h2>The free tier and your own API keys</h2>
+      <p>A limited number of AI-powered scans per day are provided free, pooled across a shared key. You may optionally add your own Gemini/Sarvam API key in Settings, in which case usage on that key is billed to you directly by that provider under their own terms — we do not mark up or charge for API usage on a key you provide.</p>
+    </section>
+
+    <section class="clause" id="t-use">
+      <h2>Acceptable use</h2>
+      <p>Don't use the app to process reports that aren't yours or that you don't have permission to process on someone's behalf (e.g. a family member you care for). Don't attempt to circumvent usage limits, reverse-engineer the app, or use it in any way that could harm our infrastructure or other users.</p>
+    </section>
+
+    <section class="clause" id="t-warranty">
+      <h2>No warranty</h2>
+      <p>The app is provided "as is", without warranty of any kind, express or implied, including but not limited to accuracy, completeness, or fitness for a particular medical purpose. AI extraction accuracy varies with scan quality, document layout, and language, and is not guaranteed.</p>
+    </section>
+
+    <section class="clause" id="t-liability">
+      <h2>Limitation of liability</h2>
+      <p>To the maximum extent permitted by law, we are not liable for any injury, loss, or damage — direct, indirect, or consequential — arising from your use of the app or from any decision made or action taken (or not taken) based on information the app displayed, including AI-generated interpretations.</p>
+    </section>
+
+    <section class="clause" id="t-content">
+      <h2>Your content</h2>
+      <p>You own the reports and data you upload. You grant us the limited right to process it (including sending it to the AI providers named in the Privacy Policy) solely to provide the app's features to you. Deleting a report or your account removes it from our servers as described in the Privacy Policy.</p>
+    </section>
+
+    <section class="clause" id="t-changes">
+      <h2>Changes and termination</h2>
+      <p>We may update these terms as the app changes; continued use after an update means you accept the new terms. You may stop using the app and delete your account at any time from Settings.</p>
+    </section>
+
+    <section class="clause" id="t-law">
+      <h2>Governing law</h2>
+      <p>These terms are governed by the laws of India, without regard to conflict-of-law principles.</p>
+    </section>
+
+    <section class="clause" id="t-contact">
+      <h2>Contact</h2>
+      <p>Questions about these terms: <a href="mailto:support@healthdecoder.app">support@healthdecoder.app</a></p>
+    </section>
+  </article>
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <span>© 2026 Health Decoder</span>
+    <span>support@healthdecoder.app</span>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var tabPrivacy = document.getElementById('tab-privacy');
+    var tabTerms = document.getElementById('tab-terms');
+    var docPrivacy = document.getElementById('doc-privacy');
+    var docTerms = document.getElementById('doc-terms');
+    var tocList = document.getElementById('toc-list');
+
+    function buildToc(doc) {
+      tocList.innerHTML = '';
+      var sections = doc.querySelectorAll('section[id]');
+      sections.forEach(function (sec) {
+        var heading = sec.querySelector('h2');
+        if (!heading) return;
+        var li = document.createElement('li');
+        var a = document.createElement('a');
+        a.href = '#' + sec.id;
+        a.textContent = heading.textContent;
+        a.addEventListener('click', function (e) {
+          e.preventDefault();
+          sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          history.replaceState(null, '', '#' + sec.id);
+        });
+        li.appendChild(a);
+        tocList.appendChild(li);
+      });
+    }
+
+    function activate(which) {
+      var showPrivacy = which === 'privacy';
+      docPrivacy.hidden = !showPrivacy;
+      docTerms.hidden = showPrivacy;
+      tabPrivacy.setAttribute('aria-selected', String(showPrivacy));
+      tabTerms.setAttribute('aria-selected', String(!showPrivacy));
+      buildToc(showPrivacy ? docPrivacy : docTerms);
+      try { localStorage.setItem('hd-legal-tab', which); } catch (e) {}
+    }
+
+    tabPrivacy.addEventListener('click', function () { activate('privacy'); });
+    tabTerms.addEventListener('click', function () { activate('terms'); });
+
+    var initial = 'privacy';
+    try {
+      var stored = localStorage.getItem('hd-legal-tab');
+      if (stored === 'terms' || stored === 'privacy') initial = stored;
+    } catch (e) {}
+    if (location.hash) {
+      var idEl = document.getElementById(location.hash.slice(1));
+      if (idEl && docTerms.contains(idEl)) initial = 'terms';
+    }
+    activate(initial);
+    if (location.hash) {
+      var target = document.getElementById(location.hash.slice(1));
+      if (target) target.scrollIntoView({ block: 'start' });
+    }
+  })();
+</script>
+</body>
+</html>
