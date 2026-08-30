@@ -66,6 +66,7 @@ fun RegisterScreen(
     prepopulatedMsisdn: String? = null,
     onRegistered: () -> Unit,
     onNavigateBack: () -> Unit,
+    onNavigateToLegal: (isTerms: Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -394,15 +395,27 @@ fun RegisterScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable { consentChecked = !consentChecked }
-                ) {
-                    Checkbox(checked = consentChecked, onCheckedChange = { consentChecked = it })
-                    Text(
-                        tr("I agree that this app is not a medical device and does not provide clinical advice."),
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { consentChecked = !consentChecked }
+                    ) {
+                        Checkbox(checked = consentChecked, onCheckedChange = { consentChecked = it })
+                        Text(
+                            tr("I agree to the Terms & Conditions and Privacy Policy, and understand this app is not a medical device and does not provide clinical advice."),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(modifier = Modifier.padding(start = 44.dp)) {
+                        TextButton(onClick = { onNavigateToLegal(true) }, contentPadding = PaddingValues(horizontal = 0.dp)) {
+                            Text(tr("Terms & Conditions"), style = MaterialTheme.typography.labelMedium)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        TextButton(onClick = { onNavigateToLegal(false) }, contentPadding = PaddingValues(horizontal = 0.dp)) {
+                            Text(tr("Privacy Policy"), style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
                 }
 
                 errorMessage?.let {

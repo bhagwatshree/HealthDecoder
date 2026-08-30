@@ -880,14 +880,14 @@ fun ReportDetailScreen(
                                         text = tr("What This Report Means"),
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.titleSmall,
-                                        color = Color(0xFF1A237E)
+                                        color = themedInk(Color(0xFF1A237E), Color(0xFF9FA8DA))
                                     )
                                 }
 
                                 Text(
                                     text = hi.interpretation,
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFF37474F),
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     lineHeight = 22.sp
                                 )
 
@@ -897,7 +897,7 @@ fun ReportDetailScreen(
                                         text = tr("Recommended Specialist(s):"),
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFF3F51B5)
+                                        color = themedInk(Color(0xFF3F51B5), Color(0xFF9FA8DA))
                                     )
                                     hi.specialistRecommendations.forEach { rec ->
                                         val (urgencyAccent, urgencyIcon) = when (rec.urgency.lowercase()) {
@@ -1149,7 +1149,7 @@ fun ReportDetailScreen(
                                             text = tr("Medicine Side-Effects"),
                                             fontWeight = FontWeight.Bold,
                                             style = MaterialTheme.typography.titleSmall,
-                                            color = Color(0xFF4A148C)
+                                            color = themedInk(Color(0xFF4A148C), Color(0xFFCE93D8))
                                         )
                                         Text(
                                             text = tr("Tap a medicine to expand"),
@@ -1191,7 +1191,7 @@ fun ReportDetailScreen(
                                                 Icon(
                                                     imageVector = Icons.Default.LocalPharmacy,
                                                     contentDescription = se.medicine,
-                                                    tint = Color(0xFF7B1FA2),
+                                                    tint = themedInk(Color(0xFF7B1FA2), Color(0xFFCE93D8)),
                                                     modifier = Modifier.size(18.dp)
                                                 )
                                                 Text(
@@ -1247,7 +1247,7 @@ fun ReportDetailScreen(
                                                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                                                             verticalAlignment = Alignment.Top
                                                         ) {
-                                                            Text(text = "•", color = Color(0xFF7B1FA2), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                            Text(text = "•", color = themedInk(Color(0xFF7B1FA2), Color(0xFFCE93D8)), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                                             Text(text = eff, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface, lineHeight = 16.sp)
                                                         }
                                                     }
@@ -1288,7 +1288,7 @@ fun ReportDetailScreen(
                                                         Text(
                                                             text = se.tips,
                                                             fontSize = 12.sp,
-                                                            color = Color(0xFF0D47A1),
+                                                            color = themedInk(Color(0xFF0D47A1), Color(0xFF90CAF9)),
                                                             lineHeight = 16.sp
                                                         )
                                                     }

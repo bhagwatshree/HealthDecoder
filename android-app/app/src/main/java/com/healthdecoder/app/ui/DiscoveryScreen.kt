@@ -401,9 +401,9 @@ fun DiscoveryScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = tr("All search results, doctor availability, and diagnostic slots are purely informational. Sourced from the public UHI network, they are not clinical recommendations or confirmed appointments. Do not rely solely on this information. Always consult a qualified medical professional for health concerns."),
+                                text = tr("Informational only, sourced from the public UHI network — not a clinical recommendation or confirmed appointment. Always consult a qualified medical professional."),
                                 fontSize = 10.sp,
-                                color = Color(0xFF37474F),
+                                color = MaterialTheme.colorScheme.onSurface,
                                 lineHeight = 14.sp
                             )
                         }

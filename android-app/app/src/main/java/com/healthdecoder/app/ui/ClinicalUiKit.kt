@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -62,6 +63,24 @@ object ClinicalStatus {
 @Composable
 fun statusContainerColor(color: Color, alpha: Float = 0.14f): Color =
     color.copy(alpha = alpha).compositeOver(MaterialTheme.colorScheme.surface)
+
+/**
+ * True when the app is currently rendering in dark theme. Checked against the resolved
+ * MaterialTheme background, not `isSystemInDarkTheme()`, so it's correct whether dark mode came
+ * from the system setting or the in-app override (see AppSettings.THEME_DARK / MedicalScannerTheme).
+ */
+@Composable
+fun isAppDarkTheme(): Boolean = MaterialTheme.colorScheme.background.luminance() < 0.5f
+
+/**
+ * A hardcoded "ink" accent color chosen for a light card background (e.g. a heading inside a
+ * white/pale card) reads as near-invisible once its container tints dark in dark theme — see
+ * statusContainerColor above, which fixes the container side of this but not the text sitting on
+ * it. This picks [dark] (a lighter, dark-theme-safe partner color) instead of [light] whenever the
+ * app is in dark theme, without needing to abandon the light-theme color the design was tuned for.
+ */
+@Composable
+fun themedInk(light: Color, dark: Color): Color = if (isAppDarkTheme()) dark else light
 
 /**
  * Small colored pill for a status word ("HIGH", "LOW", "WORSENED", "COMPLETED", ...).

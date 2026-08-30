@@ -73,7 +73,8 @@ private fun restartApp(context: Context) {
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier,
-    onNavigateToTab: (BottomNavTab) -> Unit = {}
+    onNavigateToTab: (BottomNavTab) -> Unit = {},
+    onNavigateToLegal: (isTerms: Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -126,7 +127,7 @@ fun SettingsScreen(
     var restoreBusy by remember { mutableStateOf(false) }
     var degradedCount by remember { mutableStateOf(0) }
     var atRiskCount by remember { mutableStateOf(0) }
-    var mislabeledCount by remember { mutableStateOf(0) }
+    var mislabeledStatus by remember { mutableStateOf(LocalRepository.MislabeledStatus(0, 0)) }
     // fixDegradedBusy/Progress/Result and recoverBusy/Progress/Result now live in
     // MaintenanceScheduler, not here — see its doc comment for why (surviving navigation away
     // from this screen mid-run, both the coroutine itself and the progress state it reports).
@@ -147,7 +148,7 @@ fun SettingsScreen(
     LaunchedEffect(Unit) { degradedCount = LocalRepository.findDegradedReports(context).size }
     LaunchedEffect(Unit) { hasAutoBackupPassword = SecureKeyManager.getBackupPassword(context) != null }
     LaunchedEffect(Unit) { atRiskCount = LocalRepository.findAtRiskBundles(context).size }
-    LaunchedEffect(Unit) { mislabeledCount = LocalRepository.findMislabeledReports(context).size }
+    LaunchedEffect(Unit) { mislabeledStatus = LocalRepository.findMislabeledStatus(context) }
 
     // SAF folder picker: user picks a cloud-synced folder (Drive / OneDrive / Dropbox / local)
     val folderPickerLauncher = rememberLauncherForActivityResult(
@@ -640,7 +641,12 @@ fun SettingsScreen(
             // panel's name correctly read but its values actually belonging to an adjacent panel
             // (e.g. "Thyroid Profile" holding Haemoglobin/RBC values) — the AI losing track of
             // which numbers belong under which header. Only shown when something's actually flagged.
-            if (mislabeledCount > 0) {
+            // Split into actionable (worth another automatic reprocess) vs capped (already retried
+            // MISLABEL_REPROCESS_MAX_ATTEMPTS times with no fix) so the button stops being offered
+            // once retrying has already failed twice — a third identical AI call has no better odds
+            // than the first two, since it's re-reading the same document with the same limitation
+            // that caused the mislabeling in the first place.
+            if (mislabeledStatus.actionable > 0) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -654,7 +660,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                         Text(
-                            text = trFormat("%1\$d section(s) have values that look like they belong to a different panel than their title says (this happens on dense, many-panel documents) — e.g. a \"Thyroid Profile\" row holding blood-count values instead. Reprocessing re-reads the whole document each affected row came from, not just the flagged row.", mislabeledCount),
+                            text = trFormat("%1\$d section(s) may belong to the wrong panel. Reprocessing re-reads the source document to fix it.", mislabeledStatus.actionable),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -676,7 +682,7 @@ fun SettingsScreen(
                             onClick = {
                                 // Runs in a scope that outlives this screen — see MaintenanceScheduler.
                                 MaintenanceScheduler.runFixMislabeled(context) {
-                                    mislabeledCount = LocalRepository.findMislabeledReports(context).size
+                                    mislabeledStatus = LocalRepository.findMislabeledStatus(context)
                                 }
                             },
                             enabled = !MaintenanceScheduler.mislabelBusy,
@@ -687,9 +693,34 @@ fun SettingsScreen(
                             if (MaintenanceScheduler.mislabelBusy) {
                                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onError)
                             } else {
-                                Text(trFormat("Reprocess Affected Documents (%1\$d)", mislabeledCount), color = MaterialTheme.colorScheme.onError)
+                                Text(trFormat("Reprocess Affected Documents (%1\$d)", mislabeledStatus.actionable), color = MaterialTheme.colorScheme.onError)
                             }
                         }
+                    }
+                }
+            } else if (mislabeledStatus.capped > 0) {
+                // Nothing left worth retrying automatically — every flagged document has already
+                // used its two attempts and come back the same. Informational only, no button: an
+                // identical third AI call would just burn a request with the same odds as the last
+                // one. Softer tertiary tone (not the alarming error color) since this isn't asking
+                // for action, just documenting a known, already-visible limitation.
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = tr("Mislabeled Sections: Review Manually"),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Text(
+                            text = trFormat("Processing is complete, but %1\$d section(s) still show a possible mismatch after two automatic attempts — already highlighted in the affected report(s) and in Trends. Please check those against the original document manually.", mislabeledStatus.capped),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
                     }
                 }
             }
@@ -702,7 +733,7 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(text = tr("Full Backup & Restore"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Text(text = tr("Export all your records (reports + images) as a single backup file. Choose your Google Drive or OneDrive folder in the picker to keep a cloud copy. Restoring REPLACES everything currently on this device."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(text = tr("Export all records + images as one file. Pick a Drive/OneDrive folder for a cloud copy. Restoring REPLACES everything on this device."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                     // Optional — without a password, the backup file itself is the only thing
                     // protecting this data: anyone who gets a copy of it can open it. With one,
@@ -920,6 +951,45 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     ) { Text(if (dupScanning) "Scanning…" else "Scan for Duplicates") }
+                }
+            }
+
+            // Legal — always reachable, not just at signup (RegisterScreen has the same two links
+            // behind its consent checkbox).
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
+            ) {
+                Column {
+                    Text(
+                        tr("Legal"),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 4.dp)
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onNavigateToLegal(false) }
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(tr("Privacy Policy"), style = MaterialTheme.typography.bodyLarge)
+                        Icon(imageVector = Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onNavigateToLegal(true) }
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(tr("Terms & Conditions"), style = MaterialTheme.typography.bodyLarge)
+                        Icon(imageVector = Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
 

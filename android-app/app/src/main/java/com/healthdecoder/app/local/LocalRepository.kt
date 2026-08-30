@@ -913,6 +913,34 @@ object LocalRepository {
         }
     }
 
+    /** Flagged rows split by whether reprocessing is still worth offering: [actionable] rows
+     *  belong to a source document that hasn't hit [AppSettings.MISLABEL_REPROCESS_MAX_ATTEMPTS]
+     *  yet, [capped] rows belong to one that has already been retried that many times with no fix.
+     *  The Settings screen uses this instead of a single count so it stops inviting a retry that
+     *  has already failed twice - reprocessing is a re-read of the whole document with the same AI
+     *  extraction limitation that caused the mislabeling in the first place, so a third identical
+     *  attempt has no better odds than the first two. */
+    data class MislabeledStatus(val actionable: Int, val capped: Int)
+
+    suspend fun findMislabeledStatus(context: Context): MislabeledStatus = withContext(Dispatchers.IO) {
+        val flagged = findMislabeledReports(context)
+        if (flagged.isEmpty()) return@withContext MislabeledStatus(0, 0)
+        val flaggedIds = flagged.map { it.first.id }.toSet()
+        val groups = DashboardEngine.groupBySourceDocument(LocalStore.getReports(context))
+            .filter { group -> group.any { it.id in flaggedIds } }
+        var actionable = 0
+        var capped = 0
+        for (group in groups) {
+            val rowsInGroup = group.count { it.id in flaggedIds }
+            if (AppSettings.isMislabelReprocessCapped(context, DashboardEngine.documentKey(group.first()))) {
+                capped += rowsInGroup
+            } else {
+                actionable += rowsInGroup
+            }
+        }
+        MislabeledStatus(actionable, capped)
+    }
+
     /** How many source documents [reprocessMislabeledReports] actually reprocessed, how many rows
      *  still look mislabeled afterward — reprocessing can legitimately fail to fix one (the same
      *  AI extraction limitation that caused it in the first place can recur), so this reports the

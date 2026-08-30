@@ -63,3 +63,9 @@ data object LiveVision : NavKey
 
 @Serializable
 data class DoctorBrief(val patientName: String) : NavKey
+
+@Serializable
+data object PrivacyPolicy : NavKey
+
+@Serializable
+data object TermsAndConditions : NavKey

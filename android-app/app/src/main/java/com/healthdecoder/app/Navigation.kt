@@ -49,6 +49,8 @@ import com.healthdecoder.app.ui.DoctorBriefScreen
 import com.healthdecoder.app.ui.TrendsScreen
 import com.healthdecoder.app.ui.DiscoveryScreen
 import com.healthdecoder.app.ui.OnboardingScreen
+import com.healthdecoder.app.ui.PrivacyPolicyScreen
+import com.healthdecoder.app.ui.TermsScreen
 import com.healthdecoder.app.ui.components.BottomNavTab
 import kotlinx.coroutines.launch
 
@@ -418,6 +420,7 @@ fun MainNavigation() {
               backStack.add(Main)
             },
             onNavigateBack = { backStack.removeLastOrNull() },
+            onNavigateToLegal = { isTerms -> backStack.add(if (isTerms) TermsAndConditions else PrivacyPolicy) },
             modifier = Modifier.safeDrawingPadding()
           )
         }
@@ -425,7 +428,20 @@ fun MainNavigation() {
           SettingsScreen(
             onNavigateBack = { backStack.removeLastOrNull() },
             modifier = Modifier.safeDrawingPadding(),
-            onNavigateToTab = navigateToTab
+            onNavigateToTab = navigateToTab,
+            onNavigateToLegal = { isTerms -> backStack.add(if (isTerms) TermsAndConditions else PrivacyPolicy) }
+          )
+        }
+        entry<PrivacyPolicy> {
+          PrivacyPolicyScreen(
+            onNavigateBack = { backStack.removeLastOrNull() },
+            modifier = Modifier.safeDrawingPadding()
+          )
+        }
+        entry<TermsAndConditions> {
+          TermsScreen(
+            onNavigateBack = { backStack.removeLastOrNull() },
+            modifier = Modifier.safeDrawingPadding()
           )
         }
         entry<Profile> {

@@ -635,9 +635,9 @@ private fun ChatBubble(message: ChatMessage, onSpeak: (() -> Unit)?) {
             }
             if (onSpeak != null) {
                 TextButton(onClick = onSpeak, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
-                    Icon(Icons.Default.VolumeUp, contentDescription = tr("Read aloud"), modifier = Modifier.size(16.dp), tint = Color(0xFF075E54))
+                    Icon(Icons.Default.VolumeUp, contentDescription = tr("Read aloud"), modifier = Modifier.size(16.dp), tint = themedInk(Color(0xFF075E54), Color(0xFF80CBC4)))
                     Spacer(Modifier.width(4.dp))
-                    Text(tr("Listen"), fontSize = 12.sp, color = Color(0xFF075E54))
+                    Text(tr("Listen"), fontSize = 12.sp, color = themedInk(Color(0xFF075E54), Color(0xFF80CBC4)))
                 }
             }
         }
