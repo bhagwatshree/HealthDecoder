@@ -117,14 +117,42 @@ object LocalRepository {
         afterWrite(context)
     }
 
-    /** Already-stored duplicate reports (newer copies of an earlier report). */
+    /**
+     * Whole-document duplicates that [LocalStore.findStoredDuplicates] misses: two or more
+     * document groups (see [DashboardEngine.groupBySourceDocument]) sharing page content - the
+     * same physical file scanned/imported more than once, landing as separate document
+     * identities (e.g. once via a direct scan, once via a later backup/transfer import that
+     * assigned it different image paths and let the AI re-segment it into a different number of
+     * panels). findStoredDuplicates compares individual report rows by patient/date/category, so
+     * it can't catch this - two copies of the same document split into 7 panels vs. 23 share no
+     * single row with a matching category. This compares whole GROUPS by shared page hash
+     * instead. Keeps the group whose earliest report is oldest (by createdAt) in each
+     * overlapping cluster; returns every report in the other, later group(s).
+     */
+    private suspend fun findDuplicateDocumentGroups(context: Context): List<MedicalReport> {
+        val groups = DashboardEngine.groupBySourceDocument(LocalStore.getReports(context))
+            .filter { group -> group.any { it.pageHashes.isNotEmpty() } }
+            .sortedBy { group -> group.minOf { it.createdAt } }
+        val keptHashSets = mutableListOf<Set<String>>()
+        val duplicates = mutableListOf<MedicalReport>()
+        for (group in groups) {
+            val hashes = group.flatMap { it.pageHashes }.toSet()
+            if (hashes.isEmpty()) continue
+            if (keptHashSets.any { kept -> kept.any { it in hashes } }) duplicates += group
+            else keptHashSets += hashes
+        }
+        return duplicates
+    }
+
+    /** Already-stored duplicate reports: newer copies of an earlier report, or a whole document
+     *  scanned/imported more than once under a different identity. */
     suspend fun findDuplicateReports(context: Context): List<MedicalReport> = withContext(Dispatchers.IO) {
-        LocalStore.findStoredDuplicates(context)
+        (LocalStore.findStoredDuplicates(context) + findDuplicateDocumentGroups(context)).distinctBy { it.id }
     }
 
     /** Deletes all stored duplicate reports, keeping the original of each group. Returns how many were removed. */
     suspend fun deleteDuplicateReports(context: Context): Int = withContext(Dispatchers.IO) {
-        val duplicates = LocalStore.findStoredDuplicates(context)
+        val duplicates = findDuplicateReports(context)
         for (dup in duplicates) {
             LocalStore.deleteReport(context, dup.id)
             detailedCacheFile(context, dup.id).delete()
