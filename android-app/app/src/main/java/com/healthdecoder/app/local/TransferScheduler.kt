@@ -90,6 +90,7 @@ object TransferScheduler {
                     append("Added ${res.added}")
                     if (res.updated > 0) append(", updated ${res.updated}")
                     append(" report(s)")
+                    if (res.skippedDuplicate > 0) append(" (${res.skippedDuplicate} already on this device, skipped)")
                     if (res.patients.isNotEmpty()) append(" • ${res.patients.joinToString()}")
                 }
             }.getOrElse { e ->

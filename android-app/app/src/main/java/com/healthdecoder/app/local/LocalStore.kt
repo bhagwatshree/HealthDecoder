@@ -243,6 +243,16 @@ object LocalStore {
         java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
             .joinToString("") { "%02x".format(it) }
 
+    /** Snapshot of every page/file hash already on this device, taken once before a bulk import
+     *  batch starts — lets the importer tell "this exact document is already here under a
+     *  different id" apart from "these hashes match because they're siblings within the SAME
+     *  import batch" (a multi-panel document's rows all share their hashes on purpose - see
+     *  ExportManager.import()'s dedup check, and findReportByAnyHash's per-scan use below). */
+    fun allPageHashes(context: Context): Set<String> {
+        val email = AppSettings.getUserEmail(context) ?: ""
+        return db(context).reportDao().getAllPageHashesFiltered(email).flatMap { it.pageHashes }.toSet()
+    }
+
     /** Existing report that already contains ANY of these page/file hashes (exact re-scan). */
     fun findReportByAnyHash(context: Context, hashes: Collection<String>): MedicalReport? {
         if (hashes.isEmpty()) return null

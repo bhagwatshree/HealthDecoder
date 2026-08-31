@@ -54,8 +54,11 @@ object ExportManager {
 
     /** Outcome of an import, for a user-facing summary. Import is add-or-update (merge), never a
      *  wipe-and-replace: [added] reports were new here, [updated] already existed (by id) and were
-     *  refreshed from the file. */
-    data class ImportResult(val added: Int, val updated: Int, val patients: Set<String>)
+     *  refreshed from the file, [skippedDuplicate] shared page content with a report already on
+     *  this device under a DIFFERENT id (e.g. the same physical document scanned locally, then
+     *  also arriving via an import of a backup/transfer file made before that scan's id existed
+     *  elsewhere) and was left out rather than filed in twice. */
+    data class ImportResult(val added: Int, val updated: Int, val patients: Set<String>, val skippedDuplicate: Int = 0)
 
     private fun exportsDir(context: Context): File =
         File(context.cacheDir, "exports").apply { if (!exists()) mkdirs() }
@@ -180,14 +183,35 @@ object ExportManager {
             family = safeFamily.filterNot { it.name.trim().equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true) }
         )
 
+        // Snapshot taken BEFORE this batch's own inserts, not re-queried per row: a multi-panel
+        // document's sibling rows share their page hashes with EACH OTHER on purpose (see the
+        // by-id comment below), so checking against a live-updating hash set would falsely flag
+        // a document's own later siblings as duplicates of its earlier ones within this same
+        // import. This only catches content that was ALREADY on the device before the import
+        // started — e.g. this exact document was scanned locally, then also arrived via an
+        // import of a backup/transfer file that assigned it a different id.
+        val hashesBeforeImport = LocalStore.allPageHashes(context)
+
         var added = 0
         var updated = 0
+        var skippedDuplicate = 0
         val patients = linkedSetOf<String>()
         for (r in payload.reports) {
             // Add-or-update by report id (a merge, never a wipe): a new id is inserted, an existing
             // one is refreshed from the file. Keying on the unique id — not page hash — is what lets
             // every report of a multi-page scan bundle import on a fresh device (siblings share hashes).
             val alreadyHere = LocalStore.getReport(context, r.id) != null
+
+            // A report with a NEW id whose pages were already on this device before the import
+            // started is the same physical document under a different id, not new content -
+            // saveScan() already refuses this at scan time (see LocalStore.findReportByAnyHash);
+            // import previously had no equivalent check, so the same document scanned locally and
+            // then also imported from a backup/transfer file made elsewhere silently filed in
+            // twice, right down to duplicate values showing up on the same date in Trends.
+            if (!alreadyHere && r.pageHashes.isNotEmpty() && r.pageHashes.any { it in hashesBeforeImport }) {
+                skippedDuplicate++
+                continue
+            }
 
             val rehydrated = r.copy(
                 imagePath = r.imagePath.takeIf { it.isNotBlank() }?.let { File(imagesDir, it).absolutePath } ?: "",
@@ -219,7 +243,7 @@ object ExportManager {
             }
             AppSettings.setFamilyProfiles(context, fam)
         }
-        return ImportResult(added, updated, patients)
+        return ImportResult(added, updated, patients, skippedDuplicate)
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
