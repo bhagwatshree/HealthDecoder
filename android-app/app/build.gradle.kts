@@ -32,8 +32,8 @@ android {
         applicationId = "com.healthdecoder.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 22
-        versionName = "1.3.13"
+        versionCode = 23
+        versionName = "1.3.14"
 
         // No Gemini/Sarvam API keys are embedded here anymore — all AI calls are proxied
         // through the backend (see BackendAiClient), so the APK ships with zero provider keys.
@@ -190,12 +190,12 @@ dependencies {
   // DocumentFile — used by SafCloudUploader for cloud-folder backup via SAF
   implementation("androidx.documentfile:documentfile:1.0.1")
 
-  // Firebase Auth (phone/OTP sign-in, and Google sign-in below)
+  // Firebase Auth (phone/OTP sign-in, and Google sign-in below). Deliberately NOT
+  // firebase-analytics: it was never called anywhere in the app, and Play Console's SDK scanner
+  // flags it as a known Advertising-ID-capable library, nagging the "Advertising ID" declaration
+  // on every release even though the app doesn't use it for anything.
   implementation(platform(libs.firebase.bom))
   implementation(libs.firebase.auth)
-  if (hasGoogleServicesConfig) {
-      implementation("com.google.firebase:firebase-analytics")
-  }
 
   // Credential Manager — native "Sign in with Google" account picker (no browser)
   implementation("androidx.credentials:credentials:1.3.0")
