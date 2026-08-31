@@ -1149,7 +1149,7 @@ fun ReportDetailScreen(
                                             text = tr("Medicine Side-Effects"),
                                             fontWeight = FontWeight.Bold,
                                             style = MaterialTheme.typography.titleSmall,
-                                            color = themedInk(Color(0xFF4A148C), Color(0xFFCE93D8))
+                                            color = themedInk(Color(0xFF4A148C), Color(0xFFB39DDB))
                                         )
                                         Text(
                                             text = tr("Tap a medicine to expand"),
@@ -1191,7 +1191,7 @@ fun ReportDetailScreen(
                                                 Icon(
                                                     imageVector = Icons.Default.LocalPharmacy,
                                                     contentDescription = se.medicine,
-                                                    tint = themedInk(Color(0xFF7B1FA2), Color(0xFFCE93D8)),
+                                                    tint = themedInk(Color(0xFF7B1FA2), Color(0xFFB39DDB)),
                                                     modifier = Modifier.size(18.dp)
                                                 )
                                                 Text(
@@ -1247,7 +1247,7 @@ fun ReportDetailScreen(
                                                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                                                             verticalAlignment = Alignment.Top
                                                         ) {
-                                                            Text(text = "•", color = themedInk(Color(0xFF7B1FA2), Color(0xFFCE93D8)), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                            Text(text = "•", color = themedInk(Color(0xFF7B1FA2), Color(0xFFB39DDB)), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                                             Text(text = eff, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface, lineHeight = 16.sp)
                                                         }
                                                     }

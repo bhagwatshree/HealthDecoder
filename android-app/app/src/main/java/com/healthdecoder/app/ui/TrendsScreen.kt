@@ -51,8 +51,15 @@ private val statusHigh = Color(0xFFC62828)
 private val statusLow = Color(0xFFE65100)
 private val statusNormal = Color(0xFF2E7D32)
 // Distinct from the clinical status colors above (this isn't saying the READING is abnormal,
-// it's saying the READING might not actually belong to this test at all).
-private val mislabeledColor = Color(0xFF6A1B9A)
+// it's saying the READING might not actually belong to this test at all) - a neutral slate-blue
+// "data quality" flag reads as administrative rather than another clinical severity, and stays
+// professional in a way the previous purple didn't. Needs its own dark-theme partner: the light
+// tone alone is too close to the dark background to stay legible there (see themedInk).
+private val mislabeledColorLight = Color(0xFF546E7A)
+private val mislabeledColorDark = Color(0xFFB0BEC5)
+
+@Composable
+private fun mislabeledColor(): Color = themedInk(mislabeledColorLight, mislabeledColorDark)
 
 private fun parseNum(s: String): Float? {
     val m = Regex("-?\\d+(\\.\\d+)?").find(s) ?: return null
@@ -367,7 +374,7 @@ private fun TrendCard(trend: ParameterTrend, onPointClick: (TrendDataPoint) -> U
                         Text(
                             text = (if (it.mislabeled) "⚠ " else "") + "${it.value} ${it.unit}".trim() + (it.context.takeIf { c -> c.isNotBlank() }?.let { c -> " ($c)" } ?: ""),
                             fontWeight = FontWeight.Bold,
-                            color = if (it.mislabeled) mislabeledColor else statusColor(it.status, MaterialTheme.colorScheme.onSurface)
+                            color = if (it.mislabeled) mislabeledColor() else statusColor(it.status, MaterialTheme.colorScheme.onSurface)
                         )
                         Icon(trendIcon, contentDescription = trend.trend, tint = trendColor, modifier = Modifier.size(18.dp))
                     }
@@ -378,7 +385,7 @@ private fun TrendCard(trend: ParameterTrend, onPointClick: (TrendDataPoint) -> U
                 Text(
                     text = tr("This reading may belong to a different panel of that report — tap it to check."),
                     style = MaterialTheme.typography.labelSmall,
-                    color = mislabeledColor,
+                    color = mislabeledColor(),
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -427,9 +434,9 @@ private fun TrendCard(trend: ParameterTrend, onPointClick: (TrendDataPoint) -> U
             val mislabeledPoints = trend.dataPoints.filter { it.mislabeled }
             if (mislabeledPoints.isNotEmpty()) {
                 Text(
-                    text = "⚠ ${mislabeledPoints.size} reading(s) (in purple) may actually belong to a different panel of that report, not ${trend.name} — tap one to open the report and reprocess it, or fix all flagged reports at once from Settings.",
+                    text = trFormat("⚠ %1\$d flagged reading(s) may belong to a different panel, not %2\$s — tap one to check, or fix all at once from Settings.", mislabeledPoints.size, trend.name),
                     style = MaterialTheme.typography.labelSmall,
-                    color = mislabeledColor,
+                    color = mislabeledColor(),
                     modifier = Modifier.padding(top = 2.dp)
                 )
             }
@@ -509,6 +516,10 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
 
     val density = LocalDensity.current
     val primary = MaterialTheme.colorScheme.primary
+    // Resolved here, not inside Canvas below: themedInk()/mislabeledColor() are @Composable and
+    // Canvas's draw scope isn't a composable context, same reason primary/surface/etc. below are
+    // captured as plain vals before the Canvas block rather than read from inside it.
+    val mislabeledColorResolved = mislabeledColor()
     val axisColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
     val bandColor = Color(0xFF2E7D32) // healthy green
@@ -631,8 +642,20 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
             var lastLabelX = -10000f
             val minGap = with(density) { 46.dp.toPx() }
             val dotAlpha = ((progress - 0.5f) * 2f).coerceIn(0f, 1f)
+            // A mislabeled duplicate (the same panel misread under two different rows — see
+            // DashboardEngine.contentMismatchWarning) shares almost the same date and a similar
+            // value as the real reading it sits next to, so their dots land on nearly the same
+            // spot and their value-label text used to draw on top of each other into an
+            // unreadable overlap. Both numbers ARE correct and available (the report's own table
+            // shows them fine) - the chart just needs to stack the labels instead of stacking the
+            // text, so a close-together point pushes its label further up rather than reusing the
+            // last one's exact height.
+            val collisionGap = with(density) { 20.dp.toPx() }
+            val stackStep = with(density) { 13.dp.toPx() }
+            var lastPointPos: Offset? = null
+            var stackOffset = 0f
             pos.forEach { (o, dp) ->
-                val c = if (dp.mislabeled) mislabeledColor else statusColor(dp.status, primary)
+                val c = if (dp.mislabeled) mislabeledColorResolved else statusColor(dp.status, primary)
                 drawCircle(color = c.copy(alpha = 0.18f * dotAlpha), radius = with(density) { 9.dp.toPx() }, center = o)
                 drawCircle(color = surface, radius = with(density) { 5.dp.toPx() } * dotAlpha, center = o)
                 drawCircle(color = c.copy(alpha = dotAlpha), radius = with(density) { 4.dp.toPx() } * dotAlpha, center = o)
@@ -646,7 +669,12 @@ private fun TrendLineChart(points: List<TrendDataPoint>, onPointClick: (TrendDat
                         if (dp.context.isNotBlank()) append(" (${dp.context.first()})")
                         if (dp.converted) append(" ↺")
                     }
-                    drawContext.canvas.nativeCanvas.drawText(pointLabel, o.x, o.y - with(density) { 11.dp.toPx() }, valuePaint)
+                    val closeToLast = lastPointPos?.let { last ->
+                        kotlin.math.abs(o.x - last.x) < collisionGap && kotlin.math.abs(o.y - last.y) < collisionGap
+                    } ?: false
+                    stackOffset = if (closeToLast) stackOffset + stackStep else 0f
+                    drawContext.canvas.nativeCanvas.drawText(pointLabel, o.x, o.y - with(density) { 11.dp.toPx() } - stackOffset, valuePaint)
+                    lastPointPos = o
                     if (o.x - lastLabelX >= minGap) {
                         drawContext.canvas.nativeCanvas.drawText(shortDate(dp.date), o.x, h - with(density) { 6.dp.toPx() }, labelPaint)
                         lastLabelX = o.x
