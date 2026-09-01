@@ -91,10 +91,6 @@ fun SettingsScreen(
     // actual backup EXPORT result now lives in TransferScheduler.backupResult (see its display
     // site below, which shows whichever fired most recently).
     var backupResult by remember { mutableStateOf<String?>(null) }
-    var dupCandidates by remember { mutableStateOf<List<MedicalReport>>(emptyList()) }
-    var showDupDialog by remember { mutableStateOf(false) }
-    var dupResult by remember { mutableStateOf<String?>(null) }
-    var dupScanning by remember { mutableStateOf(false) }
     var cloudFolderLabel by remember { mutableStateOf(SafCloudUploader.getBackupFolderLabel(context)) }
     var pendingSyncCount by remember { mutableStateOf(BackupSync.pendingCount(context)) }
     // Only for runMerge()'s own busy state now — export/import's busy+result live in
@@ -126,7 +122,6 @@ fun SettingsScreen(
     var restorePasswordError by remember { mutableStateOf<String?>(null) }
     var restoreBusy by remember { mutableStateOf(false) }
     var degradedCount by remember { mutableStateOf(0) }
-    var atRiskCount by remember { mutableStateOf(0) }
     var mislabeledStatus by remember { mutableStateOf(LocalRepository.MislabeledStatus(0, 0)) }
     // fixDegradedBusy/Progress/Result and recoverBusy/Progress/Result now live in
     // MaintenanceScheduler, not here — see its doc comment for why (surviving navigation away
@@ -147,7 +142,6 @@ fun SettingsScreen(
     LaunchedEffect(Unit) { patients = LocalRepository.listPatients(context) }
     LaunchedEffect(Unit) { degradedCount = LocalRepository.findDegradedReports(context).size }
     LaunchedEffect(Unit) { hasAutoBackupPassword = SecureKeyManager.getBackupPassword(context) != null }
-    LaunchedEffect(Unit) { atRiskCount = LocalRepository.findAtRiskBundles(context).size }
     LaunchedEffect(Unit) { mislabeledStatus = LocalRepository.findMislabeledStatus(context) }
 
     // SAF folder picker: user picks a cloud-synced folder (Drive / OneDrive / Dropbox / local)
@@ -580,62 +574,10 @@ fun SettingsScreen(
                 }
             }
 
-            // Multi-page scan bundles that predate the chunk-size fix — a panel from the same
-            // original document (e.g. an electrolytes page) may never have been saved at all.
-            // Only shown when there's actually something to check.
-            if (atRiskCount > 0) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = tr("Check for Missing Report Data"),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Text(
-                            text = trFormat("%1\$d multi-page scan(s) were processed before a fix to how large documents are split for analysis — a panel from the same document (e.g. an electrolytes or PT/INR page) may be missing. This re-checks them using the pages already stored and adds anything that was missed; anything already saved is left alone.", atRiskCount),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        if (MaintenanceScheduler.recoverBusy) {
-                            Text(
-                                trFormat(
-                                    "Checking %1\$d of %2\$d…",
-                                    MaintenanceScheduler.recoverProgress.first,
-                                    MaintenanceScheduler.recoverProgress.second
-                                ),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                        MaintenanceScheduler.recoverResult?.let {
-                            Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
-                        }
-                        Button(
-                            onClick = {
-                                // Runs in a scope that outlives this screen — see MaintenanceScheduler.
-                                MaintenanceScheduler.runRecoverMissingPanels(context) {
-                                    atRiskCount = LocalRepository.findAtRiskBundles(context).size
-                                }
-                            },
-                            enabled = !MaintenanceScheduler.recoverBusy,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                        ) {
-                            if (MaintenanceScheduler.recoverBusy) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onError)
-                            } else {
-                                Text(trFormat("Check Now (%1\$d)", atRiskCount), color = MaterialTheme.colorScheme.onError)
-                            }
-                        }
-                    }
-                }
-            }
+            // "Check for Missing Report Data" used to be a manual button here. It's now run
+            // automatically and silently from HomeScreen's launch effect (see there) instead of
+            // asking a non-technical user to know this maintenance concept exists, let alone
+            // remember to trigger it — see MaintenanceScheduler.runRecoverMissingPanels.
 
             // Dense multi-panel documents (10+ distinct panels in one scan) can come back with a
             // panel's name correctly read but its values actually belonging to an adjacent panel
@@ -926,33 +868,10 @@ fun SettingsScreen(
                 }
             }
 
-            // Duplicate cleanup
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(text = tr("Remove Duplicate Reports"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Text(text = tr("Finds reports that were saved more than once (same patient, date, and content) and removes the extra copies. The original of each report is always kept. New scans are checked automatically; this cleans up older duplicates."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    dupResult?.let { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
-                    OutlinedButton(
-                        onClick = {
-                            dupScanning = true
-                            dupResult = null
-                            coroutineScope.launch {
-                                val found = runCatching { LocalRepository.findDuplicateReports(context) }.getOrDefault(emptyList())
-                                dupScanning = false
-                                if (found.isEmpty()) dupResult = "No duplicate reports found."
-                                else { dupCandidates = found; showDupDialog = true }
-                            }
-                        },
-                        enabled = !dupScanning,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    ) { Text(if (dupScanning) "Scanning…" else "Scan for Duplicates") }
-                }
-            }
+            // "Remove Duplicate Reports" used to be a manual scan-and-confirm button here. It's
+            // now run automatically and silently after every scan/reprocess/import (see
+            // LocalRepository.autoRemoveDuplicates) instead of asking a non-technical user to
+            // know this maintenance concept exists, let alone remember to trigger it.
 
             // Legal — always reachable, not just at signup (RegisterScreen has the same two links
             // behind its consent checkbox).
@@ -1508,32 +1427,6 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { tmp.delete(); pendingRestoreFile = null }, enabled = !RestoreScheduler.isBusy) { Text(tr("Cancel")) }
             }
-        )
-    }
-
-    if (showDupDialog) {
-        AlertDialog(
-            onDismissRequest = { showDupDialog = false },
-            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-            title = { Text("Remove ${dupCandidates.size} duplicate report${if (dupCandidates.size == 1) "" else "s"}?") },
-            text = {
-                val preview = dupCandidates.take(5).joinToString("\n") {
-                    "• ${it.reportType ?: "Report"} — ${it.patientName ?: "Unknown"} (${it.reportDate ?: "no date"})"
-                }
-                val more = if (dupCandidates.size > 5) "\n…and ${dupCandidates.size - 5} more" else ""
-                Text("These are extra copies of reports you already have. The original of each is kept.\n\n$preview$more")
-            },
-            confirmButton = {
-                Button(onClick = {
-                    showDupDialog = false
-                    coroutineScope.launch {
-                        val removed = runCatching { LocalRepository.deleteDuplicateReports(context) }.getOrDefault(0)
-                        dupResult = "Removed $removed duplicate report${if (removed == 1) "" else "s"}."
-                        dupCandidates = emptyList()
-                    }
-                }) { Text(tr("Remove Duplicates")) }
-            },
-            dismissButton = { TextButton(onClick = { showDupDialog = false }) { Text(tr("Cancel")) } }
         )
     }
 

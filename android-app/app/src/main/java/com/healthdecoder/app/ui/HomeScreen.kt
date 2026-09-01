@@ -35,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import com.healthdecoder.app.local.AppSettings
 import com.healthdecoder.app.local.DemoDataSeeder
 import com.healthdecoder.app.local.LocalRepository
+import com.healthdecoder.app.local.MaintenanceScheduler
 import com.healthdecoder.app.ui.components.AppBottomNavBar
 import com.healthdecoder.app.ui.components.BottomNavTab
 import kotlinx.coroutines.launch
@@ -79,6 +80,18 @@ fun HomeScreen(
     var showFamilyManager by remember { mutableStateOf(false) }
     var familyReload by remember { mutableStateOf(0) }
     val isLoggedIn = AppSettings.isLoggedIn(context)
+
+    // Silent, automatic backlog cleanup — no button, no progress banner a non-technical user
+    // would have to notice and act on. "Missing panels" only affects OLD documents scanned
+    // before a chunk-size bug fix (see findAtRiskBundles), so a fresh scan never adds new work
+    // here; each affected bundle is marked checked after one pass (AppSettings.
+    // markRecoveryBundleChecked), so this converges to an instant no-op once the one-time
+    // backlog is cleared, and is cheap to re-check on every Home visit after that.
+    LaunchedEffect(Unit) {
+        if (LocalRepository.findAtRiskBundles(context).isNotEmpty()) {
+            MaintenanceScheduler.runRecoverMissingPanels(context)
+        }
+    }
 
     LaunchedEffect(familyReload) {
         // Real, persisted family members (includes people added with no reports yet).

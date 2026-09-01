@@ -128,18 +128,30 @@ object LocalRepository {
      * single row with a matching category. This compares whole GROUPS by shared page hash
      * instead. Keeps the group whose earliest report is oldest (by createdAt) in each
      * overlapping cluster; returns every report in the other, later group(s).
+     *
+     * This feeds [deleteDuplicateReports], which runRecoverMissingPanels() calls automatically
+     * with no user confirmation - so a false match here is a silent, unattended deletion of a
+     * real document, not just a wrong suggestion the user can decline. Requiring only ONE shared
+     * hash was too weak a signal: a single reused blank/placeholder page (or any other
+     * coincidental match) between two otherwise-unrelated documents would wrongly delete the
+     * entire later one. Requiring most of the SMALLER group's pages to match is a much stronger,
+     * safer signal - the same document scanned/imported twice shares ALL or nearly all of its
+     * pages, not just one.
      */
     private suspend fun findDuplicateDocumentGroups(context: Context): List<MedicalReport> {
         val groups = DashboardEngine.groupBySourceDocument(LocalStore.getReports(context))
-            .filter { group -> group.any { it.pageHashes.isNotEmpty() } }
-            .sortedBy { group -> group.minOf { it.createdAt } }
-        val keptHashSets = mutableListOf<Set<String>>()
+            .map { group -> group to group.flatMap { it.pageHashes }.toSet() }
+            .filter { (_, hashes) -> hashes.isNotEmpty() }
+            .sortedBy { (group, _) -> group.minOf { it.createdAt } }
+        val kept = mutableListOf<Set<String>>()
         val duplicates = mutableListOf<MedicalReport>()
-        for (group in groups) {
-            val hashes = group.flatMap { it.pageHashes }.toSet()
-            if (hashes.isEmpty()) continue
-            if (keptHashSets.any { kept -> kept.any { it in hashes } }) duplicates += group
-            else keptHashSets += hashes
+        for ((group, hashes) in groups) {
+            val isDuplicateOfKept = kept.any { keptHashes ->
+                val overlap = hashes.count { it in keptHashes }
+                val smallerSize = minOf(hashes.size, keptHashes.size)
+                smallerSize > 0 && overlap.toFloat() / smallerSize >= 0.6f
+            }
+            if (isDuplicateOfKept) duplicates += group else kept += hashes
         }
         return duplicates
     }
@@ -159,6 +171,22 @@ object LocalRepository {
         }
         if (duplicates.isNotEmpty()) afterWrite(context)
         duplicates.size
+    }
+
+    /**
+     * Runs the same cleanup as [deleteDuplicateReports], automatically, right after an operation
+     * that could introduce a document-level duplicate (a fresh scan, a reprocess, an import) -
+     * see the comment on [findDuplicateDocumentGroups] for why those specifically. A
+     * non-technical user shouldn't have to know a "Remove Duplicate Reports" button in Settings
+     * exists, let alone remember to tap it; this is pure data comparison with no AI call, so
+     * there's no cost consideration against running it every time. Never surfaces failures to the
+     * caller - a failed cleanup attempt shouldn't turn a successful scan/reprocess/import into a
+     * failed one.
+     */
+    private suspend fun autoRemoveDuplicates(context: Context) {
+        runCatching { deleteDuplicateReports(context) }
+            .onSuccess { if (it > 0) Log.i("ScanDiag", "Auto-removed $it duplicate report(s) after write") }
+            .onFailure { it.printStackTrace() }
     }
 
     /**
@@ -317,6 +345,7 @@ object LocalRepository {
         for (r in saved) for (m in r.medications) if (m.name.isNotBlank())
             MedicineScheduleStore.clearDismissed(context, m.name, r.patientName ?: patientName)
 
+        autoRemoveDuplicates(context)
         afterWrite(context)
         saved
     }
@@ -662,6 +691,7 @@ object LocalRepository {
         val siblings = DashboardEngine.groupBySourceDocument(LocalStore.getReports(context))
             .firstOrNull { group -> group.any { it.id == existing.id } } ?: listOf(existing)
         val updated = reprocessSiblings(context, siblings)
+        autoRemoveDuplicates(context)
         afterWrite(context)
         updated
     }
@@ -695,6 +725,7 @@ object LocalRepository {
             }
         }
         onProgress(groups.size, groups.size)
+        autoRemoveDuplicates(context)
         afterWrite(context)
         processed
     }
@@ -1028,6 +1059,7 @@ object LocalRepository {
             }
         }
         onProgress(groups.size, groups.size)
+        autoRemoveDuplicates(context)
         afterWrite(context)
         val stillMislabeled = findMislabeledReports(context)
         // A document that came back clean doesn't need its attempt count anymore — if something
@@ -1407,7 +1439,10 @@ object LocalRepository {
     suspend fun importData(context: Context, uri: android.net.Uri): ExportManager.ImportResult =
         withContext(Dispatchers.IO) {
             val result = ExportManager.import(context, uri)
-            if (result.added > 0 || result.updated > 0) afterWrite(context)
+            if (result.added > 0 || result.updated > 0) {
+                autoRemoveDuplicates(context)
+                afterWrite(context)
+            }
             result
         }
 
