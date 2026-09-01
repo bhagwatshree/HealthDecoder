@@ -556,6 +556,14 @@ object DashboardEngine {
         // multiple points on the same line (e.g. Hemoglobin vs MCH collapsing together).
         val paramMap = linkedMapOf<String, MutableList<TrendDataPoint>>()
         val seenPerReport = HashSet<String>()
+        // Two DIFFERENT reports (different ids) can legitimately both state the same reading for
+        // the same date - e.g. a lab panel report and a doctor's summary/discharge note that
+        // recaps the same lab value, or the same physical document scanned/imported more than
+        // once. Whatever the cause, showing the identical value twice on one trend line is never
+        // useful information, just a stacked-label eyesore - so this collapses same
+        // test+date+value across DIFFERENT reports into one point, on top of seenPerReport's
+        // existing per-report dedup above.
+        val seenValueForDate = HashSet<String>()
         // Computed once per report, not per parameter — same check as saveScan()/reprocessing use
         // to flag a NEW mislabel, re-run here so an EXISTING one shows up on the chart too.
         val mislabeledCache = HashMap<String, Boolean>()
@@ -598,6 +606,10 @@ object DashboardEngine {
                     refLow = refLow?.let { UnitConverter.convert(canon, it, rawUnit, unit) }
                     refHigh = refHigh?.let { UnitConverter.convert(canon, it, rawUnit, unit) }
                 }
+                // Same test, same date, same value already recorded from a DIFFERENT report -
+                // keep the first one's point (and its reportId, for tap-through) rather than
+                // stacking an identical-looking second dot on top of it.
+                if (!seenValueForDate.add("$canon|$date|$value")) continue
                 paramMap.getOrPut(canon) { mutableListOf() }.add(
                     TrendDataPoint(date, value, unit, p.status ?: "", r.id, context, origValue, origUnit, converted, refLow, refHigh, mislabeled)
                 )
