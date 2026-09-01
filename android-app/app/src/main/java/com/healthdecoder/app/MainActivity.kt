@@ -22,6 +22,18 @@ class MainActivity : FragmentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+
+    // Normally auto-initialized by FirebaseInitProvider (a ContentProvider Firebase's own
+    // manifest declares, which Android runs before any Activity) — but Google Play's
+    // pre-launch report crawler hit "Default FirebaseApp is not initialized" on this exact
+    // login screen, meaning that auto-init didn't complete in time on at least that test
+    // environment. initializeApp() is idempotent — a no-op if auto-init already succeeded —
+    // so calling it explicitly here removes the dependency on that timing without any risk of
+    // double-initializing.
+    if (com.google.firebase.FirebaseApp.getApps(this).isEmpty()) {
+      runCatching { com.google.firebase.FirebaseApp.initializeApp(this) }
+    }
+
     MedicineReminderManager.createChannel(this)
 
     intent?.data?.let {
