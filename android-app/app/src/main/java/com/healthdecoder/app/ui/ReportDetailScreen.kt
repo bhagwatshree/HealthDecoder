@@ -88,8 +88,12 @@ fun ReportDetailScreen(
     val isReprocessing = com.healthdecoder.app.local.ReprocessScheduler.isBusy(reportId)
     // Other report rows saved from the same source document (e.g. a Haemogram + PT/INR +
     // Biochemistry panel split into separate rows at scan time) — lets the reprocess dialog
-    // offer refreshing all of them together instead of only this one section.
-    var documentSiblingCount by remember { mutableStateOf(1) }
+    // offer refreshing all of them together instead of only this one section, and the "View
+    // Complete Report" link below jump straight to any of them without going back to Records
+    // and hunting for the right document card.
+    var documentSiblings by remember { mutableStateOf<List<MedicalReport>>(emptyList()) }
+    val documentSiblingCount = documentSiblings.size.coerceAtLeast(1)
+    var showCompleteReportDialog by remember { mutableStateOf(false) }
     var reprocessWholeDocument by remember { mutableStateOf(false) }
     // Whether this document has already used up its automatic mislabel-reprocess attempts (see
     // AppSettings' cap) — stops the mismatch banner's button from being tapped indefinitely for a
@@ -181,7 +185,7 @@ fun ReportDetailScreen(
         // and shows next time this report is opened even if not this time.
         com.healthdecoder.app.local.BackgroundTasks.launch {
             runCatching { LocalRepository.ensureEnrichment(context, reportId) }.getOrNull()?.let { report = it }
-            documentSiblingCount = runCatching { LocalRepository.documentSiblings(context, reportId).size }.getOrDefault(1)
+            documentSiblings = runCatching { LocalRepository.documentSiblings(context, reportId) }.getOrDefault(emptyList())
         }
     }
 
@@ -371,6 +375,34 @@ fun ReportDetailScreen(
                                     }
                                 }
                             }
+                        }
+                    }
+
+                    // A multi-panel scan (Haemogram + PT/INR + Biochemistry etc.) saves each
+                    // panel as its own report row — this section only shows the ONE panel the
+                    // user tapped into. Surfaced right here, not buried in a menu, since "how do
+                    // I see the rest of this document" was a direct ask: jumping between panels
+                    // otherwise meant going back to Records and finding the right document card.
+                    if (documentSiblings.size > 1) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { showCompleteReportDialog = true }
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.Article, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                Text(
+                                    trFormat("This is 1 of %1\$d sections in this document", documentSiblings.size),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            Text(tr("View Complete Report"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -1568,6 +1600,61 @@ fun ReportDetailScreen(
             }
 
             // Delete Confirmation Dialog
+            if (showCompleteReportDialog) {
+                AlertDialog(
+                    onDismissRequest = { showCompleteReportDialog = false },
+                    icon = { Icon(Icons.Default.Article, contentDescription = null) },
+                    title = { Text(tr("Complete Report")) },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                tr("This document was split into these sections. Tap one to open it."),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                            documentSiblings.forEach { sibling ->
+                                val isCurrent = sibling.id == reportId
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable(enabled = !isCurrent) {
+                                            showCompleteReportDialog = false
+                                            onNavigateToDetail(sibling.id)
+                                        }
+                                        .background(
+                                            if (isCurrent) MaterialTheme.colorScheme.primaryContainer
+                                            else Color.Transparent
+                                        )
+                                        .padding(horizontal = 10.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        if (isCurrent) Icons.Default.RadioButtonChecked else Icons.Default.InsertDriveFile,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        sibling.reportType?.takeIf { it.isNotBlank() } ?: tr("Report"),
+                                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    if (isCurrent) {
+                                        Text("(${tr("current")})", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showCompleteReportDialog = false }) { Text(tr("Close")) }
+                    }
+                )
+            }
+
             if (showDeleteDialog) {
                 AlertDialog(
                     onDismissRequest = { showDeleteDialog = false },
