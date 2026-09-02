@@ -864,6 +864,18 @@ fun ReportItemCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                // ReportGroupCard shows the original filename for a multi-panel document; a
+                // standalone report (this card) never did, even when it has one — an inconsistency
+                // between the two card styles, not a deliberate omission. Absent for a report with
+                // no preserved original file (e.g. a camera scan with no source PDF/image kept).
+                report.sourceFiles.firstOrNull()?.name?.takeIf { it.isNotBlank() }?.let { fileName ->
+                    Text(
+                        text = fileName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             if (report.medications.isNotEmpty()) {
