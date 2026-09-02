@@ -49,6 +49,7 @@ import com.healthdecoder.app.ui.DoctorBriefScreen
 import com.healthdecoder.app.ui.TrendsScreen
 import com.healthdecoder.app.ui.DiscoveryScreen
 import com.healthdecoder.app.ui.OnboardingScreen
+import com.healthdecoder.app.ui.CompleteReportScreen
 import com.healthdecoder.app.ui.PrivacyPolicyScreen
 import com.healthdecoder.app.ui.TermsScreen
 import com.healthdecoder.app.ui.components.BottomNavTab
@@ -485,6 +486,15 @@ fun MainNavigation() {
             onNavigateToDetail = { reportId -> backStack.add(ReportDetail(reportId)) },
             onNavigateToScan = { backStack.add(Scan()) },
             onNavigateToChat = { backStack.add(Chat(contextHint = "Records")) },
+            onNavigateToCompleteReport = { reportId -> backStack.add(CompleteReport(reportId)) },
+            modifier = Modifier.safeDrawingPadding()
+          )
+        }
+        entry<CompleteReport> { key ->
+          CompleteReportScreen(
+            reportId = key.reportId,
+            onNavigateBack = { backStack.removeLastOrNull() },
+            onNavigateToDetail = { id -> backStack.add(ReportDetail(id)) },
             modifier = Modifier.safeDrawingPadding()
           )
         }
@@ -574,6 +584,7 @@ fun MainNavigation() {
             onNavigateToDiscovery = { category, query ->
               backStack.add(Discovery(category = category, query = query))
             },
+            onNavigateToCompleteReport = { id -> backStack.add(CompleteReport(id)) },
             modifier = Modifier.safeDrawingPadding()
           )
         }

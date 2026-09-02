@@ -65,6 +65,9 @@ data object LiveVision : NavKey
 data class DoctorBrief(val patientName: String) : NavKey
 
 @Serializable
+data class CompleteReport(val reportId: String) : NavKey
+
+@Serializable
 data object PrivacyPolicy : NavKey
 
 @Serializable

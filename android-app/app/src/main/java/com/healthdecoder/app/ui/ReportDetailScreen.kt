@@ -59,6 +59,7 @@ fun ReportDetailScreen(
     onNavigateToDetail: (String) -> Unit = {},
     onNavigateToAnalysis: (String) -> Unit = {},
     onNavigateToDiscovery: (String, String) -> Unit = { _, _ -> },
+    onNavigateToCompleteReport: (String) -> Unit = {},
     highlightParam: String? = null,
     modifier: Modifier = Modifier
 ) {
@@ -93,7 +94,6 @@ fun ReportDetailScreen(
     // and hunting for the right document card.
     var documentSiblings by remember { mutableStateOf<List<MedicalReport>>(emptyList()) }
     val documentSiblingCount = documentSiblings.size.coerceAtLeast(1)
-    var showCompleteReportDialog by remember { mutableStateOf(false) }
     var reprocessWholeDocument by remember { mutableStateOf(false) }
     // Whether this document has already used up its automatic mislabel-reprocess attempts (see
     // AppSettings' cap) — stops the mismatch banner's button from being tapped indefinitely for a
@@ -388,7 +388,7 @@ fun ReportDetailScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
-                                .clickable { showCompleteReportDialog = true }
+                                .clickable { onNavigateToCompleteReport(reportId) }
                                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                                 .padding(horizontal = 14.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1600,61 +1600,6 @@ fun ReportDetailScreen(
             }
 
             // Delete Confirmation Dialog
-            if (showCompleteReportDialog) {
-                AlertDialog(
-                    onDismissRequest = { showCompleteReportDialog = false },
-                    icon = { Icon(Icons.Default.Article, contentDescription = null) },
-                    title = { Text(tr("Complete Report")) },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                tr("This document was split into these sections. Tap one to open it."),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                            documentSiblings.forEach { sibling ->
-                                val isCurrent = sibling.id == reportId
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable(enabled = !isCurrent) {
-                                            showCompleteReportDialog = false
-                                            onNavigateToDetail(sibling.id)
-                                        }
-                                        .background(
-                                            if (isCurrent) MaterialTheme.colorScheme.primaryContainer
-                                            else Color.Transparent
-                                        )
-                                        .padding(horizontal = 10.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(
-                                        if (isCurrent) Icons.Default.RadioButtonChecked else Icons.Default.InsertDriveFile,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                        tint = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        sibling.reportType?.takeIf { it.isNotBlank() } ?: tr("Report"),
-                                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                    if (isCurrent) {
-                                        Text("(${tr("current")})", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { showCompleteReportDialog = false }) { Text(tr("Close")) }
-                    }
-                )
-            }
-
             if (showDeleteDialog) {
                 AlertDialog(
                     onDismissRequest = { showDeleteDialog = false },

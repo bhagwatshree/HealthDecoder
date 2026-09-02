@@ -30,6 +30,7 @@ fun RecordsScreen(
     onNavigateToDetail: (String) -> Unit,
     onNavigateToScan: () -> Unit,
     onNavigateToChat: () -> Unit,
+    onNavigateToCompleteReport: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -346,7 +347,8 @@ fun RecordsScreen(
                                         ReportGroupCard(
                                             reports = group,
                                             onReportClick = { id -> onNavigateToDetail(id) },
-                                            onReprocessed = { loadDashboard() }
+                                            onReprocessed = { loadDashboard() },
+                                            onViewComplete = { id -> onNavigateToCompleteReport(id) }
                                         )
                                     }
                                 }

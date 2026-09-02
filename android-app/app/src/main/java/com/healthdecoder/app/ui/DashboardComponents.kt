@@ -710,7 +710,11 @@ fun ReportGroupCard(
     onReportClick: (String) -> Unit,
     // Refreshes the caller's list after a successful whole-document reprocess. Optional so
     // callers that don't offer reprocessing here (none currently) aren't forced to wire it.
-    onReprocessed: () -> Unit = {}
+    onReprocessed: () -> Unit = {},
+    // Opens the consolidated all-sections view (CompleteReportScreen) - added because seeing
+    // every panel meant tapping into each one individually from here first; this reads the
+    // whole document from the list itself, without picking a panel first.
+    onViewComplete: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     var showReprocessDialog by remember { mutableStateOf(false) }
@@ -763,11 +767,16 @@ fun ReportGroupCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                // Reprocesses every panel of this document together (one AI call) without needing
-                // to open each panel individually and reprocess it on its own.
-                IconButton(onClick = { showReprocessDialog = true }, enabled = !isReprocessing) {
-                    if (isReprocessing) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    else Icon(imageVector = Icons.Default.Autorenew, contentDescription = tr("Reprocess this document"))
+                Row {
+                    IconButton(onClick = { onViewComplete(first.id) }) {
+                        Icon(imageVector = Icons.Default.Article, contentDescription = tr("View Complete Report"))
+                    }
+                    // Reprocesses every panel of this document together (one AI call) without
+                    // needing to open each panel individually and reprocess it on its own.
+                    IconButton(onClick = { showReprocessDialog = true }, enabled = !isReprocessing) {
+                        if (isReprocessing) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        else Icon(imageVector = Icons.Default.Autorenew, contentDescription = tr("Reprocess this document"))
+                    }
                 }
             }
 
