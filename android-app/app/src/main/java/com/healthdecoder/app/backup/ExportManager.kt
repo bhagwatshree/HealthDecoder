@@ -8,6 +8,7 @@ import com.healthdecoder.app.local.LocalStore
 import com.healthdecoder.app.model.FamilyProfile
 import com.healthdecoder.app.model.MedicalReport
 import com.healthdecoder.app.model.SourceFile
+import com.healthdecoder.app.model.VitalReading
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import java.io.ByteArrayOutputStream
@@ -49,7 +50,11 @@ object ExportManager {
         val sinceTimestamp: String?,   // the delta cutoff used, or null for a full export
         val patientFilter: String?,    // the single patient exported, or null for all
         val reports: List<MedicalReport>,  // paths already reduced to bare file names
-        val family: List<FamilyProfile> = emptyList()  // patient profiles (name/relation/sex/DOB) for the reports
+        val family: List<FamilyProfile> = emptyList(),  // patient profiles (name/relation/sex/DOB) for the reports
+        // Absent in exports made before this field existed — gson.fromJson then leaves it null
+        // despite the default, same as every other field this class documents; see safeVitals
+        // at the import() call site below.
+        val vitals: List<VitalReading> = emptyList()
     )
 
     /** Outcome of an import, for a user-facing summary. Import is add-or-update (merge), never a
@@ -58,7 +63,10 @@ object ExportManager {
      *  this device under a DIFFERENT id (e.g. the same physical document scanned locally, then
      *  also arriving via an import of a backup/transfer file made before that scan's id existed
      *  elsewhere) and was left out rather than filed in twice. */
-    data class ImportResult(val added: Int, val updated: Int, val patients: Set<String>, val skippedDuplicate: Int = 0)
+    data class ImportResult(
+        val added: Int, val updated: Int, val patients: Set<String>, val skippedDuplicate: Int = 0,
+        val vitalsAdded: Int = 0
+    )
 
     private fun exportsDir(context: Context): File =
         File(context.cacheDir, "exports").apply { if (!exists()) mkdirs() }
@@ -73,7 +81,8 @@ object ExportManager {
         reports: List<MedicalReport>,
         sinceTimestamp: String?,
         patientFilter: String?,
-        family: List<FamilyProfile> = emptyList()
+        family: List<FamilyProfile> = emptyList(),
+        vitals: List<VitalReading> = emptyList()
     ): File {
         // The "Try Demo" sample patient (see DemoDataSeeder) must never leave the device — a real
         // backup exported for safekeeping, or handed to another family member's phone, must not
@@ -81,6 +90,7 @@ object ExportManager {
         // Filtered here, at the write boundary, so this holds regardless of what a caller passes.
         val reports = reports.filterNot { it.patientName.equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true) }
         val family = family.filterNot { it.name.trim().equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true) }
+        val vitals = vitals.filterNot { it.patientName.equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true) }
 
         val tag = (patientFilter?.replace(Regex("[^A-Za-z0-9]"), "_")?.take(20) ?: "all")
         val outFile = File(exportsDir(context), "MedicalAssist_${tag}_${stamp.format(Date())}.zip")
@@ -113,7 +123,7 @@ object ExportManager {
                 val detail = File(LocalStore.detailedAnalysisDir(context), "${r.id}.json")
                 if (detail.exists()) zip.putFile("detailed/${r.id}.json", detail)
             }
-            val payload = Payload(FORMAT_VERSION, nowIso(), sinceTimestamp, patientFilter, portable, family)
+            val payload = Payload(FORMAT_VERSION, nowIso(), sinceTimestamp, patientFilter, portable, family, vitals)
             zip.putNextEntry(ZipEntry("export.json"))
             zip.write(gson.toJson(payload).toByteArray(Charsets.UTF_8))
             zip.closeEntry()
@@ -174,13 +184,21 @@ object ExportManager {
         // the .copy() calls below don't crash on the compiler's non-null parameter check.
         val safeReports = (rawPayload.reports ?: emptyList()).map { it.sanitized() }
         val safeFamily = rawPayload.family ?: emptyList()
+        // Same Gson-bypasses-null-safety hazard described above for reports: a hand-edited or
+        // truncated file can leave these non-nullable String fields actually null at runtime, and
+        // the very next .equals()/.getVitals() call would NPE. Drop rows with no usable identity,
+        // patch the rest.
+        val safeVitals = (rawPayload.vitals ?: emptyList())
+            .filter { it.patientName != null && it.value != null }
+            .map { it.sanitized() }
 
         // Second layer of the same guard as export(): even if a stray file predating that fix (or
         // a hand-edited one) somehow contains the demo patient, refuse to import it — this device's
         // own "Try Demo" flow is the only legitimate source of that data, never an imported file.
         val payload = rawPayload.copy(
             reports = safeReports.filterNot { it.patientName.equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true) },
-            family = safeFamily.filterNot { it.name.trim().equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true) }
+            family = safeFamily.filterNot { it.name.trim().equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true) },
+            vitals = safeVitals.filterNot { it.patientName.equals(DemoDataSeeder.DEMO_PATIENT_NAME, ignoreCase = true) }
         )
 
         // Snapshot taken BEFORE this batch's own inserts, not re-queried per row: a multi-panel
@@ -243,7 +261,19 @@ object ExportManager {
             }
             AppSettings.setFamilyProfiles(context, fam)
         }
-        return ImportResult(added, updated, patients, skippedDuplicate)
+
+        // Vitals: add-or-update by id, same merge convention as reports — a reading already
+        // present locally under the same id is refreshed, not duplicated.
+        var vitalsAdded = 0
+        for (v in payload.vitals) {
+            // Point lookup by id, not a per-row scan of the patient's whole vitals table — years
+            // of twice-daily logging is a lot of rows to re-read once per imported reading.
+            val existed = LocalStore.getVital(context, v.id) != null
+            LocalStore.upsertVital(context, v)
+            if (!existed) vitalsAdded++
+            patients.add(v.patientName)
+        }
+        return ImportResult(added, updated, patients, skippedDuplicate, vitalsAdded)
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -259,6 +289,22 @@ object ExportManager {
         createdAt = createdAt ?: nowIso(),
         pageHashes = pageHashes ?: emptyList(),
         sourcePageIndices = sourcePageIndices ?: emptyList()
+    )
+
+    /** VitalReading's counterpart to [MedicalReport.sanitized] — see that function's call site for
+     *  why Gson can leave non-nullable fields null. Identity fields are guaranteed non-null by the
+     *  filter at the call site; these are the optional ones that just need a default. */
+    private fun VitalReading.sanitized(): VitalReading = copy(
+        id = id ?: java.util.UUID.randomUUID().toString(),
+        metric = metric ?: "",
+        value2 = value2 ?: "",
+        value3 = value3 ?: "",
+        unit = unit ?: "",
+        context = context ?: "",
+        note = note ?: "",
+        recordedAt = recordedAt ?: nowIso(),
+        createdAt = createdAt ?: nowIso(),
+        source = source ?: "manual"
     )
 
     private fun String.baseName(): String = if (isBlank()) this else File(this).name

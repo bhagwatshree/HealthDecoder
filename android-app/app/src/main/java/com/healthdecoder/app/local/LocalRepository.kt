@@ -1419,14 +1419,28 @@ object LocalRepository {
                 (from == null || d >= from) &&
                 (to == null || d <= to)
         }
-        if (selected.isEmpty()) return@withContext null
+        // Home readings for the same patient/date-window selection, so a patient with vitals but
+        // no reports yet still produces a non-empty, worthwhile export. The all-patients branch
+        // must union report patients with family members: listPatients() is derived from reports
+        // alone, so on its own it would silently drop the vitals of anyone who has only ever
+        // logged home readings — exactly the person this feature exists for.
+        val allFamily = familyMembers(context)
+        val vitalsPatients = if (patientName != null) listOf(patientName)
+            else (listPatients(context) + allFamily.map { it.name }).distinctBy { it.trim().lowercase() }
+        val selectedVitals = vitalsPatients.flatMap { LocalStore.getVitals(context, it) }
+            .filter { v ->
+                val d = v.recordedAt.substringBefore("T")
+                (since == null || v.createdAt > since) && (from == null || d >= from) && (to == null || d <= to)
+            }
+        if (selected.isEmpty() && selectedVitals.isEmpty()) return@withContext null
         // Include the profile(s) (name/relation/sex/DOB) for the exported people so their details
         // travel with the records — just the one member for a per-patient export, else everyone.
-        val exportedNames = selected.mapNotNull { it.patientName?.trim()?.lowercase() }.toHashSet()
-        val family = familyMembers(context).filter {
+        val exportedNames = (selected.mapNotNull { it.patientName?.trim()?.lowercase() } +
+            selectedVitals.map { it.patientName.trim().lowercase() }).toHashSet()
+        val family = allFamily.filter {
             patientName == null || it.name.trim().lowercase() in exportedNames
         }
-        val file = ExportManager.export(context, selected, since, patientName, family)
+        val file = ExportManager.export(context, selected, since, patientName, family, selectedVitals)
         val isFullExport = patientName == null && from == null && to == null
         if (isFullExport) {
             selected.maxByOrNull { it.createdAt }?.createdAt?.let { AppSettings.setLastExportAt(context, it) }
@@ -1439,7 +1453,7 @@ object LocalRepository {
     suspend fun importData(context: Context, uri: android.net.Uri): ExportManager.ImportResult =
         withContext(Dispatchers.IO) {
             val result = ExportManager.import(context, uri)
-            if (result.added > 0 || result.updated > 0) {
+            if (result.added > 0 || result.updated > 0 || result.vitalsAdded > 0) {
                 autoRemoveDuplicates(context)
                 afterWrite(context)
             }
@@ -1537,6 +1551,67 @@ object LocalRepository {
 
     suspend fun deletePendingTest(context: Context, id: String) = withContext(Dispatchers.IO) {
         LocalStore.deletePendingTest(context, id); afterWrite(context)
+    }
+
+    // ── Vitals (manual home readings — sugar, BP, pulse, SpO2) ─────────────────
+    // Kept as its own table, never a synthetic MedicalReport row — see VitalReading's doc comment.
+    suspend fun addVital(
+        context: Context,
+        patientName: String,
+        metric: String,
+        value: String,
+        value2: String = "",
+        value3: String = "",
+        unit: String = "",
+        readingContext: String = "",
+        note: String = "",
+        recordedAt: String
+    ): VitalReading = withContext(Dispatchers.IO) {
+        val reading = VitalReading(
+            id = LocalStore.newId(), patientName = patientName, metric = metric, value = value,
+            value2 = value2, value3 = value3, unit = unit, context = readingContext, note = note,
+            recordedAt = recordedAt, createdAt = nowIso()
+        )
+        LocalStore.upsertVital(context, reading)
+        afterWrite(context)
+        reading
+    }
+
+    suspend fun deleteVital(context: Context, id: String) = withContext(Dispatchers.IO) {
+        LocalStore.deleteVital(context, id); afterWrite(context)
+    }
+
+    /** All of a patient's home readings, newest first, optionally narrowed to one metric. */
+    suspend fun getVitals(context: Context, patientName: String, metric: String? = null): List<VitalReading> = withContext(Dispatchers.IO) {
+        val all = LocalStore.getVitals(context, patientName)
+        if (metric == null) all else all.filter { it.metric == metric }
+    }
+
+    /** The [buildVitalsSummary]-backed Home Readings trends — the manual-data counterpart to
+     *  [getHealthSummary], deliberately built by a separate on-device engine call so it never
+     *  shares a trend line with lab data (see docs/IMPLEMENTATION_PLAN_MANUAL_VITALS.md §7.1). */
+    suspend fun getVitalsSummary(context: Context, patientName: String, period: String?): HealthSummary = withContext(Dispatchers.IO) {
+        val all = LocalStore.getVitals(context, patientName)
+        val filtered = filterVitalsByPeriod(all, period)
+        // Blood sugar is the one Phase-1 metric a patient can log in two units (mg/dL, mmol/L).
+        // Standardize the home line to the SAME unit-system preference the lab charts use, so
+        // switching glucometers doesn't fragment the chart — the two lines still stay entirely
+        // separate, they just agree on how a number is spelled.
+        val system = AppSettings.getUnitSystemEnum(context)
+        val standardUnits = buildMap {
+            UnitConverter.standardUnitFor("blood sugar", system)?.let {
+                put(VitalCatalog.TREND_BLOOD_SUGAR_HOME, it)
+            }
+        }
+        DashboardEngine.buildVitalsSummary(patientName, filtered, standardUnits)
+    }
+
+    private fun filterVitalsByPeriod(vitals: List<VitalReading>, period: String?): List<VitalReading> {
+        if (period == null || period == "all") return vitals
+        val months = mapOf("1m" to 1, "3m" to 3, "6m" to 6, "1y" to 12, "2y" to 24)[period] ?: return vitals
+        val cal = java.util.Calendar.getInstance().apply { add(java.util.Calendar.MONTH, -months) }
+        val cutoff = isoDate.format(cal.time)
+        return vitals.filter { it.recordedAt.substringBefore("T") >= cutoff }
     }
 
     // ── Medication logs & edits ────────────────────────────────────────────────

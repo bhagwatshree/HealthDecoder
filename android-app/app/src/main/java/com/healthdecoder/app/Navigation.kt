@@ -37,6 +37,7 @@ import com.healthdecoder.app.ui.CompareScreen
 import com.healthdecoder.app.ui.DetailedAnalysisScreen
 import com.healthdecoder.app.ui.HomeScreen
 import com.healthdecoder.app.ui.LoginScreen
+import com.healthdecoder.app.ui.ManualEntryScreen
 import com.healthdecoder.app.ui.MedicationTrackerScreen
 import com.healthdecoder.app.ui.PendingTestsScreen
 import com.healthdecoder.app.ui.RecordsScreen
@@ -471,6 +472,7 @@ fun MainNavigation() {
             onNavigateToPendingTests = { backStack.add(PendingTests) },
             onNavigateToDiscovery = { category -> backStack.add(Discovery(category = category)) },
             onNavigateToLiveVision = { backStack.add(LiveVision) },
+            onNavigateToManualEntry = { backStack.add(ManualEntry()) },
             onNavigateToTab = navigateToTab,
             onRefresh = {
               coroutineScope.launch {
@@ -536,8 +538,16 @@ fun MainNavigation() {
           TrendsScreen(
             onNavigateBack = { backStack.removeLastOrNull() },
             onNavigateToReport = { reportId, param -> backStack.add(ReportDetail(reportId, param)) },
+            onNavigateToManualEntry = { metric -> backStack.add(ManualEntry(metric)) },
             modifier = Modifier.safeDrawingPadding(),
             onNavigateToTab = navigateToTab
+          )
+        }
+        entry<ManualEntry> { key ->
+          ManualEntryScreen(
+            initialMetric = key.metric,
+            onNavigateBack = { backStack.removeLastOrNull() },
+            modifier = Modifier.safeDrawingPadding()
           )
         }
         entry<Compare> {

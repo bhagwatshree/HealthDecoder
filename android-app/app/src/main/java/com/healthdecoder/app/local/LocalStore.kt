@@ -8,6 +8,7 @@ import com.healthdecoder.app.local.db.ReportSummary
 import com.healthdecoder.app.model.MedLogEntry
 import com.healthdecoder.app.model.MedicalReport
 import com.healthdecoder.app.model.PendingTest
+import com.healthdecoder.app.model.VitalReading
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
@@ -71,7 +72,7 @@ object LocalStore {
                 )
                     .openHelperFactory(factory)
                     .setJournalMode(RoomDatabase.JournalMode.TRUNCATE)
-                    .addMigrations(MedicalDatabase.MIGRATION_1_2, MedicalDatabase.MIGRATION_2_3, MedicalDatabase.MIGRATION_3_4, MedicalDatabase.MIGRATION_4_5, MedicalDatabase.MIGRATION_5_6)
+                    .addMigrations(MedicalDatabase.MIGRATION_1_2, MedicalDatabase.MIGRATION_2_3, MedicalDatabase.MIGRATION_3_4, MedicalDatabase.MIGRATION_4_5, MedicalDatabase.MIGRATION_5_6, MedicalDatabase.MIGRATION_6_7)
                     .build()
 
                 // Force open the database to verify passphrase decryption is correct
@@ -89,7 +90,7 @@ object LocalStore {
                 )
                     .openHelperFactory(factory)
                     .setJournalMode(RoomDatabase.JournalMode.TRUNCATE)
-                    .addMigrations(MedicalDatabase.MIGRATION_1_2, MedicalDatabase.MIGRATION_2_3, MedicalDatabase.MIGRATION_3_4, MedicalDatabase.MIGRATION_4_5, MedicalDatabase.MIGRATION_5_6)
+                    .addMigrations(MedicalDatabase.MIGRATION_1_2, MedicalDatabase.MIGRATION_2_3, MedicalDatabase.MIGRATION_3_4, MedicalDatabase.MIGRATION_4_5, MedicalDatabase.MIGRATION_5_6, MedicalDatabase.MIGRATION_6_7)
                     .build()
             }
 
@@ -370,10 +371,27 @@ object LocalStore {
         db(context).medLogDao().renameMedicine(patientName, oldName, newName)
     }
 
-    /** Re-keys a patient's intake logs and pending tests when two name variants are merged. */
+    /** Re-keys a patient's intake logs, pending tests, and home readings when two name variants
+     *  are merged. */
     fun renamePatientRecords(context: Context, oldName: String, newName: String) {
         db(context).medLogDao().renamePatient(oldName, newName)
         db(context).pendingTestDao().renamePatient(oldName, newName)
+        db(context).vitalDao().renamePatient(oldName, newName)
+    }
+
+    // ── Vitals (manual home readings) ──────────────────────────────────────
+    fun getVitals(context: Context, patientName: String): List<VitalReading> =
+        db(context).vitalDao().getAllForPatient(patientName)
+
+    fun getVital(context: Context, id: String): VitalReading? =
+        db(context).vitalDao().getById(id)
+
+    fun upsertVital(context: Context, reading: VitalReading) {
+        db(context).vitalDao().upsert(reading)
+    }
+
+    fun deleteVital(context: Context, id: String) {
+        db(context).vitalDao().deleteById(id)
     }
 
     // ── Image storage ───────────────────────────────────────────────────────

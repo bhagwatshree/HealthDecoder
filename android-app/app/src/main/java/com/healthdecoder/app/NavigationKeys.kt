@@ -55,6 +55,12 @@ data class Reminders(val focus: String = "medicines") : NavKey
 @Serializable
 data object PendingTests : NavKey
 
+// metric = a VitalCatalog key ("bp" | "glucose" | "pulse" | "spo2") to open straight into that
+// metric's entry sheet, or null to open the quick-log grid (Home tile / Trends FAB with no
+// specific metric in mind).
+@Serializable
+data class ManualEntry(val metric: String? = null) : NavKey
+
 @Serializable
 data class Discovery(val category: String = "lab_tests", val query: String? = null) : NavKey
 

@@ -169,6 +169,21 @@ object DashboardEngine {
         TREND_CATEGORIES.firstOrNull { (_, members) -> members.contains(canonicalName) }?.first
             ?: CATEGORY_OTHER
 
+    // ── Home Readings (manual vitals) — a completely separate namespace from the lab groups
+    // above, never merged with them. See [buildVitalsSummary] and
+    // docs/IMPLEMENTATION_PLAN_MANUAL_VITALS.md §7.1.
+    val HOME_TREND_CATEGORIES: List<Pair<String, List<String>>> = listOf(
+        VitalCatalog.GROUP_DIABETES to listOf(VitalCatalog.TREND_BLOOD_SUGAR_HOME),
+        VitalCatalog.GROUP_VITALS to listOf(
+            VitalCatalog.TREND_SYSTOLIC_HOME, VitalCatalog.TREND_DIASTOLIC_HOME,
+            VitalCatalog.TREND_PULSE_HOME, VitalCatalog.TREND_SPO2_HOME
+        )
+    )
+
+    fun homeCategoryOf(trendName: String): String =
+        HOME_TREND_CATEGORIES.firstOrNull { (_, members) -> members.contains(trendName) }?.first
+            ?: CATEGORY_OTHER
+
     // Keyword hints for guessing a section's broad category from its own printed NAME (as
     // opposed to [categoryOf], which classifies from a PARAMETER's canonical name). Deliberately
     // narrow, high-confidence phrases only — this exists to catch an obvious swap, not to
@@ -673,5 +688,106 @@ object DashboardEngine {
         }
 
         return HealthSummary(narrative, trends, timeline, flags)
+    }
+
+    // ── Home Readings (manual vitals) ───────────────────────────────────────
+    /**
+     * Builds Home Readings trend lines from patient-logged [VitalReading]s — the [buildHealthSummary]
+     * counterpart for manual data, kept as a SEPARATE function rather than a parameter on
+     * [buildHealthSummary] so lab dedup/report-shaped rules never apply to a twice-daily log (see
+     * docs/IMPLEMENTATION_PLAN_MANUAL_VITALS.md §3).
+     *
+     * Pulse gets special handling: it can be logged standalone, or ride alongside a BP or SpO2
+     * reading (most home devices report pulse as part of that same measurement) — all three
+     * sources are unioned onto the one "Pulse (Home)" line so a user who only ever takes their
+     * pulse off a BP cuff still sees a populated chart, not an empty one.
+     */
+    fun buildVitalsSummary(
+        patientName: String,
+        vitals: List<VitalReading>,
+        standardUnits: Map<String, String> = emptyMap()
+    ): HealthSummary {
+        if (vitals.isEmpty()) {
+            return HealthSummary("No home readings found for this patient in the selected period.", emptyList(), emptyList(), emptyList())
+        }
+        val chrono = vitals.sortedBy { it.recordedAt }
+        val lines = linkedMapOf<String, MutableList<TrendDataPoint>>()
+
+        fun point(v: VitalReading, value: String, unit: String, status: String): TrendDataPoint =
+            TrendDataPoint(
+                date = v.recordedAt, value = value, unit = unit, status = status,
+                reportId = "", context = v.context, source = "manual"
+            )
+        fun addTo(trendName: String, dp: TrendDataPoint) {
+            lines.getOrPut(trendName) { mutableListOf() }.add(dp)
+        }
+
+        for (v in chrono) {
+            when (v.metric) {
+                VitalCatalog.KEY_GLUCOSE -> {
+                    val num = v.value.toFloatOrNull()
+                    // Status is classified on the reading as printed (glucoseStatus converts
+                    // internally), but the CHART needs one consistent unit: a patient who
+                    // switches glucometers can log some readings in mg/dL and others in mmol/L,
+                    // and TrendCard drops any point whose unit differs from the line's standard.
+                    // Convert here — same verified factor and the same converted/originalValue
+                    // fields the lab path uses — so a unit switch never silently loses readings.
+                    val status = num?.let { com.healthdecoder.app.util.VitalReference.glucoseStatus(it, v.unit, v.context) } ?: ""
+                    val std = standardUnits[VitalCatalog.TREND_BLOOD_SUGAR_HOME]
+                    var value = v.value; var unit = v.unit
+                    var origValue = ""; var origUnit = ""; var converted = false
+                    if (std != null && v.unit.isNotBlank() &&
+                        UnitConverter.canonicalizeUnitString(v.unit) != UnitConverter.canonicalizeUnitString(std)
+                    ) {
+                        val conv = num?.let { UnitConverter.convert("blood sugar", it, v.unit, std) }
+                        if (conv != null) {
+                            value = fmtNum(conv); unit = std
+                            origValue = v.value; origUnit = v.unit; converted = true
+                        }
+                    } else if (std != null && v.unit.isNotBlank()) {
+                        unit = std // same unit, normalize the spelling so the line stays uniform
+                    }
+                    addTo(
+                        VitalCatalog.TREND_BLOOD_SUGAR_HOME,
+                        point(v, value, unit, status).copy(
+                            originalValue = origValue, originalUnit = origUnit, converted = converted
+                        )
+                    )
+                }
+                VitalCatalog.KEY_BP -> {
+                    val sys = v.value.toFloatOrNull(); val dia = v.value2.toFloatOrNull()
+                    // Each line carries its OWN component's status. Colouring a diastolic point
+                    // red because the systolic beside it was high would report a perfectly normal
+                    // number (the 70 in 150/70) as abnormal — see VitalReference.bpStatus.
+                    val sysStatus = sys?.let { com.healthdecoder.app.util.VitalReference.systolicStatus(it) } ?: ""
+                    val diaStatus = dia?.let { com.healthdecoder.app.util.VitalReference.diastolicStatus(it) } ?: ""
+                    addTo(VitalCatalog.TREND_SYSTOLIC_HOME, point(v, v.value, v.unit, sysStatus))
+                    addTo(VitalCatalog.TREND_DIASTOLIC_HOME, point(v, v.value2, v.unit, diaStatus))
+                    if (v.value3.isNotBlank()) {
+                        val pulseStatus = v.value3.toFloatOrNull()?.let { com.healthdecoder.app.util.VitalReference.pulseStatus(it) } ?: ""
+                        addTo(VitalCatalog.TREND_PULSE_HOME, point(v, v.value3, "bpm", pulseStatus))
+                    }
+                }
+                VitalCatalog.KEY_PULSE -> {
+                    val status = v.value.toFloatOrNull()?.let { com.healthdecoder.app.util.VitalReference.pulseStatus(it) } ?: ""
+                    addTo(VitalCatalog.TREND_PULSE_HOME, point(v, v.value, v.unit, status))
+                }
+                VitalCatalog.KEY_SPO2 -> {
+                    val status = v.value.toFloatOrNull()?.let { com.healthdecoder.app.util.VitalReference.spo2Status(it) } ?: ""
+                    addTo(VitalCatalog.TREND_SPO2_HOME, point(v, v.value, v.unit, status))
+                    if (v.value3.isNotBlank()) {
+                        val pulseStatus = v.value3.toFloatOrNull()?.let { com.healthdecoder.app.util.VitalReference.pulseStatus(it) } ?: ""
+                        addTo(VitalCatalog.TREND_PULSE_HOME, point(v, v.value3, "bpm", pulseStatus))
+                    }
+                }
+            }
+        }
+        // Appending in `chrono` order already leaves each line sorted, the three-source pulse
+        // union included. Kept as cheap insurance for later metrics that may feed pulse from
+        // somewhere other than this loop's straight pass over `chrono`.
+        lines[VitalCatalog.TREND_PULSE_HOME]?.sortBy { it.date }
+
+        val trends = lines.map { (name, pts) -> ParameterTrend(name = name, dataPoints = pts, trend = "stable") }
+        return HealthSummary(overallNarrative = "", parameterTrends = trends, medicationTimeline = emptyList(), activeFlags = emptyList())
     }
 }

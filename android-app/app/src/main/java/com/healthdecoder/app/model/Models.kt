@@ -152,7 +152,13 @@ data class TrendDataPoint(
     // True when the report this point came from looks like it may hold a different panel's
     // values than its own title claims (see DashboardEngine.contentMismatchWarning) — the chart
     // flags the point instead of plotting it as if it were an ordinary, correctly-read reading.
-    @SerializedName("mislabeled") val mislabeled: Boolean = false
+    @SerializedName("mislabeled") val mislabeled: Boolean = false,
+    // "report" (lab-scanned) or "manual" (patient self-logged, see VitalReading). Lab and home
+    // trend lines are always built and displayed separately — see DashboardEngine.buildVitalsSummary
+    // — so no point on the same line ever mixes sources; this rides along so click-through knows
+    // whether to open a report (reportId) or a manual entry sheet, and so nothing downstream can
+    // present a self-reported number as lab-verified.
+    @SerializedName("source") val source: String = "report"
 )
 
 data class ParameterTrend(
@@ -555,5 +561,40 @@ data class UhiPollResponse(
     @SerializedName("search_id") val searchId: String,
     @SerializedName("intent") val intent: String,
     @SerializedName("results") val results: List<UhiProvider> = emptyList()
+)
+
+// ── Manual vitals (patient-logged home readings) ─────────────────────────────
+
+/**
+ * One patient-logged home reading — BP, blood sugar, pulse, or SpO2 in Phase 1 (see
+ * [VitalCatalog]). Deliberately a separate table from [MedicalReport], not a synthetic report row:
+ * a scanned report's duplicate/dedup rules (same patient+date+category => skip) would silently
+ * drop the second BP reading of the same day, which is the normal case here, not a duplicate.
+ * See docs/IMPLEMENTATION_PLAN_MANUAL_VITALS.md §3 for the full reasoning.
+ *
+ * [value]/[value2]/[value3] cover every Tier-1 shape without a table per metric: a single number
+ * (sugar, pulse, SpO2) uses only [value]; blood pressure uses [value] for systolic and [value2] for
+ * diastolic; an optional pulse taken alongside a BP or SpO2 reading rides in [value3]. No userEmail
+ * column — scoped by [patientName] only, same convention as [MedLogEntry] and [PendingTest].
+ */
+@Entity(
+    tableName = "vitals",
+    indices = [Index("patientName", "metric", "recordedAt"), Index("recordedAt")]
+)
+data class VitalReading(
+    @PrimaryKey @SerializedName("id") val id: String,
+    @SerializedName("patient_name") val patientName: String,
+    @SerializedName("metric") val metric: String,       // VitalCatalog key: "bp" | "glucose" | "pulse" | "spo2"
+    @SerializedName("value") val value: String,
+    @SerializedName("value2") val value2: String = "",   // BP diastolic
+    @SerializedName("value3") val value3: String = "",   // pulse taken alongside BP / SpO2
+    @SerializedName("unit") val unit: String = "",
+    @SerializedName("context") val context: String = "", // "Fasting" | "Sitting, Left arm" | ...
+    @SerializedName("note") val note: String = "",
+    // ISO local date-TIME ("2026-09-06T08:15") — vitals are time-of-day sensitive (morning vs
+    // evening BP), unlike a report's date-only reportDate.
+    @SerializedName("recorded_at") val recordedAt: String,
+    @SerializedName("created_at") val createdAt: String,
+    @SerializedName("source") val source: String = "manual" // room for "device" / "healthconnect" later
 )
 

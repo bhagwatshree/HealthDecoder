@@ -8,6 +8,7 @@ import com.healthdecoder.app.model.MedLogEntry
 import com.healthdecoder.app.model.MedicalReport
 import com.healthdecoder.app.model.PendingTest
 import com.healthdecoder.app.model.ProcessedEmail
+import com.healthdecoder.app.model.VitalReading
 
 // All queries are blocking; LocalStore is only ever called from Dispatchers.IO.
 
@@ -139,6 +140,30 @@ interface MedLogDao {
 
     /** Re-keys a patient's intake logs when two mis-scanned name variants are merged. */
     @Query("UPDATE med_logs SET patientName = :newName WHERE patientName = :oldName COLLATE NOCASE")
+    fun renamePatient(oldName: String, newName: String)
+}
+
+@Dao
+interface VitalDao {
+
+    @Query("SELECT * FROM vitals WHERE patientName = :patientName ORDER BY recordedAt DESC")
+    fun getAllForPatient(patientName: String): List<VitalReading>
+
+    @Query("SELECT * FROM vitals WHERE id = :id LIMIT 1")
+    fun getById(id: String): VitalReading?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun upsert(reading: VitalReading)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertAll(readings: List<VitalReading>)
+
+    @Query("DELETE FROM vitals WHERE id = :id")
+    fun deleteById(id: String)
+
+    /** Re-keys a patient's home readings when two mis-scanned name variants are merged, or a
+     *  family member is renamed — same convention as [MedLogDao.renamePatient]. */
+    @Query("UPDATE vitals SET patientName = :newName WHERE patientName = :oldName COLLATE NOCASE")
     fun renamePatient(oldName: String, newName: String)
 }
 

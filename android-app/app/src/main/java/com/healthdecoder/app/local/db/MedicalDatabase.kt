@@ -9,6 +9,7 @@ import com.healthdecoder.app.model.MedLogEntry
 import com.healthdecoder.app.model.MedicalReport
 import com.healthdecoder.app.model.PendingTest
 import com.healthdecoder.app.model.ProcessedEmail
+import com.healthdecoder.app.model.VitalReading
 
 /**
  * On-device SQLite store for all medical records (replaces the reports.json /
@@ -19,8 +20,8 @@ import com.healthdecoder.app.model.ProcessedEmail
  * each committed write, so a zip taken between writes is a consistent snapshot.
  */
 @Database(
-    entities = [MedicalReport::class, ReportFts::class, PendingTest::class, MedLogEntry::class, ProcessedEmail::class],
-    version = 6,
+    entities = [MedicalReport::class, ReportFts::class, PendingTest::class, MedLogEntry::class, ProcessedEmail::class, VitalReading::class],
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -29,6 +30,7 @@ abstract class MedicalDatabase : RoomDatabase() {
     abstract fun pendingTestDao(): PendingTestDao
     abstract fun medLogDao(): MedLogDao
     abstract fun processedEmailDao(): ProcessedEmailDao
+    abstract fun vitalDao(): VitalDao
 
     companion object {
         /** v2: per-page SHA-256 hashes on reports, for duplicate-scan detection. */
@@ -73,6 +75,24 @@ abstract class MedicalDatabase : RoomDatabase() {
         val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `reports` ADD COLUMN `sourcePageIndices` TEXT NOT NULL DEFAULT '[]'")
+            }
+        }
+
+        /** v7: `vitals` table — patient-logged home readings (BP, blood sugar, pulse, SpO2 in
+         *  Phase 1), kept deliberately separate from `reports`; see VitalReading's doc comment
+         *  and docs/IMPLEMENTATION_PLAN_MANUAL_VITALS.md §3. */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `vitals` (" +
+                    "`id` TEXT NOT NULL, `patientName` TEXT NOT NULL, `metric` TEXT NOT NULL, " +
+                    "`value` TEXT NOT NULL, `value2` TEXT NOT NULL DEFAULT '', `value3` TEXT NOT NULL DEFAULT '', " +
+                    "`unit` TEXT NOT NULL DEFAULT '', `context` TEXT NOT NULL DEFAULT '', `note` TEXT NOT NULL DEFAULT '', " +
+                    "`recordedAt` TEXT NOT NULL, `createdAt` TEXT NOT NULL, `source` TEXT NOT NULL DEFAULT 'manual', " +
+                    "PRIMARY KEY(`id`))"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_vitals_patientName_metric_recordedAt` ON `vitals` (`patientName`, `metric`, `recordedAt`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_vitals_recordedAt` ON `vitals` (`recordedAt`)")
             }
         }
     }

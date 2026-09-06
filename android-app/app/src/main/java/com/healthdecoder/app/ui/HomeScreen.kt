@@ -66,6 +66,7 @@ fun HomeScreen(
     onNavigateToPendingTests: () -> Unit,
     onNavigateToDiscovery: (String) -> Unit,
     onNavigateToLiveVision: () -> Unit,
+    onNavigateToManualEntry: () -> Unit = {},
     onNavigateToTab: (BottomNavTab) -> Unit = {},
     onRefresh: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -128,6 +129,8 @@ fun HomeScreen(
         add(HomeAction("Doctor Appointments", "📅", Color(0xFFE8EAF6), Color(0xFF283593), onNavigateToAppointments))
         add(HomeAction("Medications", "💊", Color(0xFFF3E5F5), Color(0xFF6A1B9A), onNavigateToMedicationTracker))
         add(HomeAction("Pending Tests", "🚨", Color(0xFFFFF9C4), Color(0xFFC62828), onNavigateToPendingTests))
+        // Sugar / BP / Heart Rate / Oxygen logged at home — see docs/IMPLEMENTATION_PLAN_MANUAL_VITALS.md.
+        add(HomeAction("Add Reading", "🩺", Color(0xFFE0F7FA), Color(0xFF00695C), onNavigateToManualEntry))
         if (isBackendReady) {
             add(HomeAction("Find Doctors", "🩺", Color(0xFFE0F2F1), Color(0xFF00796B), { onNavigateToDiscovery("doctors") }))
             add(HomeAction("Find Labs", "🧪", Color(0xFFE0F7FA), Color(0xFF006064), { onNavigateToDiscovery("lab_tests") }))

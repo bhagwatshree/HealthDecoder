@@ -42,9 +42,12 @@ import com.healthdecoder.app.ai.DashboardEngine
 import com.healthdecoder.app.local.LocalRepository
 import com.healthdecoder.app.model.ParameterTrend
 import com.healthdecoder.app.model.TrendDataPoint
+import com.healthdecoder.app.model.VitalCatalog
 import com.healthdecoder.app.ui.components.AppBottomNavBar
 import com.healthdecoder.app.ui.components.BottomNavTab
+import com.healthdecoder.app.util.TestInfo
 import com.healthdecoder.app.util.TestReference
+import com.healthdecoder.app.util.VitalReference
 import kotlinx.coroutines.launch
 
 private val statusHigh = Color(0xFFC62828)
@@ -85,12 +88,26 @@ private fun shortDate(iso: String): String {
     return "$day ${MONTHS.getOrElse(m) { parts[1] }} '$yy"
 }
 
-/** Parses yyyy-MM-dd to epoch millis so points can be spaced by real time. */
+/**
+ * Parses yyyy-MM-dd, or yyyy-MM-dd'T'HH:mm, to epoch millis so points can be spaced by real time.
+ *
+ * The time component matters for manual home readings and only for them: a lab report carries a
+ * date-only reportDate (one panel per day), but a patient logs BP morning AND evening, and
+ * dropping the clock time put both on the same x-coordinate — two readings rendering as a single
+ * stacked dot, and, when every reading fell on one day, collapsing the chart to a single distinct
+ * timestamp so it silently gave up on time-based spacing altogether. A date-only string still
+ * resolves to midnight exactly as before, so lab trends are unaffected.
+ */
 private fun isoToMillis(iso: String): Long? = try {
-    val parts = iso.split("T")[0].split("-")
+    val datePart = iso.split("T")[0].split("-")
+    val timePart = iso.split("T").getOrNull(1)?.split(":")
     val cal = java.util.Calendar.getInstance()
     cal.clear()
-    cal.set(parts[0].toInt(), parts[1].toInt() - 1, parts[2].toInt())
+    cal.set(datePart[0].toInt(), datePart[1].toInt() - 1, datePart[2].toInt())
+    if (timePart != null) {
+        cal.set(java.util.Calendar.HOUR_OF_DAY, timePart[0].toIntOrNull() ?: 0)
+        cal.set(java.util.Calendar.MINUTE, timePart.getOrNull(1)?.toIntOrNull() ?: 0)
+    }
     cal.timeInMillis
 } catch (e: Exception) {
     null
@@ -101,12 +118,18 @@ private fun isoToMillis(iso: String): Long? = try {
 fun TrendsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToReport: (String, String) -> Unit,
+    onNavigateToManualEntry: (String?) -> Unit = {},
     modifier: Modifier = Modifier,
     onNavigateToTab: (BottomNavTab) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
+    // "lab" (scanned reports) or "home" (patient-logged vitals) — a hard top-level split, never a
+    // blended view: the same quantity (sugar, BP) can come from both a lab and a home device, and
+    // the two are different measurements that must not share a trend line. See
+    // docs/IMPLEMENTATION_PLAN_MANUAL_VITALS.md §7.1.
+    var mode by remember { mutableStateOf("lab") }
     var patients by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedPatient by remember { mutableStateOf<String?>(null) }
     var period by remember { mutableStateOf<String?>(null) }
@@ -117,11 +140,16 @@ fun TrendsScreen(
     var patientMenu by remember { mutableStateOf(false) }
     var refreshTick by remember { mutableStateOf(0) }
 
-    // Build the patient list once.
+    // Build the patient list once — reports first (most-reports-first, as before), then any
+    // patient who has ONLY home readings and no reports yet, so switching to Home mode never
+    // leaves a real patient unreachable.
     LaunchedEffect(Unit) {
         val reports = LocalRepository.getReports(context)
         val byCount = reports.mapNotNull { it.patientName }.groupingBy { it }.eachCount()
-        patients = byCount.entries.sortedByDescending { it.value }.map { it.key }
+        val reportPatients = byCount.entries.sortedByDescending { it.value }.map { it.key }
+        val vitalsOnly = LocalRepository.familyMembers(context).map { it.name }
+            .filter { name -> reportPatients.none { it.equals(name, ignoreCase = true) } }
+        patients = reportPatients + vitalsOnly
         // Default to the family member selected on Home, if that person has trend data.
         val active = com.healthdecoder.app.local.AppSettings.getActivePatient(context)
         selectedPatient = patients.firstOrNull { it.equals(active, ignoreCase = true) } ?: patients.firstOrNull()
@@ -136,12 +164,13 @@ fun TrendsScreen(
         }
     }
 
-    // Reload trends when patient/period changes, or the user taps refresh.
-    LaunchedEffect(selectedPatient, period, refreshTick) {
+    // Reload trends when patient/period/mode changes, or the user taps refresh.
+    LaunchedEffect(selectedPatient, period, refreshTick, mode) {
         val p = selectedPatient ?: return@LaunchedEffect
         isLoading = true
         trends = try {
-            LocalRepository.getHealthSummary(context, p, period).parameterTrends
+            if (mode == "lab") LocalRepository.getHealthSummary(context, p, period).parameterTrends
+            else LocalRepository.getVitalsSummary(context, p, period).parameterTrends
         } catch (e: Exception) {
             e.printStackTrace(); emptyList()
         }
@@ -152,17 +181,45 @@ fun TrendsScreen(
         trends.filter { t -> t.dataPoints.any { parseNum(it.value) != null } }
     }
     // Only offer panels that actually have data, so the dropdown never leads to an empty screen.
-    val availableCategories = remember(withData) {
-        val present = withData.map { DashboardEngine.categoryOf(it.name) }.toSet()
-        listOf(DashboardEngine.CATEGORY_ALL) +
-            DashboardEngine.TREND_CATEGORIES.map { it.first }.filter { it in present } +
-            listOf(DashboardEngine.CATEGORY_OTHER).filter { it in present }
+    val availableCategories = remember(withData, mode) {
+        if (mode == "lab") {
+            val present = withData.map { DashboardEngine.categoryOf(it.name) }.toSet()
+            listOf(DashboardEngine.CATEGORY_ALL) +
+                DashboardEngine.TREND_CATEGORIES.map { it.first }.filter { it in present } +
+                listOf(DashboardEngine.CATEGORY_OTHER).filter { it in present }
+        } else {
+            val present = withData.map { DashboardEngine.homeCategoryOf(it.name) }.toSet()
+            // CATEGORY_OTHER catch-all, same as the lab branch above: a metric added to
+            // VitalCatalog but not to HOME_TREND_CATEGORIES would otherwise be filtered out of
+            // every selectable group and become invisible except under "All tests".
+            listOf(DashboardEngine.CATEGORY_ALL) +
+                DashboardEngine.HOME_TREND_CATEGORIES.map { it.first }.filter { it in present } +
+                listOf(DashboardEngine.CATEGORY_OTHER).filter { it in present }
+        }
     }
-    val visibleTrends = remember(withData, selectedCategory) {
+    val categoryFiltered = remember(withData, selectedCategory, mode) {
         if (selectedCategory == DashboardEngine.CATEGORY_ALL) withData
-        else withData.filter { DashboardEngine.categoryOf(it.name) == selectedCategory }
+        else if (mode == "lab") withData.filter { DashboardEngine.categoryOf(it.name) == selectedCategory }
+        else withData.filter { DashboardEngine.homeCategoryOf(it.name) == selectedCategory }
     }
-    // A previously chosen panel can vanish when the patient/period changes — fall back to All.
+    // Home mode only: readings carry a per-point condition (Fasting / 2h after meal / Sitting /
+    // ...) that lab data has no equivalent of — filtering by it is what makes a home sugar or BP
+    // log actually readable (see docs/IMPLEMENTATION_PLAN_MANUAL_VITALS.md §7.1).
+    var contextFilter by remember { mutableStateOf<String?>(null) }
+    val availableContexts = remember(categoryFiltered, mode) {
+        if (mode != "home") emptyList()
+        else categoryFiltered.flatMap { it.dataPoints }.mapNotNull { it.context.takeIf { c -> c.isNotBlank() } }.distinct()
+    }
+    LaunchedEffect(availableContexts) {
+        if (contextFilter !in availableContexts) contextFilter = null
+    }
+    val visibleTrends = remember(categoryFiltered, contextFilter, mode) {
+        val cf = contextFilter
+        if (mode != "home" || cf == null) categoryFiltered
+        else categoryFiltered.map { it.copy(dataPoints = it.dataPoints.filter { dp -> dp.context == cf }) }
+            .filter { it.dataPoints.isNotEmpty() }
+    }
+    // A previously chosen panel can vanish when the patient/period/mode changes — fall back to All.
     LaunchedEffect(availableCategories) {
         if (selectedCategory !in availableCategories) selectedCategory = DashboardEngine.CATEGORY_ALL
     }
@@ -179,7 +236,10 @@ fun TrendsScreen(
                         TopBarLogo()
                         Column {
                             Text(tr("Health Trends"), fontWeight = FontWeight.Bold)
-                            Text(tr("Tap any point to open that report"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                if (mode == "lab") tr("Tap any point to open that report") else tr("Your patient-logged home readings"),
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 },
@@ -197,6 +257,11 @@ fun TrendsScreen(
         },
         bottomBar = {
             AppBottomNavBar(currentTab = BottomNavTab.Trends, onNavigate = onNavigateToTab)
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { onNavigateToManualEntry(null) }) {
+                Icon(Icons.Default.Add, contentDescription = tr("Add a Reading"))
+            }
         }
     ) { innerPadding ->
         Column(
@@ -205,6 +270,28 @@ fun TrendsScreen(
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
+            // Lab reports vs. Home readings — see the comment on `mode` above. Always visible,
+            // never defaulted away, so it's clear at a glance which world you're looking at.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = mode == "lab",
+                    onClick = { mode = "lab" },
+                    label = { Text(tr("Lab reports")) },
+                    leadingIcon = { Icon(Icons.Default.Science, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    modifier = Modifier.weight(1f)
+                )
+                FilterChip(
+                    selected = mode == "home",
+                    onClick = { mode = "home" },
+                    label = { Text(tr("Home readings")) },
+                    leadingIcon = { Icon(Icons.Default.MonitorHeart, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
             // Patient + key-only controls
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -252,8 +339,11 @@ fun TrendsScreen(
                 )
                 ExposedDropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
                     availableCategories.forEach { cat ->
-                        val count = if (cat == DashboardEngine.CATEGORY_ALL) withData.size
-                                    else withData.count { DashboardEngine.categoryOf(it.name) == cat }
+                        val count = when {
+                            cat == DashboardEngine.CATEGORY_ALL -> withData.size
+                            mode == "lab" -> withData.count { DashboardEngine.categoryOf(it.name) == cat }
+                            else -> withData.count { DashboardEngine.homeCategoryOf(it.name) == cat }
+                        }
                         DropdownMenuItem(
                             text = { Text(if (count > 0) "$cat  ($count)" else cat) },
                             onClick = { selectedCategory = cat; categoryMenu = false }
@@ -279,20 +369,62 @@ fun TrendsScreen(
                 }
             }
 
+            // Context filter (Home mode only) — "Fasting" / "2h after meal" / "Sitting" / ... —
+            // lab data has no equivalent, since a lab panel doesn't carry a condition per reading.
+            if (mode == "home" && availableContexts.isNotEmpty()) {
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item {
+                        FilterChip(
+                            selected = contextFilter == null,
+                            onClick = { contextFilter = null },
+                            label = { Text(tr("All"), fontSize = 12.sp) },
+                            shape = RoundedCornerShape(20.dp)
+                        )
+                    }
+                    items(availableContexts) { c ->
+                        FilterChip(
+                            selected = contextFilter == c,
+                            onClick = { contextFilter = c },
+                            label = { Text(tr(c), fontSize = 12.sp) },
+                            shape = RoundedCornerShape(20.dp)
+                        )
+                    }
+                }
+            }
+
             Spacer(Modifier.height(8.dp))
 
             Box(modifier = Modifier.weight(1f)) {
                 when {
                     isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                    selectedPatient == null -> EmptyStateView(Icons.Default.ShowChart, tr("No reports yet"), tr("Scan lab reports (blood test, thyroid, etc.) and their trends will appear here."))
-                    visibleTrends.isEmpty() -> EmptyStateView(Icons.Default.ShowChart, tr("No test values to chart"), tr("Trends appear once you have reports with numeric test values like TSH, sugar, hemoglobin, cholesterol."))
+                    selectedPatient == null -> if (mode == "lab")
+                        EmptyStateView(Icons.Default.ShowChart, tr("No reports yet"), tr("Scan lab reports (blood test, thyroid, etc.) and their trends will appear here."))
+                    else
+                        EmptyStateView(Icons.Default.MonitorHeart, tr("No home readings yet"), tr("Add a Sugar, BP, Heart Rate or Oxygen reading and it will appear here."))
+                    visibleTrends.isEmpty() -> if (mode == "lab")
+                        EmptyStateView(Icons.Default.ShowChart, tr("No test values to chart"), tr("Trends appear once you have reports with numeric test values like TSH, sugar, hemoglobin, cholesterol."))
+                    else
+                        EmptyStateView(Icons.Default.MonitorHeart, tr("No home readings in this period"), tr("Tap + to log your first Sugar, BP, Heart Rate or Oxygen reading."))
                     else -> LazyColumn(
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         item { OverviewCard(trends = visibleTrends, period = period) }
                         items(visibleTrends) { trend ->
-                            TrendCard(trend = trend, onPointClick = { dp -> if (dp.reportId.isNotEmpty()) onNavigateToReport(dp.reportId, trend.name) })
+                            TrendCard(
+                                trend = trend,
+                                onPointClick = { dp ->
+                                    if (mode == "lab") {
+                                        if (dp.reportId.isNotEmpty()) onNavigateToReport(dp.reportId, trend.name)
+                                    } else {
+                                        onNavigateToManualEntry(VitalCatalog.metricKeyForTrendName(trend.name))
+                                    }
+                                },
+                                infoProvider = if (mode == "lab") { { n: String -> TestReference.describe(n) } } else { { n: String -> VitalReference.describe(n) } }
+                            )
                         }
                     }
                 }
@@ -343,7 +475,11 @@ private fun OverviewCard(trends: List<ParameterTrend>, period: String?) {
 }
 
 @Composable
-private fun TrendCard(trend: ParameterTrend, onPointClick: (TrendDataPoint) -> Unit) {
+private fun TrendCard(
+    trend: ParameterTrend,
+    onPointClick: (TrendDataPoint) -> Unit,
+    infoProvider: (String) -> TestInfo? = { TestReference.describe(it) }
+) {
     val latest = trend.dataPoints.lastOrNull()
     val (trendIcon, trendColor) = when (trend.trend) {
         "improving", "decreasing" -> Icons.Default.TrendingDown to statusNormal
@@ -356,7 +492,7 @@ private fun TrendCard(trend: ParameterTrend, onPointClick: (TrendDataPoint) -> U
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        val info = TestReference.describe(trend.name)
+        val info = infoProvider(trend.name)
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
