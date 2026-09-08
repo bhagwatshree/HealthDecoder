@@ -191,6 +191,36 @@ class VitalsSummaryTest {
         assertNull(VitalCatalog.metricKeyForTrendName("Hemoglobin"))
     }
 
+    // ── Tile labels ─────────────────────────────────────────────────────────
+
+    @Test
+    fun `no two quick-log tiles show the same label`() {
+        // "Blood Pressure" and "Blood Sugar" both truncated to a bare "Blood" on the half-width
+        // tile, so two different tiles read identically and there was no way to tell which opened
+        // what. Distinctness is the property that actually matters, so it is asserted directly
+        // rather than left to depend on how the text happens to wrap.
+        val labels = VitalCatalog.METRICS.map { it.shortName.ifBlank { it.displayName } }
+        assertEquals("tile labels must be unique", labels.size, labels.toSet().size)
+    }
+
+    @Test
+    fun `no quick-log tile label is long enough to need truncating`() {
+        // The tile is roughly half the screen wide and shares its row with the emoji. Anything
+        // much past this length is relying on a two-line wrap to stay readable, which is how the
+        // "Blood" defect happened in the first place.
+        for (metric in VitalCatalog.METRICS) {
+            val label = metric.shortName.ifBlank { metric.displayName }
+            assertTrue("tile label '$label' is too long to render reliably", label.length <= 14)
+        }
+    }
+
+    @Test
+    fun `a metric with a short name still keeps its full name for use elsewhere`() {
+        val bp = VitalCatalog.byKey(VitalCatalog.KEY_BP)!!
+        assertEquals("BP", bp.shortName)
+        assertEquals("Blood Pressure", bp.displayName)
+    }
+
     @Test
     fun `no readings yields an explanatory summary rather than an empty crash`() {
         val summary = DashboardEngine.buildVitalsSummary("Ramesh", emptyList())

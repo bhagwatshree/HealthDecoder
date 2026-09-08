@@ -10,6 +10,12 @@ data class VitalMetric(
     val displayName: String,
     val emoji: String,
     val group: String,
+    // What the compact quick-log tile shows. The tile is half the screen wide and shares its row
+    // with the emoji, so a long [displayName] has to wrap to fit — and a wrap is a layout accident
+    // waiting to happen, not a label. "BP" is both shorter AND what people actually call it, so the
+    // tile states it outright instead of depending on how the text happens to break. Blank => the
+    // tile uses [displayName]. The full name is still used wherever there is room for it.
+    val shortName: String = "",
     val units: List<String> = emptyList(),       // first = default; empty = unitless
     val contextOptions: List<String> = emptyList(),
     // Field labels use the words patients actually say, not the clinical terms. In India a blood
@@ -61,6 +67,7 @@ object VitalCatalog {
         VitalMetric(
             key = KEY_BP,
             displayName = "Blood Pressure",
+            shortName = "BP",
             emoji = "💗",
             group = GROUP_VITALS,
             units = listOf("mmHg"),
@@ -86,6 +93,7 @@ object VitalCatalog {
         VitalMetric(
             key = KEY_SPO2,
             displayName = "Oxygen (SpO2)",
+            shortName = "Oxygen",
             emoji = "🫁",
             group = GROUP_VITALS,
             units = listOf("%"),

@@ -31,6 +31,7 @@ package com.healthdecoder.app.ui
 object UiTranslations {
     private val hindi: Map<String, String> = buildHindiMap()
     private fun buildHindiMap(): Map<String, String> = mapOf(
+        "Oxygen" to "ऑक्सीजन",
         // ── Manual home readings (sugar / BP / heart rate / oxygen) ──
         "Blood Sugar" to "रक्त शर्करा",
         "Blood Pressure" to "रक्तचाप",
@@ -903,6 +904,7 @@ object UiTranslations {
 
     private val marathi: Map<String, String> = buildMarathiMap()
     private fun buildMarathiMap(): Map<String, String> = mapOf(
+        "Oxygen" to "ऑक्सिजन",
         // ── Manual home readings (sugar / BP / heart rate / oxygen) ──
         "Blood Sugar" to "रक्त शर्करा",
         "Blood Pressure" to "रक्तदाब",
@@ -1767,6 +1769,7 @@ object UiTranslations {
 
     private val gujarati: Map<String, String> = buildGujaratiMap()
     private fun buildGujaratiMap(): Map<String, String> = mapOf(
+        "Oxygen" to "ઓક્સિજન",
         // ── Manual home readings (sugar / BP / heart rate / oxygen) ──
         "Blood Sugar" to "રક્ત શર્કરા",
         "Blood Pressure" to "બ્લડ પ્રેશર",
@@ -2629,6 +2632,7 @@ object UiTranslations {
 
     private val tamil: Map<String, String> = buildTamilMap()
     private fun buildTamilMap(): Map<String, String> = mapOf(
+        "Oxygen" to "ஆக்ஸிஜன்",
         // ── Manual home readings (sugar / BP / heart rate / oxygen) ──
         "Blood Sugar" to "இரத்த சர்க்கரை",
         "Blood Pressure" to "இரத்த அழுத்தம்",
@@ -3491,6 +3495,7 @@ object UiTranslations {
 
     private val telugu: Map<String, String> = buildTeluguMap()
     private fun buildTeluguMap(): Map<String, String> = mapOf(
+        "Oxygen" to "ఆక్సిజన్",
         // ── Manual home readings (sugar / BP / heart rate / oxygen) ──
         "Blood Sugar" to "రక్త చక్కెర",
         "Blood Pressure" to "రక్తపోటు",
@@ -4353,6 +4358,7 @@ object UiTranslations {
 
     private val kannada: Map<String, String> = buildKannadaMap()
     private fun buildKannadaMap(): Map<String, String> = mapOf(
+        "Oxygen" to "ಆಮ್ಲಜನಕ",
         // ── Manual home readings (sugar / BP / heart rate / oxygen) ──
         "Blood Sugar" to "ರಕ್ತದ ಸಕ್ಕರೆ",
         "Blood Pressure" to "ರಕ್ತದೊತ್ತಡ",
@@ -5215,6 +5221,7 @@ object UiTranslations {
 
     private val bengali: Map<String, String> = buildBengaliMap()
     private fun buildBengaliMap(): Map<String, String> = mapOf(
+        "Oxygen" to "অক্সিজেন",
         // ── Manual home readings (sugar / BP / heart rate / oxygen) ──
         "Blood Sugar" to "রক্তে শর্করা",
         "Blood Pressure" to "রক্তচাপ",
@@ -6077,6 +6084,7 @@ object UiTranslations {
 
     private val punjabi: Map<String, String> = buildPunjabiMap()
     private fun buildPunjabiMap(): Map<String, String> = mapOf(
+        "Oxygen" to "ਆਕਸੀਜਨ",
         // ── Manual home readings (sugar / BP / heart rate / oxygen) ──
         "Blood Sugar" to "ਖੂਨ ਵਿੱਚ ਸ਼ੂਗਰ",
         "Blood Pressure" to "ਬਲੱਡ ਪ੍ਰੈਸ਼ਰ",
@@ -6939,6 +6947,7 @@ object UiTranslations {
 
     private val malayalam: Map<String, String> = buildMalayalamMap()
     private fun buildMalayalamMap(): Map<String, String> = mapOf(
+        "Oxygen" to "ഓക്സിജൻ",
         // ── Manual home readings (sugar / BP / heart rate / oxygen) ──
         "Blood Sugar" to "രക്തത്തിലെ പഞ്ചസാര",
         "Blood Pressure" to "രക്തസമ്മർദ്ദം",
@@ -7801,6 +7810,7 @@ object UiTranslations {
 
     private val odia: Map<String, String> = buildOdiaMap()
     private fun buildOdiaMap(): Map<String, String> = mapOf(
+        "Oxygen" to "ଅକ୍ସିଜେନ",
         // ── Manual home readings (sugar / BP / heart rate / oxygen) ──
         "Blood Sugar" to "ରକ୍ତ ଶର୍କରା",
         "Blood Pressure" to "ରକ୍ତଚାପ",

@@ -273,7 +273,7 @@ private fun QuickLogTile(metric: VitalMetric, latest: VitalReading?, modifier: M
                 // Sugar" both truncated to a bare "Blood" — two different tiles rendering the same
                 // word. Same fix, and same reasoning, as ActionSquare on the Home grid.
                 Text(
-                    tr(metric.displayName),
+                    tr(metric.shortName.ifBlank { metric.displayName }),
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.bodyMedium,
                     lineHeight = 16.sp,
