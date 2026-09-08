@@ -97,8 +97,10 @@ private fun shortDate(iso: String): String {
  * stacked dot, and, when every reading fell on one day, collapsing the chart to a single distinct
  * timestamp so it silently gave up on time-based spacing altogether. A date-only string still
  * resolves to midnight exactly as before, so lab trends are unaffected.
+ *
+ * Visible for testing — same convention as OcrEngine.chunkByBudget/mergeChunks.
  */
-private fun isoToMillis(iso: String): Long? = try {
+internal fun isoToMillis(iso: String): Long? = try {
     val datePart = iso.split("T")[0].split("-")
     val timePart = iso.split("T").getOrNull(1)?.split(":")
     val cal = java.util.Calendar.getInstance()

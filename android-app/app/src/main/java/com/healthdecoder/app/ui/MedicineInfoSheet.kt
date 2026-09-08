@@ -339,8 +339,12 @@ fun MedicineInfoSheet(
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
+                        // AI-generated content, so it has no stable key for UiTranslations and must
+                        // go through trDynamic (translate-once, cached on device). Without this the
+                        // whole point of the sheet — what this medicine is actually for — rendered
+                        // in English for a user who had chosen Hindi, Tamil or any other language.
                         Text(
-                            medicineInfo.basicUse,
+                            trDynamic(medicineInfo.basicUse),
                             fontSize = 16.sp,
                             lineHeight = 24.sp,
                             color = MaterialTheme.colorScheme.onSurface
@@ -391,7 +395,7 @@ fun MedicineInfoSheet(
                                             .background(MaterialTheme.colorScheme.primary)
                                     )
                                     Text(
-                                        note,
+                                        trDynamic(note),
                                         fontSize = 15.sp,
                                         lineHeight = 22.sp,
                                         color = MaterialTheme.colorScheme.onSurface

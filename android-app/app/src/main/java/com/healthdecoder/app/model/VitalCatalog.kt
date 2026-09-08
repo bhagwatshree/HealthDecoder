@@ -12,7 +12,14 @@ data class VitalMetric(
     val group: String,
     val units: List<String> = emptyList(),       // first = default; empty = unitless
     val contextOptions: List<String> = emptyList(),
-    val secondValueLabel: String = "",            // non-blank => a second numeric field (BP diastolic)
+    // Field labels use the words patients actually say, not the clinical terms. In India a blood
+    // pressure reading is universally described as "upper" over "lower"; a form asking for
+    // "Systolic" makes people stop and think about which number goes where — on the one screen
+    // that has to be fast enough to use twice a day. The clinical terms are kept in [valueHint]
+    // so nothing is lost for someone who wants them. Blank => the field is labelled [displayName].
+    val firstValueLabel: String = "",
+    val secondValueLabel: String = "",            // non-blank => a second numeric field (BP lower)
+    val valueHint: String = "",                   // caption under the value row, e.g. the 120/80 example
     val hasPulseField: Boolean = false,           // optional third numeric field (BP/SpO2 pulse)
     // Data-entry sanity check ONLY (catches a fat-fingered "1200"), never a clinical/normal
     // range — see docs/IMPLEMENTATION_PLAN_MANUAL_VITALS.md §8 rule 4.
@@ -58,7 +65,9 @@ object VitalCatalog {
             group = GROUP_VITALS,
             units = listOf("mmHg"),
             contextOptions = listOf("Sitting", "Standing", "Lying", "Left arm", "Right arm", "Before medicine", "After medicine"),
-            secondValueLabel = "Diastolic",
+            firstValueLabel = "Upper",
+            secondValueLabel = "Lower",
+            valueHint = "Upper (systolic) over lower (diastolic) — e.g. 120 / 80",
             hasPulseField = true,
             plausibleRange = 60f..260f,
             plausibleRange2 = 30f..180f,
@@ -86,6 +95,14 @@ object VitalCatalog {
             trendNames = listOf(TREND_SPO2_HOME)
         )
     )
+
+    /**
+     * Typo guard for the optional pulse field that rides along with a BP or SpO2 reading. It is
+     * the same range the standalone Heart Rate metric declares — read from that metric rather than
+     * repeated, so the two can never drift apart and disagree about what a plausible pulse is.
+     */
+    val pulseRange: ClosedFloatingPointRange<Float>
+        get() = byKey(KEY_PULSE)?.plausibleRange ?: 30f..220f
 
     fun byKey(key: String): VitalMetric? = METRICS.firstOrNull { it.key == key }
 

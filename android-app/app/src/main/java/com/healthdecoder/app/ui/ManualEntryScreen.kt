@@ -68,14 +68,24 @@ fun ManualEntryScreen(
     var isLoading by remember { mutableStateOf(true) }
     var editingMetric by remember { mutableStateOf<VitalMetric?>(null) }
     var reloadTick by remember { mutableStateOf(0) }
+    var showFamilyManager by remember { mutableStateOf(false) }
+    var familyReload by remember { mutableStateOf(0) }
 
-    LaunchedEffect(Unit) {
+    // Re-runs when a person is added, so the new member is selectable without leaving the screen.
+    LaunchedEffect(familyReload) {
         val loaded = LocalRepository.familyMembers(context)
         profiles = loaded
         val active = AppSettings.getActivePatient(context)
-        selectedPatient = loaded.firstOrNull { it.name.equals(active, ignoreCase = true) }?.name
+        // Keep whoever is already chosen — re-picking the active patient here would yank the
+        // selection back after the user deliberately switched people.
+        selectedPatient = selectedPatient?.takeIf { sel -> loaded.any { it.name == sel } }
+            ?: loaded.firstOrNull { it.name.equals(active, ignoreCase = true) }?.name
             ?: loaded.firstOrNull()?.name
-        // Deep-linked from a Trends chart point or the Home tile with a metric already chosen.
+    }
+
+    // Deep-link from a Trends chart point or the Home tile. Keyed on the argument, NOT on the
+    // family reload above — otherwise adding a person would re-open this dialog unprompted.
+    LaunchedEffect(initialMetric) {
         editingMetric = VitalCatalog.byKey(initialMetric ?: "")
     }
 
@@ -132,10 +142,25 @@ fun ManualEntryScreen(
             }
 
             if (selectedPatient == null) {
-                EmptyStateView(
-                    Icons.Default.MonitorHeart, tr("Add a family member first"),
-                    tr("Home readings are logged against a patient — add yourself or a family member from Home to get started.")
-                )
+                // A first-run user (no reports scanned yet, so familyMembers() has auto-seeded
+                // nobody) would otherwise land on a dead end here, told to go elsewhere with no
+                // way to act on it. The family manager is a dialog, so it opens in place.
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(Icons.Default.MonitorHeart, contentDescription = null, modifier = Modifier.size(56.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                    Text(tr("Add a family member first"), fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        tr("Home readings are saved against a person, so we need to know who this reading is for."),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Button(onClick = { showFamilyManager = true }) { Text(tr("Add a person")) }
+                }
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -207,6 +232,13 @@ fun ManualEntryScreen(
         }
     }
 
+    if (showFamilyManager) {
+        FamilyManagerDialog(
+            onDismiss = { showFamilyManager = false; familyReload++ },
+            onChanged = { familyReload++ }
+        )
+    }
+
     editingMetric?.let { metric ->
         val patient = selectedPatient
         if (patient != null) {
@@ -236,7 +268,18 @@ private fun QuickLogTile(metric: VitalMetric, latest: VitalReading?, modifier: M
         Column(modifier = Modifier.padding(14.dp).fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(metric.emoji, fontSize = 20.sp)
-                Text(tr(metric.displayName), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                // Two lines with an ellipsis, not one with a hard clip. These tiles are half the
+                // screen wide and share the row with the emoji, so "Blood Pressure" and "Blood
+                // Sugar" both truncated to a bare "Blood" — two different tiles rendering the same
+                // word. Same fix, and same reasoning, as ActionSquare on the Home grid.
+                Text(
+                    tr(metric.displayName),
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyMedium,
+                    lineHeight = 16.sp,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
             }
             Spacer(Modifier.height(8.dp))
             if (latest == null) {
@@ -335,6 +378,12 @@ private fun VitalEntryDialog(
     val value1Error = value1.isNotBlank() && (num1 == null || num1 !in metric.plausibleRange)
     val value2Error = metric.secondValueLabel.isNotBlank() &&
         value2.isNotBlank() && (num2 == null || range2 == null || num2 !in range2)
+    // The optional pulse riding along with a BP/SpO2 reading was previously saved unvalidated —
+    // a mistyped 900 went straight onto the Pulse trend line, since it bypasses the standalone
+    // Heart Rate metric's own range check.
+    val num3 = value3.toFloatOrNull()
+    val value3Error = metric.hasPulseField && value3.isNotBlank() &&
+        (num3 == null || num3 !in VitalCatalog.pulseRange)
     val cal = remember(recordedAt) { parseRecordedAt(recordedAt) }
     // A reading cannot have been taken in the future. The date picker already caps at today, but
     // the time picker can still push a today-dated reading past the current hour, so the composed
@@ -343,7 +392,7 @@ private fun VitalEntryDialog(
     val isFuture = cal.timeInMillis > System.currentTimeMillis()
     val canSave = num1 != null && num1 in metric.plausibleRange &&
         (metric.secondValueLabel.isBlank() || (num2 != null && range2 != null && num2 in range2)) &&
-        !isFuture
+        !value3Error && !isFuture
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -357,7 +406,7 @@ private fun VitalEntryDialog(
                     OutlinedTextField(
                         value = value1,
                         onValueChange = { value1 = it },
-                        label = { Text(if (metric.secondValueLabel.isNotBlank()) tr("Systolic") else tr(metric.displayName)) },
+                        label = { Text(tr(metric.firstValueLabel.ifBlank { metric.displayName })) },
                         isError = value1Error,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
@@ -378,6 +427,10 @@ private fun VitalEntryDialog(
                 if (value1Error || value2Error) {
                     Text(tr("That doesn't look like a valid reading — please check the number."),
                         color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                } else if (metric.valueHint.isNotBlank()) {
+                    // Only when there is no error to show, so the hint never competes with it.
+                    Text(tr(metric.valueHint), style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
                 if (metric.hasPulseField) {
@@ -385,10 +438,15 @@ private fun VitalEntryDialog(
                         value = value3,
                         onValueChange = { value3 = it },
                         label = { Text(tr("Pulse (optional, bpm)")) },
+                        isError = value3Error,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    if (value3Error) {
+                        Text(tr("That doesn't look like a valid pulse — please check the number."),
+                            color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                    }
                 }
 
                 if (metric.units.size > 1) {
