@@ -5,7 +5,13 @@
     <init>(...);
 }
 
-# Keep SQLCipher classes
+# Keep SQLCipher classes. Both coordinates are listed: net.zetetic.database.** is the current
+# sqlcipher-android library (moved to for 16 KB page-size support), and net.sqlcipher.** is the
+# deprecated android-database-sqlcipher package — kept as a no-op rule so that if any transitive
+# dependency still pulls the old artifact in, its JNI classes are not stripped and the failure is
+# a clean missing-library error rather than an obfuscated crash inside the database layer.
+-keep class net.zetetic.database.** { *; }
+-dontwarn net.zetetic.database.**
 -keep class net.sqlcipher.** { *; }
 -dontwarn net.sqlcipher.**
 

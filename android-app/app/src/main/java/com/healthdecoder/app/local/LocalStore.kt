@@ -58,10 +58,15 @@ object LocalStore {
             database?.let { return it }
             val dbFile = File(recordsDir(context), "medical_records.db")
 
-            // Initialize SQLCipher native libraries
-            net.sqlcipher.database.SQLiteDatabase.loadLibs(context)
+            // Initialize SQLCipher native libraries. sqlcipher-android loads its own .so by name
+            // rather than the old artifact's loadLibs(context) — see the dependency comment in
+            // build.gradle.kts for why the library changed (16 KB page-size support).
+            System.loadLibrary("sqlcipher")
             val passphrase = SecureKeyManager.getDatabasePassphrase(context)
-            val factory = net.sqlcipher.database.SupportFactory(passphrase)
+            // SupportOpenHelperFactory is this library's equivalent of the old SupportFactory, and
+            // keys the database with the RAW passphrase bytes exactly as that one did — which is
+            // what makes an already-encrypted database from a previous version still open here.
+            val factory = net.zetetic.database.sqlcipher.SupportOpenHelperFactory(passphrase)
 
             var instance: MedicalDatabase? = null
             try {
@@ -79,8 +84,31 @@ object LocalStore {
                 instance.openHelper.writableDatabase
             } catch (e: Exception) {
                 e.printStackTrace()
-                // Recover from decryption / key mismatch errors by recreating database
+                // Recover from decryption / key mismatch errors by recreating database.
+                //
+                // This path DELETES every medical record on the device, so it must never be the
+                // silent end of the story. Before recreating, the unreadable file is set aside
+                // rather than dropped: if a future change to the encryption layer — a SQLCipher
+                // library swap, a key-derivation change — ever failed to open existing databases,
+                // this branch would otherwise wipe each upgrading user's records with nothing left
+                // to recover from, and the app would look like it had simply forgotten them.
+                //
+                // Kept as ONE spare copy (overwritten each time) so a repeatedly failing open can't
+                // fill the device with copies. It stays inside records/, so it is covered by the
+                // same backup and clear-all-data paths as everything else.
                 runCatching { instance?.close() }
+                if (dbFile.exists() && dbFile.length() > 0) {
+                    runCatching {
+                        val quarantine = File(recordsDir(context), "medical_records.unreadable.db")
+                        if (quarantine.exists()) quarantine.delete()
+                        dbFile.copyTo(quarantine, overwrite = true)
+                        android.util.Log.e(
+                            "ScanDiag",
+                            "database could not be opened (${e.javaClass.simpleName}); it has been " +
+                                "set aside as ${quarantine.name} and a new empty database created"
+                        )
+                    }
+                }
                 dbFile.delete()
 
                 instance = Room.databaseBuilder(

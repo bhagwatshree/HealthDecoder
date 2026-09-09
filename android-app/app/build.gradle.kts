@@ -32,8 +32,8 @@ android {
         applicationId = "com.healthdecoder.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 37
-        versionName = "1.3.28"
+        versionCode = 38
+        versionName = "1.3.29"
 
         // No Gemini/Sarvam API keys are embedded here anymore — all AI calls are proxied
         // through the backend (see BackendAiClient), so the APK ships with zero provider keys.
@@ -189,8 +189,18 @@ dependencies {
   implementation(libs.androidx.room.runtime)
   ksp(libs.androidx.room.compiler)
 
-  // SQLCipher database encryption & Jetpack Security Crypto
-  implementation("net.zetetic:android-database-sqlcipher:4.5.4")
+  // SQLCipher database encryption & Jetpack Security Crypto.
+  //
+  // sqlcipher-android, NOT the older android-database-sqlcipher. The old artifact is deprecated
+  // and its last release predates 16 KB memory page sizes: its libsqlcipher.so is built with
+  // 4096-byte ELF segment alignment, which Play now rejects ("your app does not support 16 KB
+  // memory page sizes"). Only the vendor can fix that, and they did so by publishing under this
+  // new coordinate — so this is a migration, not a version bump. The package name changes from
+  // net.sqlcipher.database to net.zetetic.database.sqlcipher (see LocalStore, BackupManager).
+  //
+  // The on-disk format is unchanged, so an existing encrypted database opens as before.
+  implementation("net.zetetic:sqlcipher-android:4.6.1")
+  implementation("androidx.sqlite:sqlite:2.4.0")
   implementation("androidx.security:security-crypto:1.0.0")
 
   // DocumentFile — used by SafCloudUploader for cloud-folder backup via SAF

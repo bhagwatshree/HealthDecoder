@@ -219,18 +219,22 @@ object BackupManager {
             val candidatePassphrase = dbPassphrase ?: SecureKeyManager.getDatabasePassphrase(context)
             val stagedDb = File(stagingDir, "medical_records.db")
             val opens = stagedDb.exists() && runCatching {
-                net.sqlcipher.database.SQLiteDatabase.loadLibs(context)
-                // Room's SupportFactory(ByteArray) keys the database with the raw bytes, not a
+                System.loadLibrary("sqlcipher")
+                // SupportOpenHelperFactory(ByteArray) keys the database with the raw bytes, not a
                 // PBKDF2-derived passphrase — SQLCipher's "x'<hex>'" convention is how the raw
-                // net.sqlcipher.database.SQLiteDatabase API asks for that same raw-key mode.
-                // Using a plain string here would derive a completely different (wrong) key even
-                // from the objectively correct bytes, and falsely report a good backup as bad.
+                // SQLiteDatabase API asks for that same raw-key mode. Using a plain string here
+                // would derive a completely different (wrong) key even from the objectively
+                // correct bytes, and falsely report a good backup as bad.
                 val rawKeyHex = "x'" + candidatePassphrase.joinToString("") { "%02x".format(it) } + "'"
-                val db = net.sqlcipher.database.SQLiteDatabase.openDatabase(
+                // Trailing null is the optional SQLiteDatabaseHook; this library has no 4-arg
+                // password overload, and the 4-arg form that does exist takes no password at all —
+                // which would silently try to open the encrypted file unencrypted.
+                val db = net.zetetic.database.sqlcipher.SQLiteDatabase.openDatabase(
                     stagedDb.absolutePath,
                     rawKeyHex,
                     null,
-                    net.sqlcipher.database.SQLiteDatabase.OPEN_READONLY
+                    net.zetetic.database.sqlcipher.SQLiteDatabase.OPEN_READONLY,
+                    null
                 )
                 try {
                     db.rawQuery("select count(*) from sqlite_master", null).use { it.moveToFirst() }
