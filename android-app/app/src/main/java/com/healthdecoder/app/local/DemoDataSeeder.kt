@@ -6,6 +6,8 @@ import com.healthdecoder.app.model.Medication
 import com.healthdecoder.app.model.PendingTest
 import com.healthdecoder.app.model.TestParameter
 import com.healthdecoder.app.model.TestResults
+import com.healthdecoder.app.model.VitalCatalog
+import com.healthdecoder.app.model.VitalReading
 import com.healthdecoder.app.reminder.AppointmentReminderManager
 import com.healthdecoder.app.reminder.AppointmentSchedule
 import com.healthdecoder.app.reminder.AppointmentStore
@@ -181,9 +183,101 @@ object DemoDataSeeder {
         )
         AppointmentReminderManager.scheduleAll(context)
 
+        // Home readings — without these, "Try Demo" showed the Add Reading tile and the Trends
+        // screen's Home Readings mode completely empty, so the newest feature was the one part of
+        // the app a prospective user could not actually see working.
+        seedHomeReadings(context)
+
         // Focus Home on the demo patient right away — the whole point of "Try Demo" is seeing a
         // populated screen immediately, not making the user find the new profile in the picker.
         AppSettings.setActivePatient(context, DEMO_PATIENT_NAME)
+    }
+
+    /**
+     * Three weeks of patient-logged home readings, written through the same [LocalStore] path the
+     * Add Reading screen uses.
+     *
+     * Shaped to demonstrate what this feature does that the lab-report side structurally cannot:
+     *  - BP is logged morning AND evening on the same days, so the chart shows two distinct points
+     *    per day rather than one — the case that only works because a reading carries a clock time.
+     *  - Every BP reading carries its pulse, as a real home cuff reports it, so the Pulse line is
+     *    populated from BP entries rather than from standalone pulse logs.
+     *  - Sugar alternates Fasting and post-meal, so the context filter chips have something to
+     *    filter and the two thresholds visibly classify the same kind of number differently.
+     *  - The BP trend drifts gently down over the three weeks, consistent with the demo patient
+     *    having started on the medication in the newer prescription — the numbers tell the same
+     *    story the rest of the demo data does, rather than being noise.
+     *
+     * Values are ordinary and unalarming on purpose: this is sample data a stranger will read as
+     * if it were real, so it should not depict a medical emergency.
+     */
+    private fun seedHomeReadings(context: Context) {
+        fun vital(
+            metric: String, day: Int, time: String, value: String,
+            value2: String = "", value3: String = "", unit: String, context_: String = ""
+        ) = VitalReading(
+            id = LocalStore.newId(),
+            patientName = DEMO_PATIENT_NAME,
+            metric = metric,
+            value = value,
+            value2 = value2,
+            value3 = value3,
+            unit = unit,
+            context = context_,
+            note = "",
+            recordedAt = "${daysAgo(day)}T$time",
+            createdAt = createdAtFor(daysAgo(day))
+        )
+
+        val readings = mutableListOf<VitalReading>()
+
+        // BP twice a day, easing from ~142/88 down toward ~126/80 across three weeks.
+        val bpDays = listOf(20, 18, 16, 14, 12, 10, 8, 6, 4, 2, 0)
+        for ((i, day) in bpDays.withIndex()) {
+            val ease = i.toFloat() / (bpDays.size - 1)          // 0.0 at the oldest, 1.0 today
+            val morningSys = (142 - 16 * ease).toInt()
+            val morningDia = (88 - 8 * ease).toInt()
+            readings += vital(
+                VitalCatalog.KEY_BP, day, "08:15",
+                morningSys.toString(), morningDia.toString(), (78 - 6 * ease).toInt().toString(),
+                unit = "mmHg", context_ = "Sitting"
+            )
+            // Evening runs a little lower, as it typically does.
+            readings += vital(
+                VitalCatalog.KEY_BP, day, "20:30",
+                (morningSys - 5).toString(), (morningDia - 3).toString(), (74 - 5 * ease).toInt().toString(),
+                unit = "mmHg", context_ = "After medicine"
+            )
+        }
+
+        // Sugar: fasting most mornings, a post-meal reading on some afternoons.
+        val sugarDays = listOf(19, 15, 11, 7, 3, 1)
+        for ((i, day) in sugarDays.withIndex()) {
+            val ease = i.toFloat() / (sugarDays.size - 1)
+            readings += vital(
+                VitalCatalog.KEY_GLUCOSE, day, "07:40",
+                (124 - 14 * ease).toInt().toString(), unit = "mg/dL", context_ = "Fasting"
+            )
+            if (day % 2 == 1) {
+                readings += vital(
+                    VitalCatalog.KEY_GLUCOSE, day, "14:20",
+                    (162 - 18 * ease).toInt().toString(), unit = "mg/dL", context_ = "2h after meal"
+                )
+            }
+        }
+
+        // A few oximeter readings, each with the pulse the same device reported.
+        for (day in listOf(12, 5, 0)) {
+            readings += vital(
+                VitalCatalog.KEY_SPO2, day, "21:00", "97", value3 = "72",
+                unit = "%", context_ = "At rest"
+            )
+        }
+
+        // One standalone pulse, so the unioned Pulse line visibly draws from all three sources.
+        readings += vital(VitalCatalog.KEY_PULSE, 9, "18:00", "76", unit = "bpm", context_ = "After activity")
+
+        for (r in readings) LocalStore.upsertVital(context, r)
     }
 
     /** Removes everything scoped to the demo patient, and ONLY the demo patient — reports (via
@@ -198,6 +292,12 @@ object DemoDataSeeder {
         val pending = LocalStore.getPendingTests(context)
             .filter { it.patientName.equals(DEMO_PATIENT_NAME, ignoreCase = true) }
         for (p in pending) LocalRepository.deletePendingTest(context, p.id)
+
+        // Home readings. Without this, removing the demo left its vitals behind: the profile and
+        // reports would vanish while the Trends screen still charted three weeks of "Aisha (Demo)"
+        // blood pressure, and familyMembers() does not re-seed from vitals, so the readings would
+        // be stranded under a patient no longer in the picker.
+        for (v in LocalStore.getVitals(context, DEMO_PATIENT_NAME)) LocalStore.deleteVital(context, v.id)
 
         val schedules = MedicineScheduleStore.loadAll(context)
             .filter { it.patientName.equals(DEMO_PATIENT_NAME, ignoreCase = true) }
