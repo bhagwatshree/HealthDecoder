@@ -182,7 +182,14 @@ fun PendingTestsScreen(
                                         }
                                     },
                                     onFindCentersClick = {
-                                        onNavigateToDiscovery(test.testName)
+                                        // PendingTestCard already hides this button while
+                                        // discovery is off, so this is belt-and-braces — but the
+                                        // original defect was exactly a gate living in a different
+                                        // file from the navigation it was meant to guard, so the
+                                        // check is repeated where the navigation is actually wired.
+                                        if (com.healthdecoder.app.FeatureFlags.DISCOVERY_ENABLED) {
+                                            onNavigateToDiscovery(test.testName)
+                                        }
                                     }
                                 )
                             }

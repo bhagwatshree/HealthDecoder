@@ -164,6 +164,21 @@ fun TodaysMedicinesTab(
         // days-of-week and end date never reaching an already-seeded reminder.
         medicationHistory.filter {
             it.status.lowercase() in setOf("active", "scheduled", "changed")
+        }.filter { med ->
+            // A medicine whose dose or frequency the extractor could not confidently read is
+            // NEVER auto-scheduled. Auto-seeding turns an extracted medicine into an alarm that
+            // tells a patient to take a specific dose at a specific time; doing that from a value
+            // no human has confirmed is the one failure in this app that can cause direct physical
+            // harm. Such a medicine still appears in the tracker, flagged, where the patient can
+            // check it against the prescription and set the reminder up deliberately.
+            if (med.uncertain) {
+                android.util.Log.i(
+                    "ScanDiag",
+                    "skipping reminder auto-seed for '${med.medicineName}' — unconfirmed extraction" +
+                        (med.uncertainReason.takeIf { it.isNotBlank() }?.let { ": $it" } ?: "")
+                )
+            }
+            !med.uncertain
         }.forEach { med ->
             val activeSlots = parseRoutine(med.currentFrequency, med.currentDosage)
                 .filter { it.second }.map { it.first }

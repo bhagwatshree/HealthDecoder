@@ -344,7 +344,13 @@ $refBlock
 Context instructions:
 $categoryText
 
-IMPORTANT: This document may contain HANDWRITTEN text (a doctor's handwriting, margin notes, ticked boxes, or corrections). Read handwritten medicines, dosages, frequencies, and comments carefully and include them — do NOT ignore handwriting. If partly illegible, transcribe your best interpretation.
+IMPORTANT: This document may contain HANDWRITTEN text (a doctor's handwriting, margin notes, ticked boxes, or corrections). Read handwritten medicines, dosages, frequencies, and comments carefully and include them — do NOT ignore handwriting.
+
+NEVER GUESS A CLINICAL VALUE. If a medicine's name, dosage, frequency or duration is partly illegible, smudged, cut off, or you are otherwise not confident you have read it correctly, you MUST NOT supply your best interpretation of it. A plausible-looking guess is indistinguishable from a correct reading once it is saved, and this app turns extracted medicines into medication reminders — a guessed dose becomes a reminder telling a patient to take that dose. Instead:
+  - Put null in the field you could not read (do NOT invent a value, and do NOT write "unknown"/"illegible" as the value itself).
+  - Set "uncertain": true on that medicine.
+  - In "uncertainReason", say briefly which field(s) you could not read and why (e.g. "dosage illegible — handwriting unclear", "frequency cut off at page edge").
+Include the medicine even when uncertain — an entry the patient can be asked to confirm is far better than a silently dropped medicine. This applies to test result values too: leave "value" empty rather than guessing a digit.
 
 MULTIPLE REPORTS: The pages may contain SEVERAL distinct reports (for example a CBC, a lipid profile, and a 2D Echo bundled together), each with its own report name and its own dates. Return one entry in "reports" for EACH distinct report. Pages belonging to the same report must be merged into ONE entry. If everything is one single report, return a single entry.
 
@@ -455,7 +461,8 @@ The response MUST be a JSON object with this schema:
       "comments": "Doctor's instructions/advice/notes for THIS report",
       "medications": [
         { "name": "", "dosage": "", "frequency": "", "duration": "", "isOptional": false, "weeklySchedule": ["Everyday"], "notes": "",
-          "startDate": "YYYY-MM-DD or null", "startAfterDays": null, "endDate": "YYYY-MM-DD or null", "durationDays": null, "intervalDays": null }
+          "startDate": "YYYY-MM-DD or null", "startAfterDays": null, "endDate": "YYYY-MM-DD or null", "durationDays": null, "intervalDays": null,
+          "uncertain": false, "uncertainReason": null }
       ],
       "recommendedTests": [ { "testName": "", "dueDate": "YYYY-MM-DD or null" } ],
       "followUps": [ { "doctorName": "", "specialty": "", "afterDays": 7, "date": "YYYY-MM-DD or null", "place": "", "notes": "" } ],

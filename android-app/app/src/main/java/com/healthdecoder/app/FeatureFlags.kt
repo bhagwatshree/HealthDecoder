@@ -40,4 +40,27 @@ object FeatureFlags {
      * Turn back on by setting `GMAIL_SYNC_ENABLED=true` in `local.properties` once verified.
      */
     val GMAIL_SYNC_ENABLED: Boolean = BuildConfig.GMAIL_SYNC_ENABLED
+
+    /**
+     * Healthcare discovery — "Find Doctors / Labs / Hospitals", the Discovery screen, and the
+     * "Find Lab Centers" / "Find Nearby" buttons that open it.
+     *
+     * OFF by default, and this one is a SAFETY gate rather than a cost or rollout gate. The
+     * backend answers these searches from a hard-coded table (backend/discovery.js): real hospital
+     * names and real phone numbers, but invented ratings, distances, prices and appointment slots.
+     * Worse, the screen's Book action performs no network call at all — it only sets local state
+     * and then tells the patient "Booking Request Sent … the facility will confirm your slot via
+     * SMS/WhatsApp within 10 minutes." A patient could wait for a confirmation that cannot arrive,
+     * for a test their doctor ordered.
+     *
+     * This previously guarded only the three Home tiles (a local `isBackendReady = false`), while
+     * two other entry points — Pending Tests' "Find Lab Centers" and Report Detail's "Find Nearby"
+     * — stayed live. Gating the FEATURE rather than one of its doors is the point: any entry point
+     * added later is covered by default.
+     *
+     * Before ever setting DISCOVERY_ENABLED=true in local.properties, the booking flow must be
+     * rebuilt against a real booking API — a success dialog that makes no request must not come
+     * back with it — and the results must come from verified live provider data.
+     */
+    val DISCOVERY_ENABLED: Boolean = BuildConfig.DISCOVERY_ENABLED
 }

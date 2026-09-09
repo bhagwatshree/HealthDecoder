@@ -10,8 +10,29 @@ package com.healthdecoder.app.ui
  * GmailApiClient, DiscoveryScreen, and the AI proxy) rather than generic boilerplate, but it is
  * still a starting draft. Have it reviewed before relying on it for a real Play Store listing —
  * in particular the governing-law/jurisdiction line and the contact address are placeholders.
+ *
+ * A later audit found four statements that had drifted from — or never matched — the code. All
+ * four are corrected above; they are listed here because each is the kind of claim that must be
+ * re-checked whenever the corresponding feature changes, and because the Play Data Safety form
+ * has to agree with them:
+ *   1. It said reports are stored on our backend so they can be restored on a new device. They
+ *      are not. NetworkModule declares uploadReport/updateReport but NOTHING CALLS THEM — records
+ *      live only in the on-device SQLCipher database. The policy now says so, including the
+ *      consequence: lose the device without a backup and the records are gone.
+ *   2. It promised the AI providers do not train on submitted content. That was never verified,
+ *      and README's own launch checklist flags the Gemini FREE tier as permitting Google to use
+ *      submissions to improve its products. A privacy promise we cannot keep is worse than none,
+ *      so the text now states the tier dependency plainly instead. If production moves to a paid
+ *      tier where it does not apply, this paragraph should be revisited — not before.
+ *   3. It described the Discovery location search as a live feature. It is switched off
+ *      (FeatureFlags.DISCOVERY_ENABLED), and with it the only thing that ever collected location.
+ *   4. It described Gmail inbox scanning as available. It is switched off
+ *      (FeatureFlags.GMAIL_SYNC_ENABLED), and Google sign-in alone grants no inbox access.
+ *
+ * Points 3 and 4 describe the app AS SHIPPED TODAY. Re-enabling either flag makes this policy
+ * wrong again, so the flag and this text have to move together.
  */
-private const val LAST_UPDATED = "August 2026"
+private const val LAST_UPDATED = "September 2026"
 private const val CONTACT_EMAIL = "support@healthdecoder.app" // placeholder — replace with a real, monitored address
 
 data class LegalSection(val heading: String, val body: String)
@@ -49,29 +70,38 @@ val PRIVACY_POLICY_SECTIONS: List<LegalSection> = listOf(
     LegalSection(
         "How your data is processed",
         "Scanned report images and extracted text are sent to Google's Gemini AI and, for Indic-" +
-            "language OCR/text-to-speech, Sarvam AI, solely to interpret your report and answer " +
-            "questions you ask about it. These providers process the request and, per their own " +
-            "terms, do not use it to train models on your data through this app's integration. " +
-            "We do not sell your medical data to anyone, for any purpose."
+            "language text-to-speech, Sarvam AI, solely to interpret your report and answer " +
+            "questions you ask about it. Before a page is sent, the app blanks out identifying " +
+            "regions it can detect on the page itself.\n\n" +
+            "How those providers may use what is sent depends on the API tier we are running on. " +
+            "Google's free tier permits Google to use submitted content to improve its products; " +
+            "its paid tiers do not. We therefore do not promise that your report contents are " +
+            "never used for provider model improvement, and you should not assume it. If that " +
+            "matters to you, do not send documents you would not want processed under those terms." +
+            "\n\nWe do not sell your medical data to anyone, for any purpose."
     ),
     LegalSection(
         "Where your data is stored",
         "On your device: your reports, images, and account cache are stored in a local database " +
             "encrypted with SQLCipher (AES-256), keyed by a random passphrase generated on your " +
             "device and never sent to us.\n\n" +
-            "On our servers: if you create an account, your profile and reports (so you can " +
-            "restore them on a new device) are stored on our backend, encrypted at rest where the " +
-            "data is sensitive (API keys, tokens). Backend infrastructure runs on AWS; the " +
-            "database is Neon, in the same region as our servers."
+            "Your reports never leave your device except through a backup or export you start " +
+            "yourself (see \"Backup and export\" below). There is no server-side copy of your " +
+            "medical records, and no way to restore them from our servers — if you lose the " +
+            "device without a backup, the records are gone.\n\n" +
+            "On our servers: if you create an account, we store your account details only — email " +
+            "address, password (hashed), the profile fields you entered, your plan, and a daily " +
+            "count of AI requests used for the free-tier limit. Backend infrastructure runs on " +
+            "AWS; the database is Neon, in the same region as our servers."
     ),
     LegalSection(
-        "Optional Gmail linking",
-        "If you explicitly enable \"Link Google Account\" for automatic report detection, the app " +
-            "requests read-only access to your Gmail inbox (the gmail.readonly scope) to find " +
-            "medical report attachments. This is entirely opt-in, off by default, and can be " +
-            "revoked at any time from Settings or from your Google Account's third-party access " +
-            "page. We only read messages looking for report attachments; we do not read, store, " +
-            "or otherwise use the content of unrelated emails."
+        "Gmail access",
+        "This version of the app does not read your email and does not request access to it. " +
+            "Automatic detection of report attachments in Gmail is switched off.\n\n" +
+            "Signing in with Google, where offered, is used only to identify your account. It " +
+            "does not grant this app access to your Gmail messages. If inbox scanning is " +
+            "reintroduced in a later version it will be opt-in and off by default, and this " +
+            "policy will be updated before that happens."
     ),
     LegalSection(
         "Backup and export",
@@ -81,18 +111,22 @@ val PRIVACY_POLICY_SECTIONS: List<LegalSection> = listOf(
             "destination; it does not pass through our servers."
     ),
     LegalSection(
-        "Location (Discovery feature)",
-        "If you use the Discovery tab to search for nearby hospitals, labs, or doctors, your " +
-            "device's location is sent, at the time of that search only, to the public UHI (Unified " +
-            "Health Interface) network to return relevant results. Location is not stored or " +
-            "logged by us beyond that single request."
+        "Location",
+        "This version of the app does not use or request your location at all. The \"find nearby " +
+            "hospitals, labs and doctors\" feature is switched off, so nothing sends or stores " +
+            "your location. If it is reintroduced in a later version, this policy will be updated " +
+            "before that happens."
     ),
     LegalSection(
         "Your controls",
         "You can delete a single report from within the app at any time. Settings → \"Delete " +
-            "Everything\" permanently erases every report, medicine, pending test, and image on " +
-            "this device and, if you're signed in, on our servers. This cannot be undone. You can " +
-            "also unlink your Google account or Gmail access at any time from Settings."
+            "Everything\" permanently erases every report, medicine, pending test, home reading " +
+            "and image on this device. Because your medical records are only ever held on your " +
+            "device, that deletion is complete — there is no server-side copy left behind. It " +
+            "cannot be undone, and it does not reach backups or exports you have already saved " +
+            "elsewhere; delete those yourself.\n\n" +
+            "Deleting your account removes the account details we hold (see \"Where your data is " +
+            "stored\"). You can sign out or delete your account at any time from Settings."
     ),
     LegalSection(
         "Children's privacy",
@@ -178,10 +212,11 @@ val TERMS_AND_CONDITIONS_SECTIONS: List<LegalSection> = listOf(
     ),
     LegalSection(
         "Your content",
-        "You own the reports and data you upload. You grant us the limited right to process it " +
-            "(including sending it to the AI providers named in the Privacy Policy) solely to " +
-            "provide the app's features to you. Deleting a report or your account removes it from " +
-            "our servers as described in the Privacy Policy."
+        "You own the reports and data you add. You grant us the limited right to process them " +
+            "(including sending them to the AI providers named in the Privacy Policy) solely to " +
+            "provide the app's features to you. We do not keep a copy of your reports — they stay " +
+            "on your device — so deleting a report in the app deletes it outright, as described " +
+            "in the Privacy Policy."
     ),
     LegalSection(
         "Changes and termination",

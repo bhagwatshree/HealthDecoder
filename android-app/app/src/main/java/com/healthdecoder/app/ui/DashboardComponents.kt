@@ -676,10 +676,17 @@ fun PendingTestCard(
                 }
 
                 if (isPending) {
-                    TextButton(onClick = onFindCentersClick) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(imageVector = Icons.Default.Search, contentDescription = tr("Find Labs"), modifier = Modifier.size(16.dp))
-                            Text(tr("Find Lab Centers"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    // Hidden while discovery is disabled — it opened a lab list with invented
+                    // prices and bookable slots. See FeatureFlags.DISCOVERY_ENABLED. Nested rather
+                    // than folded into the `isPending` condition on purpose: folding it in would
+                    // drop a pending test through to the `else if` below and show it the
+                    // "view report" action instead of nothing.
+                    if (com.healthdecoder.app.FeatureFlags.DISCOVERY_ENABLED) {
+                        TextButton(onClick = onFindCentersClick) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Icon(imageVector = Icons.Default.Search, contentDescription = tr("Find Labs"), modifier = Modifier.size(16.dp))
+                                Text(tr("Find Lab Centers"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 } else if (test.resolvedReportId != null) {

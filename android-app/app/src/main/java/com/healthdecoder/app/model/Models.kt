@@ -50,7 +50,22 @@ data class Medication(
     // weeklySchedule/daysOfWeek already express. Reminders count days since startDate (defaulted
     // to the report date when this is set but no explicit start was given — the interval needs
     // an anchor day to count from).
-    @SerializedName("intervalDays") val intervalDays: Int? = null
+    @SerializedName("intervalDays") val intervalDays: Int? = null,
+    /**
+     * True when the extractor could not confidently read one or more of this medicine's clinical
+     * fields (see OcrEngine's prompt, which is instructed to leave the field null and flag it
+     * rather than supply a best guess).
+     *
+     * This exists because extracted medicines are turned into medication REMINDERS. A guessed dose
+     * is indistinguishable from a read one once stored, so without this flag the app could alarm a
+     * patient to take a dose no human ever verified. An uncertain medicine is never auto-scheduled
+     * — see MedicineScheduleStore.autoSeedIfAbsent — and is surfaced for confirmation instead.
+     *
+     * Nullable with a false default so every report saved before this existed deserializes
+     * unchanged and is treated as confidently read, which is what it was.
+     */
+    @SerializedName("uncertain") val uncertain: Boolean? = false,
+    @SerializedName("uncertainReason") val uncertainReason: String? = null
 )
 
 data class TestParameter(
@@ -290,7 +305,11 @@ data class MedicationHistory(
     @SerializedName("notes") val notes: String = "",
     @SerializedName("currentStartDate") val currentStartDate: String? = null,
     @SerializedName("currentEndDate") val currentEndDate: String? = null,
-    @SerializedName("currentIntervalDays") val currentIntervalDays: Int? = null
+    @SerializedName("currentIntervalDays") val currentIntervalDays: Int? = null,
+    /** Carried through from [Medication.uncertain] so the reminder auto-seed can refuse to
+     *  schedule a medicine whose dose or frequency was never confidently read. */
+    @SerializedName("uncertain") val uncertain: Boolean = false,
+    @SerializedName("uncertainReason") val uncertainReason: String = ""
 )
 
 data class ScannedReportData(

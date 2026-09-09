@@ -32,8 +32,8 @@ android {
         applicationId = "com.healthdecoder.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 36
-        versionName = "1.3.27"
+        versionCode = 37
+        versionName = "1.3.28"
 
         // No Gemini/Sarvam API keys are embedded here anymore — all AI calls are proxied
         // through the backend (see BackendAiClient), so the APK ships with zero provider keys.
@@ -59,6 +59,12 @@ android {
         buildConfigField(
             "boolean", "GMAIL_SYNC_ENABLED",
             (localProp("GMAIL_SYNC_ENABLED").takeIf { it.isNotBlank() } ?: "false")
+        )
+        // Healthcare discovery (Find Doctors / Labs / Hospitals). OFF by default — the backend
+        // currently answers with simulated providers. See FeatureFlags.DISCOVERY_ENABLED.
+        buildConfigField(
+            "boolean", "DISCOVERY_ENABLED",
+            (localProp("DISCOVERY_ENABLED").takeIf { it.isNotBlank() } ?: "false")
         )
     }
 

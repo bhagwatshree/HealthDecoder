@@ -84,6 +84,16 @@ fun DiscoveryScreen(
     var errorMessage by remember { mutableStateOf("") }
 
     // Booking Dialog
+    //
+    // ⚠ DO NOT SHIP THIS AS-IS. The Book action below performs NO network call — it sets these
+    // three values and shows a dialog reading "Booking Request Sent … the facility will confirm
+    // your slot via SMS/WhatsApp within 10 minutes", naming a real hospital. Nothing is ever sent,
+    // so a patient can wait for a confirmation that cannot arrive, for a test their doctor ordered.
+    //
+    // This whole screen is currently unreachable (FeatureFlags.DISCOVERY_ENABLED is off), which is
+    // the only reason it is still here. Before that flag is ever turned on, this flow must be
+    // rebuilt against a real booking API and must report what actually happened — a confirmation
+    // dialog that makes no request must not come back with it.
     var showBookingSuccessDialog by remember { mutableStateOf(false) }
     var bookedItemName by remember { mutableStateOf("") }
     var bookedFacilityName by remember { mutableStateOf("") }

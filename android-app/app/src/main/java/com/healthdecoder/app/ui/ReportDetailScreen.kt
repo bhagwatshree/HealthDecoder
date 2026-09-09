@@ -980,6 +980,12 @@ fun ReportDetailScreen(
                                                             color = textColor
                                                         )
                                                     }
+                                                    // Hidden while discovery is disabled — the
+                                                    // doctor list behind it is simulated. See
+                                                    // FeatureFlags.DISCOVERY_ENABLED. The
+                                                    // recommendation itself still shows; only the
+                                                    // "find one near you" action is withheld.
+                                                    if (com.healthdecoder.app.FeatureFlags.DISCOVERY_ENABLED)
                                                     TextButton(
                                                         onClick = { onNavigateToDiscovery("doctors", rec.specialist) },
                                                         contentPadding = PaddingValues(horizontal = 8.dp),

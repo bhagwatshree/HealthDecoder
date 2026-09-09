@@ -130,6 +130,47 @@ const VALID_GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'];
 // signup, login and reset-password-otp.
 const authIpLimit = ipRateLimit('auth', () => parseInt(process.env.AUTH_IP_LIMIT_PER_HOUR || '30', 10));
 
+/**
+ * Middleware that closes a route serving a feature the app has switched off.
+ *
+ * Turning a feature off in the client hides it from users; it does NOT stop anyone calling the
+ * endpoint that served it. Two of this backend's route groups had real flaws that were only
+ * un-exploitable because nothing in the app pointed at them any more, which is not a security
+ * boundary — it is a coincidence. Closing the route removes the exposure outright, and reopening
+ * it is one env var once the underlying flaw is actually fixed.
+ *
+ * Defaults to DISABLED: a feature comes back only when someone deliberately enables it, rather
+ * than because a deploy forgot to set a variable.
+ */
+const featureRoute = (envVar) => (req, res, next) => {
+  if (process.env[envVar] === 'true') return next();
+  console.warn(`Blocked call to disabled route ${req.method} ${req.originalUrl} (${envVar}=off)`);
+  return res.status(404).json({ error: 'Not found.' });
+};
+
+// Browser-redirect Google OAuth. Its callback returns the app session JWT and the Google access
+// token as QUERY PARAMETERS on a medicalscanner:// URL — which leak through browser history, logs
+// and any app that registers the same custom scheme. The Android app never calls these (it uses
+// the native Credential Manager flow at POST /api/auth/google-signin, which sends an ID token in
+// the request body); the only trigger was the Gmail "Link Account" button, itself already behind
+// the app's GMAIL_SYNC_ENABLED flag.
+//
+// Before setting WEB_OAUTH_ENABLED=true, replace the URL-borne credentials with a one-time,
+// single-use code exchanged over an authenticated back-channel, and move off the custom scheme to
+// an HTTPS App Link so another app cannot claim the redirect.
+const webOAuthRoute = featureRoute('WEB_OAUTH_ENABLED');
+
+// Healthcare discovery. Serves a hard-coded provider table (see discovery.js), and separately
+// GET /results looks a session up by search_id WITHOUT checking it belongs to the caller, so any
+// authenticated user holding another's UUID reads that user's location-derived results. The
+// on_search webhook is unauthenticated and unverified, so results can be injected into a session.
+// The app's own discovery UI is off (FeatureFlags.DISCOVERY_ENABLED).
+//
+// Before setting DISCOVERY_ENABLED=true: scope the results lookup to the requesting user, add
+// signature verification, replay protection and size limits to the webhook, and connect the search
+// to verified live provider data.
+const discoveryRoute = featureRoute('DISCOVERY_ENABLED');
+
 app.post('/api/auth/signup', authIpLimit, async (req, res) => {
   try {
     const { firstName, lastName, dateOfBirth, gender, email, password, phoneIdToken } = req.body || {};
@@ -416,7 +457,7 @@ const getGoogleRedirectUri = (req) => {
 };
 
 // 1. Redirect user to Google for authentication
-app.get('/api/auth/google', (req, res) => {
+app.get('/api/auth/google', webOAuthRoute, (req, res) => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
@@ -459,7 +500,7 @@ app.get('/api/auth/google', (req, res) => {
 });
 
 // 2. Google Redirect Callback Handler
-app.get('/api/auth/google/callback', async (req, res) => {
+app.get('/api/auth/google/callback', webOAuthRoute, async (req, res) => {
   try {
     const { code, state } = req.query;
     if (!code) {
@@ -1018,7 +1059,7 @@ app.post('/api/ai/translate', requireDeviceOrUser, async (req, res) => {
 // ─── Healthcare & Lab Test Discovery ──────────────────────────────────────────
 
 // 1. Search (Universal endpoint for UHI and Commercial)
-app.post('/api/discovery/search', requireAuth, async (req, res) => {
+app.post('/api/discovery/search', discoveryRoute, requireAuth, async (req, res) => {
   try {
     const { latitude, longitude, category, query, mode = 'commercial' } = req.body || {};
 
@@ -1055,7 +1096,7 @@ app.post('/api/discovery/search', requireAuth, async (req, res) => {
 });
 
 // 2. Poll/Retrieve UHI Webhook Results
-app.get('/api/discovery/results', requireAuth, async (req, res) => {
+app.get('/api/discovery/results', discoveryRoute, requireAuth, async (req, res) => {
   try {
     const { search_id } = req.query;
     if (!search_id) {
@@ -1084,7 +1125,7 @@ app.get('/api/discovery/results', requireAuth, async (req, res) => {
 });
 
 // 3. Public Webhook callback endpoint for UHI/Beckn Protocol
-app.post('/api/discovery/uhi/on_search', async (req, res) => {
+app.post('/api/discovery/uhi/on_search', discoveryRoute, async (req, res) => {
   try {
     await processUhiWebhook(req.body);
     res.json({ status: 'ACK' });

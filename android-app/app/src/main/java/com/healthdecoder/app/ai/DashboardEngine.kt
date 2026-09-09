@@ -265,7 +265,9 @@ object DashboardEngine {
         // they happened to be scanned in — falling back to the scan date for a document whose own
         // date could not be read. Compared as yyyy-MM-dd, so both forms sort together.
         val currency: String,
-        val startDate: String?, val endDate: String?, val intervalDays: Int?
+        val startDate: String?, val endDate: String?, val intervalDays: Int?,
+        // Carried through so an unconfidently-read medicine is never auto-scheduled as a reminder.
+        val uncertain: Boolean = false, val uncertainReason: String = ""
     )
 
     fun buildDashboard(reports: List<MedicalReport>, pendingTests: List<PendingTest>): DashboardData {
@@ -425,9 +427,18 @@ object DashboardEngine {
                     clean.any { it.isDigit() }
                 ) displayName[dnKey] = clean
                 medMap.getOrPut(key) { mutableListOf() }.add(
-                    MedPoint(r.id, m.dosage.orEmpty().ifEmpty { "1 tablet" }, m.frequency.orEmpty(), m.duration ?: "",
+                    // The "1 tablet" default stands in for a prescription that simply never stated
+                    // a dose — a normal, harmless gap. It must NOT stand in for a dose that was
+                    // printed but could not be READ: substituting a default there invents a
+                    // clinical instruction out of an illegible one, which is the very thing the
+                    // uncertain flag exists to prevent. So an uncertain medicine keeps its blank.
+                    MedPoint(r.id,
+                        if (m.uncertain == true) m.dosage.orEmpty()
+                        else m.dosage.orEmpty().ifEmpty { "1 tablet" },
+                        m.frequency.orEmpty(), m.duration ?: "",
                         m.isOptional, m.weeklySchedule ?: emptyList(), m.notes ?: "", date, currency,
-                        m.startDate, m.endDate, m.intervalDays)
+                        m.startDate, m.endDate, m.intervalDays,
+                        uncertain = m.uncertain == true, uncertainReason = m.uncertainReason ?: "")
                 )
             }
         }
@@ -478,7 +489,9 @@ object DashboardEngine {
                         notes = current.notes,
                         currentStartDate = current.startDate,
                         currentEndDate = current.endDate,
-                        currentIntervalDays = current.intervalDays
+                        currentIntervalDays = current.intervalDays,
+                        uncertain = current.uncertain,
+                        uncertainReason = current.uncertainReason
                     )
                 )
             }

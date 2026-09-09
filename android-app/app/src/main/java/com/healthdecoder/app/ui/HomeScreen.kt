@@ -71,7 +71,10 @@ fun HomeScreen(
     onRefresh: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val isBackendReady = false
+    // Was a bare local `false`, which gated ONLY these three tiles while Pending Tests' "Find Lab
+    // Centers" and Report Detail's "Find Nearby" stayed live — so the feature looked disabled while
+    // remaining reachable. Now the one flag every discovery entry point reads.
+    val isBackendReady = com.healthdecoder.app.FeatureFlags.DISCOVERY_ENABLED
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
