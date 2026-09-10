@@ -97,7 +97,10 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(familyReload) {
+    // Keyed on DataChangeSignal as well as familyReload: Home is never removed from the back stack
+    // while you scan, so without this the picker keeps the list it loaded before the scan — and a
+    // newly auto-detected patient stays missing until the app is restarted.
+    LaunchedEffect(familyReload, com.healthdecoder.app.local.DataChangeSignal.version) {
         // Real, persisted family members (includes people added with no reports yet).
         val loaded = LocalRepository.familyMembers(context)
         profiles = loaded

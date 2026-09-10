@@ -67,6 +67,49 @@ class LegalContentAccuracyTest {
     }
 
     @Test
+    fun `the sections a health app must carry are all present`() {
+        // These were entirely absent until the content audit. Losing one again would be invisible
+        // in review — the policy would still read as complete prose.
+        val required = mapOf(
+            "controller identity" to "Who we are",
+            "legal basis" to "Why we are allowed to process your data",
+            "third-party records" to "Records you keep for someone else",
+            "retention" to "How long we keep things",
+            "security" to "How we protect your data",
+            "breach notification" to "If something goes wrong",
+            "automated processing" to "Automated processing",
+            "data rights" to "Your rights over your data",
+            "grievance redressal" to "Raising a complaint"
+        )
+        for ((why, heading) in required) {
+            assertTrue("the $why section ('$heading') is missing from the policy", policy.contains(heading))
+        }
+    }
+
+    @Test
+    fun `the grievance contact is the real monitored address, not a placeholder`() {
+        // A grievance address that bounces is worse than none — it looks like a channel exists.
+        assertTrue(
+            "the grievance section must carry the contact address",
+            policy.contains("Raising a complaint") && policy.contains("CONTACT_EMAIL")
+        )
+        assertFalse(
+            "CONTACT_EMAIL is still the old placeholder",
+            policy.contains("support@healthdecoder.app")
+        )
+    }
+
+    @Test
+    fun `third-party records are addressed for adults, not only children`() {
+        // The original text covered only the child case, while the app's commonest use is an adult
+        // managing a parent's records — the shipped demo profiles are literally "Papa" and "Mummy".
+        assertTrue(
+            "the policy must address keeping records for another ADULT, not just a child",
+            policy.contains("another adult") || policy.contains("or another adult")
+        )
+    }
+
+    @Test
     fun `the unreviewed-draft warning is still present`() {
         // Correcting the factual errors does not make this a lawyer-reviewed policy, and it must
         // not be mistaken for one just because it now reads as accurate.

@@ -48,6 +48,10 @@ object LocalRepository {
     private fun nowIso() = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
 
     private fun afterWrite(context: Context) {
+        // Tell any screen sitting in the back stack that what it is showing may be stale. Placed
+        // here because every mutation already funnels through afterWrite, so no future write can
+        // forget to signal — which is exactly how a scanned report ended up invisible on Home.
+        DataChangeSignal.bump()
         // Uses the persisted auto-backup password (opt-in, see SecureKeyManager) if the user
         // has set one — otherwise unprotected, exactly as before. These backups are the ones
         // that actually leave the device via BackupSync's cloud upload, so a password set only
@@ -344,6 +348,35 @@ object LocalRepository {
         // reminders screen re-seeds it.
         for (r in saved) for (m in r.medications) if (m.name.isNotBlank())
             MedicineScheduleStore.clearDismissed(context, m.name, r.patientName ?: patientName)
+
+        // Make sure the person this scan was filed under actually EXISTS as a family profile.
+        //
+        // A profile used to be created only as a side effect of familyMembers(), which runs when
+        // Home composes or when the dashboard is built with no active patient. Neither happens
+        // after a scan that auto-detected a NEW name while a different patient was selected — so
+        // the report was saved correctly and then became invisible: absent from the picker because
+        // no profile existed, and filtered out of Records and Trends because its patient wasn't the
+        // active one. It could still be opened by id, and re-uploading it still reported "record
+        // exists", because that check matches on page hash rather than on patient.
+        //
+        // Seeding here, at the point the name is assigned, is what makes the record reachable.
+        // Relying on a UI screen to run a data side effect was the actual defect.
+        runCatching { familyMembers(context) }
+
+        // If the user did not pick a patient and the scan resolved to somebody who had no records
+        // until now, select them. Otherwise the app files a report under a person, then shows the
+        // previously-selected person's (empty) view — which reads as "my scan disappeared".
+        if (patientNameOverride.isBlank()) {
+            val active = AppSettings.getActivePatient(context)
+            val isNewPatient = LocalStore.getReports(context)
+                .count { it.patientName.equals(patientName, ignoreCase = true) } == saved.size
+            if (isNewPatient && !patientName.equals(active, ignoreCase = true) &&
+                !patientName.equals("Unknown Patient", ignoreCase = true)
+            ) {
+                Log.i("ScanDiag", "scan auto-detected new patient '$patientName' — switching to them")
+                AppSettings.setActivePatient(context, patientName)
+            }
+        }
 
         autoRemoveDuplicates(context)
         afterWrite(context)
