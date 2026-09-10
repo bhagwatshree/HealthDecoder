@@ -32,8 +32,8 @@ android {
         applicationId = "com.healthdecoder.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 38
-        versionName = "1.3.29"
+        versionCode = 39
+        versionName = "1.3.30"
 
         // No Gemini/Sarvam API keys are embedded here anymore — all AI calls are proxied
         // through the backend (see BackendAiClient), so the APK ships with zero provider keys.
