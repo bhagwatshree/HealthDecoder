@@ -310,7 +310,19 @@ fun RegisterScreen(
                                             dobDisplay = "%02d/%02d/%04d".format(dayOfMonth, month + 1, year)
                                         },
                                         cal.get(Calendar.YEAR) - 25, cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
-                                    ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
+                                    ).apply {
+                                        // The latest date that still makes the account holder 18.
+                                        // Both the Terms and the Privacy Policy require 18+, and
+                                        // capping the picker means an under-age date cannot be
+                                        // chosen at all — better than accepting it and rejecting
+                                        // the form afterwards. The backend enforces the same rule
+                                        // on /api/auth/signup, which is the gate that actually
+                                        // counts; this one just makes it visible.
+                                        val eighteenthBirthday = Calendar.getInstance().apply {
+                                            add(Calendar.YEAR, -18)
+                                        }
+                                        datePicker.maxDate = eighteenthBirthday.timeInMillis
+                                    }.show()
                                 }
                         )
                     }

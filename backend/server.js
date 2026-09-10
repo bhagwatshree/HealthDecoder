@@ -181,6 +181,30 @@ app.post('/api/auth/signup', authIpLimit, async (req, res) => {
     if (!dateOfBirth || Number.isNaN(Date.parse(dateOfBirth))) {
       return res.status(400).json({ error: 'A valid date of birth is required.' });
     }
+    // 18+ gate. Both the Terms and the Privacy Policy state that you must be 18 or older, and
+    // until this existed that was aspirational: the date of birth was collected and stored but
+    // never checked against anything. Under India's DPDP Act a child is anyone under 18, and
+    // processing a child's personal data requires verifiable parental consent — which this app
+    // has no mechanism to obtain, so the only defensible position is not to accept the account.
+    //
+    // Enforced HERE rather than only in the app: the client check is a courtesy that gives an
+    // immediate answer, but it is trivially bypassed by calling this endpoint directly.
+    //
+    // Calendar arithmetic, not milliseconds ÷ 365: an average-year divisor drifts by a day or
+    // more across leap years, which decides accounts for anyone signing up near their birthday.
+    {
+      const dob = new Date(dateOfBirth);
+      const now = new Date();
+      if (dob.getTime() > now.getTime()) {
+        return res.status(400).json({ error: 'Date of birth cannot be in the future.' });
+      }
+      let age = now.getUTCFullYear() - dob.getUTCFullYear();
+      const monthDelta = now.getUTCMonth() - dob.getUTCMonth();
+      if (monthDelta < 0 || (monthDelta === 0 && now.getUTCDate() < dob.getUTCDate())) age--;
+      if (age < 18) {
+        return res.status(400).json({ error: 'You must be 18 or older to create an account.' });
+      }
+    }
     if (!VALID_GENDERS.includes(gender)) {
       return res.status(400).json({ error: 'A valid gender is required.' });
     }
