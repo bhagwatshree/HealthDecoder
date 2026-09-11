@@ -1,0 +1,1041 @@
+<title>Health Decoder</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================= TOKENS ============================= */
+:root{
+  --page-bg:#F3F6F5;
+  --page-bg-soft:#EAF1EF;
+  --ink:#12211F;
+  --ink-soft:#4B615E;
+  --ink-faint:#7C918D;
+  --surface:#FFFFFF;
+  --surface-2:#F6FAF9;
+  --border:#DCE6E4;
+  --accent:#0D9488;      /* brand teal, from the app's own launcher icon */
+  --accent-ink:#04403A;
+  --accent-soft:#DFF3F0;
+  --blue:#1565C0;         /* the app's real Material primary (nav, links) */
+  --blue-soft:#E4EEFB;
+  --shadow: 0 1px 2px rgba(18,33,31,.04), 0 12px 28px -12px rgba(18,33,31,.16);
+  --status-high:#C62828;
+  --status-low:#E65100;
+  --status-normal:#2E7D32;
+  --font-display:'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-body:'IBM Plex Sans', -apple-system, Segoe UI, sans-serif;
+  --font-mono:'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+  --font-phone:'Roboto', -apple-system, Segoe UI, sans-serif; /* mimics real Android rendering */
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page-bg:#0E1615;
+    --page-bg-soft:#121C1A;
+    --ink:#EAF3F1;
+    --ink-soft:#9FB4B0;
+    --ink-faint:#6C8480;
+    --surface:#16221F;
+    --surface-2:#1B2825;
+    --border:#263532;
+    --accent:#2DD4BF;
+    --accent-ink:#04241F;
+    --accent-soft:#123330;
+    --blue:#6FA8F0;
+    --blue-soft:#152538;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 20px 40px -20px rgba(0,0,0,.6);
+    --status-high:#EF5350;
+    --status-low:#FFA557;
+    --status-normal:#66BB6A;
+  }
+}
+:root[data-theme="dark"]{
+  --page-bg:#0E1615;
+  --page-bg-soft:#121C1A;
+  --ink:#EAF3F1;
+  --ink-soft:#9FB4B0;
+  --ink-faint:#6C8480;
+  --surface:#16221F;
+  --surface-2:#1B2825;
+  --border:#263532;
+  --accent:#2DD4BF;
+  --accent-ink:#04241F;
+  --accent-soft:#123330;
+  --blue:#6FA8F0;
+  --blue-soft:#152538;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 20px 40px -20px rgba(0,0,0,.6);
+  --status-high:#EF5350;
+  --status-low:#FFA557;
+  --status-normal:#66BB6A;
+}
+
+/* ============================= BASE ============================= */
+*{box-sizing:border-box;}
+body{
+  background:var(--page-bg);
+  color:var(--ink);
+  font-family:var(--font-body);
+  padding-inline:16px;
+}
+h1,h2,h3{font-family:var(--font-display); text-wrap:balance; margin:0;}
+p{margin:0;}
+button{font-family:inherit;}
+::selection{background:var(--accent-soft); color:var(--accent-ink);}
+
+.wrap{max-width:1180px; margin-inline:auto; padding-block:56px 40px;}
+
+/* ---------- hero ---------- */
+.hero{display:flex; flex-direction:column; gap:14px; max-width:640px; margin-bottom:40px;}
+.eyebrow{
+  display:inline-flex; align-items:center; gap:8px; align-self:flex-start;
+  font-family:var(--font-mono); font-size:12px; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--accent-ink); background:var(--accent-soft); border:1px solid var(--border);
+  padding:6px 12px; border-radius:100px;
+}
+.eyebrow .dot{width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none;}
+.hero h1{font-size:clamp(34px,5vw,52px); font-weight:600; line-height:1.05; color:var(--ink);}
+.hero .dek{font-size:17px; line-height:1.55; color:var(--ink-soft); max-width:56ch;}
+.hero .meta{display:flex; flex-wrap:wrap; gap:8px 18px; font-size:13px; color:var(--ink-faint); font-family:var(--font-mono);}
+.hero .meta b{color:var(--ink-soft); font-weight:500;}
+
+/* ---------- stage: phone + side notes ---------- */
+.stage{
+  display:grid; grid-template-columns:minmax(300px,380px) 1fr; gap:40px; align-items:start;
+}
+@media (max-width:860px){ .stage{grid-template-columns:1fr;} }
+
+.device-col{display:flex; flex-direction:column; align-items:center; gap:16px;}
+
+.device{
+  width:100%; max-width:380px; aspect-ratio:9/19.5;
+  background:linear-gradient(160deg,#232323,#0b0b0b);
+  border-radius:46px; padding:14px;
+  box-shadow:var(--shadow), inset 0 0 0 2px rgba(255,255,255,.06);
+  position:relative;
+}
+.device .notch{
+  position:absolute; top:14px; left:50%; transform:translateX(-50%);
+  width:120px; height:22px; background:#0b0b0b; border-radius:0 0 16px 16px; z-index:5;
+}
+.screen{
+  position:relative; width:100%; height:100%; border-radius:32px; overflow:hidden;
+  background:#F7FAF9; font-family:var(--font-phone); color:#151515;
+  display:flex; flex-direction:column;
+}
+.statusbar{
+  height:30px; flex:none; display:flex; align-items:center; justify-content:space-between;
+  padding:0 22px; font-size:11px; font-weight:500; color:#1a1a1a; background:#F7FAF9;
+}
+.appbar{
+  flex:none; background:#E3F0FB; padding:12px 16px 12px 16px; display:flex; align-items:center; gap:10px;
+}
+.appbar .back{font-size:18px; line-height:1; cursor:pointer; padding:4px; margin-left:-4px; color:#1a1a1a; background:none; border:none;}
+.appbar .mark{
+  width:26px; height:26px; border-radius:8px; background:#00695C; color:#fff; display:flex; align-items:center;
+  justify-content:center; font-size:11px; font-weight:700; letter-spacing:-.03em; flex:none;
+}
+.appbar .title{font-size:16px; font-weight:700; color:#151515; line-height:1.15;}
+.appbar .sub{font-size:11px; color:#4a4a4a; line-height:1.2;}
+
+.screen-body{flex:1; overflow-y:auto; -ms-overflow-style:none; scrollbar-width:none;}
+.screen-body::-webkit-scrollbar{display:none;}
+.pad{padding:14px 16px;}
+
+.bottomnav{
+  flex:none; display:flex; background:#FFFFFF; border-top:1px solid #E4E9E8;
+  padding:7px 2px 10px;
+}
+.navitem{
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer;
+  background:none; border:none; color:#6b6b6b; font-family:inherit; padding:2px 0;
+}
+.navitem .ic{font-size:17px; line-height:1;}
+.navitem .lb{font-size:9.5px; font-weight:500;}
+.navitem.active{color:#1565C0;}
+
+.hint{font-size:12.5px; color:var(--ink-faint); text-align:center; max-width:300px;}
+.hint b{color:var(--ink-soft);}
+
+/* ---------- generic phone-UI pieces (rendered inside .screen-body) ---------- */
+.greetrow{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
+.greet{font-size:19px; font-weight:700; display:flex; align-items:center; gap:6px;}
+.refresh{font-size:15px; color:#333; opacity:.6;}
+
+.demobanner{
+  background:#E4EEFB; border-radius:12px; padding:12px 14px; margin-bottom:14px;
+  font-size:12.5px; line-height:1.5; color:#0d3a66;
+}
+.demobanner b{display:block; font-size:13.5px; margin-bottom:2px;}
+
+.tipcard{
+  background:#FBF1DC; border-radius:14px; padding:14px; margin-bottom:14px;
+}
+.tipcard .eb{font-size:10.5px; font-weight:700; letter-spacing:.05em; color:#9a6b12; text-transform:uppercase;}
+.tipcard h4{font-size:15px; font-weight:700; margin:6px 0 4px; font-family:inherit;}
+.tipcard p{font-size:12px; color:#555; line-height:1.45;}
+.tipcard a{font-size:12.5px; color:#1565C0; font-weight:600; display:inline-block; margin-top:8px;}
+
+.tilegrid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.tile{
+  border-radius:16px; padding:14px 10px; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; gap:6px; text-align:center; cursor:pointer; border:none;
+  font-family:inherit; min-height:84px;
+}
+.tile .ic{font-size:21px;}
+.tile .lb{font-size:11.5px; font-weight:700; line-height:1.2;}
+
+.bannerlink{
+  margin-top:12px; background:#EDE7FE; border-radius:14px; padding:12px 14px; display:flex; align-items:center; gap:10px; cursor:pointer;
+}
+.bannerlink .ic{font-size:19px;}
+.bannerlink b{font-size:12.5px; display:block;}
+.bannerlink span{font-size:11px; color:#555;}
+
+.sectiontitle{font-size:14px; font-weight:700; margin:16px 0 8px;}
+
+.card{background:#fff; border-radius:14px; border:1px solid #E6EBEA; padding:12px 14px; margin-bottom:10px;}
+.rowbetween{display:flex; align-items:center; justify-content:space-between;}
+.pill{
+  display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:700; letter-spacing:.02em;
+  padding:3px 8px; border-radius:100px;
+}
+.pill.high{background:#FCE4E4; color:var(--status-high);}
+.pill.low{background:#FDEBDD; color:var(--status-low);}
+.pill.normal{background:#E3F2E3; color:var(--status-normal);}
+
+.tabrow{display:flex; gap:8px; margin-bottom:12px;}
+.tab{
+  flex:1; text-align:center; padding:10px 6px; border-radius:11px; border:1px solid #DCE6E4; background:#fff;
+  font-size:12.5px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+}
+.tab.on{background:#E4EEFB; border-color:#E4EEFB; color:#1565C0;}
+.tab:not(.on){color:#333;}
+
+.field{border:1px solid #DCE6E4; border-radius:11px; padding:10px 12px; margin-bottom:10px;}
+.field label{font-size:10.5px; color:#1565C0; font-weight:600; display:block; margin-bottom:2px;}
+.field .fake-input{font-size:15px;}
+.chipsrow{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;}
+.chip{
+  font-size:11.5px; padding:6px 11px; border-radius:100px; border:1px solid #DCE6E4; background:#fff; cursor:pointer; color:#333;
+}
+.chip.on{background:#E4EEFB; border-color:#E4EEFB; color:#1565C0; font-weight:600;}
+
+.quicktile{background:#fff; border:1px solid #E6EBEA; border-radius:14px; padding:12px; cursor:pointer;}
+.quicktile .lb{font-size:12.5px; font-weight:700; display:flex; align-items:center; gap:6px; margin-bottom:6px;}
+.quicktile .val{font-size:17px; font-weight:800;}
+.quicktile .unit{font-size:11px; font-weight:500; color:#666;}
+.quicktile .when{font-size:10px; color:#888; margin-top:1px;}
+.quicktile .empty{font-size:11.5px; color:#888;}
+.quicktile .logbtn{font-size:11.5px; color:#1565C0; font-weight:700; margin-top:6px; display:flex; align-items:center; gap:4px;}
+
+.recentrow{display:flex; align-items:center; gap:10px; background:#fff; border:1px solid #E6EBEA; border-radius:12px; padding:10px 12px; margin-bottom:8px;}
+.recentrow .ic{font-size:17px;}
+.recentrow .main{flex:1; min-width:0;}
+.recentrow .val{font-size:13.5px; font-weight:700;}
+.recentrow .when{font-size:10.5px; color:#888;}
+.recentrow .del{font-size:15px; color:#c62828; opacity:.6; cursor:pointer; padding:4px;}
+
+.emptybox{text-align:center; padding:26px 10px; color:#888;}
+.emptybox .ic{font-size:30px; opacity:.35; display:block; margin-bottom:8px;}
+.emptybox b{font-size:12.5px; display:block; margin-bottom:3px; color:#555;}
+.emptybox span{font-size:11px;}
+
+.btn{
+  border:none; border-radius:100px; padding:10px 18px; font-size:13px; font-weight:700; cursor:pointer;
+  font-family:inherit;
+}
+.btn.primary{background:#1565C0; color:#fff;}
+.btn.ghost{background:none; color:#1565C0;}
+.btn[disabled]{opacity:.35; cursor:not-allowed;}
+
+/* modal (entry dialog) */
+.modal-overlay{
+  position:absolute; inset:0; background:rgba(10,16,15,.42); display:flex; align-items:flex-end; z-index:40;
+}
+.modal{
+  background:#F3EFF8; width:100%; border-radius:20px 20px 0 0; padding:18px 16px 16px; max-height:88%; overflow-y:auto;
+}
+.modal h3{font-size:19px; font-weight:800; margin-bottom:14px; font-family:inherit;}
+.modal .row2{display:flex; gap:10px;}
+.modal .row2 .field{flex:1;}
+.modal .hintline{font-size:11px; color:#666; margin:-4px 0 12px;}
+.modal .modalbtns{display:flex; justify-content:flex-end; gap:16px; margin-top:14px;}
+.modal .modalbtns button{background:none; border:none; font-weight:700; font-size:13.5px; cursor:pointer; font-family:inherit;}
+.modal .modalbtns .cancel{color:#1565C0;}
+.modal .modalbtns .save{color:#fff; background:#1565C0; padding:9px 20px; border-radius:100px;}
+.modal .modalbtns .save[disabled]{background:#b9c8dd; cursor:not-allowed;}
+.modal .err{color:#c62828; font-size:11px; margin:-6px 0 10px;}
+.modal input[type=text],.modal input[type=number]{
+  border:none; width:100%; font-size:15px; font-family:inherit; outline:none; background:none; color:#151515;
+}
+
+/* trends chart */
+.overviewgrid{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;}
+.ovtile{background:#EAF1EF; border-radius:10px; padding:9px 10px;}
+.ovtile .lb{font-size:10.5px; color:#555; margin-bottom:2px;}
+.ovtile .val{font-size:16px; font-weight:800;}
+.chartcard{background:#fff; border:1px solid #E6EBEA; border-radius:14px; padding:14px 12px 8px; margin-bottom:12px;}
+.chartcard h5{font-size:14px; font-weight:700; margin-bottom:2px; font-family:inherit;}
+.chartcard .latest{font-size:12px; color:#555; margin-bottom:6px;}
+.chartcard .desc{font-size:11px; color:#666; line-height:1.4; background:#F5F7F7; border-radius:8px; padding:8px; margin-top:6px;}
+.svgwrap{width:100%;}
+.svgwrap svg{width:100%; display:block; overflow:visible;}
+
+/* records */
+.reportrow{background:#fff; border:1px solid #E6EBEA; border-radius:13px; padding:12px 13px; margin-bottom:9px; cursor:pointer;}
+.reportrow .rtitle{font-size:13.5px; font-weight:700;}
+.reportrow .rdate{font-size:11px; color:#888; margin-top:1px;}
+.reportrow .rtags{display:flex; gap:5px; margin-top:7px;}
+
+.paramrow{display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid #F0F0F0;}
+.paramrow:last-child{border-bottom:none;}
+.paramrow .pname{font-size:12.5px; font-weight:600;}
+.paramrow .prange{font-size:10.5px; color:#888;}
+.paramrow .pval{font-size:13.5px; font-weight:800; text-align:right;}
+.paramrow .punit{font-size:10px; font-weight:500; color:#777;}
+
+.medrow{display:flex; justify-content:space-between; align-items:center; background:#fff; border:1px solid #E6EBEA; border-radius:12px; padding:11px 13px; margin-bottom:8px;}
+.medrow .mname{font-size:13px; font-weight:700;}
+.medrow .mfreq{font-size:11px; color:#777; margin-top:1px;}
+.toggle{width:36px; height:20px; border-radius:100px; background:#DCE6E4; position:relative; cursor:pointer; flex:none;}
+.toggle .knob{position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.25); transition:left .15s;}
+.toggle.on{background:#1565C0;}
+.toggle.on .knob{left:18px;}
+
+.briefcard{background:#fff; border:1px solid #E6EBEA; border-radius:14px; padding:14px;}
+.briefcard h5{font-size:13.5px; font-weight:700; margin:12px 0 5px; font-family:inherit;}
+.briefcard p{font-size:12px; line-height:1.55; color:#333;}
+.briefactions{display:flex; gap:8px; margin-top:14px;}
+.briefactions button{flex:1;}
+
+.toast{
+  position:absolute; left:16px; right:16px; bottom:80px; background:#20302d; color:#fff; font-size:12px;
+  padding:11px 14px; border-radius:11px; text-align:center; z-index:60; box-shadow:0 8px 20px rgba(0,0,0,.25);
+}
+
+.placeholder{padding:40px 20px; text-align:center; color:#666;}
+.placeholder .ic{font-size:34px; display:block; margin-bottom:10px; opacity:.5;}
+.placeholder h4{font-size:15px; font-weight:700; color:#222; margin-bottom:6px; font-family:inherit;}
+.placeholder p{font-size:12px; line-height:1.5;}
+
+/* ---------- feature grid + footer ---------- */
+.side-notes{display:flex; flex-direction:column; gap:14px; padding-top:6px;}
+.note{
+  background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:18px 20px;
+  box-shadow:var(--shadow);
+}
+.note .k{font-family:var(--font-mono); font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--accent-ink); margin-bottom:6px;}
+.note h3{font-size:17px; font-weight:600; margin-bottom:6px; color:var(--ink);}
+.note p{font-size:13.5px; line-height:1.55; color:var(--ink-soft);}
+
+.features{
+  margin-top:64px; display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--border);
+  border:1px solid var(--border); border-radius:18px; overflow:hidden;
+}
+@media (max-width:760px){ .features{grid-template-columns:1fr;} }
+.feature{background:var(--surface); padding:24px 22px;}
+.feature .num{font-family:var(--font-mono); font-size:12px; color:var(--accent); margin-bottom:10px;}
+.feature h3{font-size:18px; font-weight:600; margin-bottom:8px;}
+.feature p{font-size:13.5px; line-height:1.55; color:var(--ink-soft);}
+
+footer{margin-top:48px; padding-top:24px; border-top:1px solid var(--border); display:flex; flex-wrap:wrap; gap:10px 24px; justify-content:space-between; align-items:baseline;}
+footer .disclaimer{font-size:12.5px; color:var(--ink-faint); max-width:60ch; line-height:1.6;}
+footer .credit{font-size:12px; color:var(--ink-faint); font-family:var(--font-mono); white-space:nowrap;}
+</style>
+
+<div class="wrap">
+
+  <div class="hero">
+    <span class="eyebrow"><span class="dot"></span>Interactive demo &middot; runs entirely in this browser</span>
+    <h1>Health Decoder</h1>
+    <p class="dek">
+      Scan a lab report, get it explained in plain language, and track what you measure at home &mdash;
+      blood pressure, sugar, oxygen &mdash; kept separate from what the lab printed, because the two
+      aren't the same measurement. This is the real app's screens, wired up with sample data.
+    </p>
+    <div class="meta">
+      <span><b>Patient shown:</b> Aisha (Demo)</span>
+      <span><b>Languages shipped:</b> 10</span>
+      <span><b>Your data here:</b> stays in this tab</span>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="device-col">
+      <div class="device">
+        <div class="notch"></div>
+        <div class="screen" id="screen"></div>
+      </div>
+      <p class="hint">Tap around &mdash; <b>Add Reading</b> and <b>Trends</b> are fully live. Everything else in this device is the real, current UI.</p>
+    </div>
+
+    <div class="side-notes">
+      <div class="note">
+        <div class="k">Why a separate table</div>
+        <h3>Lab results and home readings never share a line</h3>
+        <p>A glucometer reads capillary blood; a lab reads venous plasma. A home BP cuff and a clinic
+        cuff don't even agree on what's "normal." So Trends has two tabs, not one merged chart &mdash;
+        try switching Systolic/Diastolic to <b>Home readings</b> and log a new BP to see it land on its own line.</p>
+      </div>
+      <div class="note">
+        <div class="k">What's real, what's illustrated</div>
+        <h3>Everything on-screen is the shipping build</h3>
+        <p>Every screen, tile colour, and threshold here (135/85 for home BP, not the clinic's 140/90)
+        is taken from the actual Android app. The camera scan itself can't run in a browser, so that
+        one screen explains what happens instead of faking it.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="features">
+    <div class="feature">
+      <div class="num">01</div>
+      <h3>On-device by default</h3>
+      <p>Reports and home readings are stored encrypted on the phone. Nothing is uploaded except the
+      page image sent once to an AI provider for extraction &mdash; identity details are blanked out first.</p>
+    </div>
+    <div class="feature">
+      <div class="num">02</div>
+      <h3>Built for families</h3>
+      <p>One account can hold records for the people you actually manage &mdash; a parent, a child,
+      yourself &mdash; each with their own trends, medicines, and reminders.</p>
+    </div>
+    <div class="feature">
+      <div class="num">03</div>
+      <h3>Ten languages, not just English</h3>
+      <p>Hindi, Tamil, Telugu, Bengali, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia &mdash;
+      including the AI-generated medicine explanations, not just the menus.</p>
+    </div>
+  </div>
+
+  <footer>
+    <p class="disclaimer">
+      This is a demo with fictional patient data, for illustration only. Health Decoder does not
+      diagnose, treat, or give medical advice &mdash; always confirm anything you read here against
+      the original report and a qualified doctor.
+    </p>
+    <span class="credit">health decoder &middot; demo build</span>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+
+/* ============================================================
+   DATA — mirrors the app's own seeded "Aisha (Demo)" dataset
+   ============================================================ */
+var TODAY = new Date(2026, 8, 6); // 6 Sep 2026, matches the seeded window
+
+var reports = [
+  { id:'r1', date:'28 Jul', type:'Complete Blood Count + Thyroid Profile',
+    params:[
+      {name:'Hemoglobin', value:'11.4', unit:'g/dL', range:'12.0 - 15.5', status:'Low'},
+      {name:'TSH', value:'6.8', unit:'µIU/mL', range:'0.4 - 4.0', status:'High'},
+      {name:'WBC', value:'7.2', unit:'10³/µL', range:'4.0 - 11.0', status:'Normal'}
+    ],
+    meds:[] },
+  { id:'r2', date:'18 Aug', type:'Lipid Profile + Fasting Sugar',
+    params:[
+      {name:'Blood Sugar (Fasting)', value:'94', unit:'mg/dL', range:'70 - 100', status:'Normal'},
+      {name:'Hemoglobin', value:'12.8', unit:'g/dL', range:'12.0 - 15.5', status:'Low'},
+      {name:'Total Cholesterol', value:'185', unit:'mg/dL', range:'< 200', status:'Normal'},
+      {name:'TSH', value:'5.1', unit:'µIU/mL', range:'0.4 - 4.0', status:'High'}
+    ],
+    meds:[
+      {name:'Levothyroxine', dose:'50mcg', freq:'Once daily · empty stomach', on:true},
+      {name:'Ferrous Ascorbate', dose:'100mg', freq:'Once daily · after lunch', on:true}
+    ] }
+];
+
+var pendingTest = { name:'HbA1c', due:'27 Sep' };
+var appointment = { doctor:'Dr. Sample', dept:'General Medicine OPD', date:'16 Sep', time:'10:30 AM' };
+
+// Home readings — seeded, plus whatever the visitor logs during this session.
+var homeReadings = {
+  bp: [
+    {d:'22 Aug',t:'8:10 AM', sys:142, dia:88, pulse:78, tag:'Sitting'},
+    {d:'22 Aug',t:'8:20 PM', sys:137, dia:85, pulse:74, tag:'After medicine'},
+    {d:'24 Aug',t:'8:05 AM', sys:138, dia:86, pulse:76, tag:'Sitting'},
+    {d:'24 Aug',t:'8:15 PM', sys:133, dia:83, pulse:73, tag:'After medicine'},
+    {d:'27 Aug',t:'8:00 AM', sys:134, dia:84, pulse:75, tag:'Sitting'},
+    {d:'27 Aug',t:'8:10 PM', sys:129, dia:81, pulse:72, tag:'After medicine'},
+    {d:'30 Aug',t:'8:12 AM', sys:130, dia:82, pulse:74, tag:'Sitting'},
+    {d:'30 Aug',t:'8:05 PM', sys:126, dia:79, pulse:71, tag:'After medicine'},
+    {d:'3 Sep', t:'8:08 AM', sys:128, dia:81, pulse:73, tag:'Sitting'},
+    {d:'3 Sep', t:'8:18 PM', sys:124, dia:78, pulse:70, tag:'After medicine'}
+  ],
+  sugar: [
+    {d:'23 Aug', t:'7:40 AM', value:124, tag:'Fasting'},
+    {d:'25 Aug', t:'2:10 PM', value:162, tag:'2h after meal'},
+    {d:'27 Aug', t:'7:35 AM', value:119, tag:'Fasting'},
+    {d:'29 Aug', t:'2:05 PM', value:155, tag:'2h after meal'},
+    {d:'2 Sep',  t:'7:45 AM', value:114, tag:'Fasting'},
+    {d:'5 Sep',  t:'7:38 AM', value:110, tag:'Fasting'}
+  ],
+  spo2: [
+    {d:'24 Aug', t:'9:00 PM', value:96, pulse:75, tag:'At rest'},
+    {d:'1 Sep',  t:'9:05 PM', value:97, pulse:73, tag:'At rest'}
+  ],
+  pulseOnly: [
+    {d:'30 Aug', t:'6:00 PM', value:82, tag:'After activity'}
+  ]
+};
+
+/* ============================================================
+   STATE
+   ============================================================ */
+var state = { screen:'home', modal:null, toast:null, reportOpen:null, trendsMode:'lab', trendsPeriod:'All' };
+
+function toast(msg){ state.toast = msg; render(); setTimeout(function(){ state.toast=null; render(); }, 1800); }
+function go(screen){ state.screen = screen; state.reportOpen = null; render(); }
+
+/* ============================================================
+   VITAL THRESHOLDS — copied from the app's own VitalReference.kt
+   ============================================================ */
+function statusColor(s){ return s==='High' ? getCss('--status-high-inline') || '#C62828' : s==='Low' ? '#E65100' : '#2E7D32'; }
+function getCss(){ return null; } // (kept simple: hex literals below match the light phone screen exactly)
+function systolicStatus(v){ return v<90?'Low': v>=135?'High':'Normal'; }
+function diastolicStatus(v){ return v<60?'Low': v>=85?'High':'Normal'; }
+function sugarStatus(v,tag){ var postMeal = tag.indexOf('after meal')>-1; var high = postMeal?180:130; return v<70?'Low': v>high?'High':'Normal'; }
+function pulseStatus(v){ return v<60?'Low': v>100?'High':'Normal'; }
+function spo2Status(v){ return v<95?'Low':'Normal'; }
+var STATUS_HEX = {High:'#C62828', Low:'#E65100', Normal:'#2E7D32'};
+
+/* ============================================================
+   RENDER — one function per screen, dispatched into #screen
+   ============================================================ */
+function render(){
+  var el = document.getElementById('screen');
+  el.innerHTML =
+    statusBar() +
+    (SCREENS[state.screen] ? SCREENS[state.screen]() : SCREENS.home()) +
+    (state.modal ? modalHTML() : '') +
+    (state.toast ? '<div class="toast">'+state.toast+'</div>' : '');
+  wireEvents();
+}
+
+function statusBar(){
+  return '<div class="statusbar"><span>9:41</span><span>●●● • 🔋 78%</span></div>';
+}
+
+function appbar(title, sub, back){
+  return '<div class="appbar">' +
+    (back ? '<button class="back" data-nav="'+back+'">←</button>' : '<span class="mark">HD</span>') +
+    '<div><div class="title">'+title+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'</div></div>';
+}
+
+function bottomNav(active){
+  var items = [
+    {k:'home', ic:'🏠', lb:'Home'},
+    {k:'chat', ic:'💬', lb:'Chat'},
+    {k:'trends', ic:'📈', lb:'Trends'},
+    {k:'compare', ic:'↔️', lb:'Compare'},
+    {k:'brief', ic:'📄', lb:'Brief'},
+    {k:'settings', ic:'⚙️', lb:'Settings'}
+  ];
+  return '<div class="bottomnav">' + items.map(function(i){
+    return '<button class="navitem'+(active===i.k?' active':'')+'" data-nav="'+i.k+'"><span class="ic">'+i.ic+'</span><span class="lb">'+i.lb+'</span></button>';
+  }).join('') + '</div>';
+}
+
+/* ---------------- HOME ---------------- */
+var TILES = [
+  {k:'scan', ic:'📸', lb:'Scan Report', bg:'#E8F5E9', fg:'#2E7D32'},
+  {k:'records', ic:'📜', lb:'Records', bg:'#ECEFF1', fg:'#455A64'},
+  {k:'reminders', ic:'⏰', lb:'Medication Reminders', bg:'#FFF3E0', fg:'#E65100'},
+  {k:'appointments', ic:'📅', lb:'Doctor Appointments', bg:'#E8EAF6', fg:'#283593'},
+  {k:'medications', ic:'💊', lb:'Medications', bg:'#F3E5F5', fg:'#6A1B9A'},
+  {k:'pending', ic:'🚨', lb:'Pending Tests', bg:'#FFF9C4', fg:'#C62828'},
+  {k:'addreading', ic:'🩺', lb:'Add Reading', bg:'#E0F7FA', fg:'#00695C'}
+];
+
+function homeScreen(){
+  var tiles = TILES.map(function(t){
+    return '<button class="tile" style="background:'+t.bg+';color:'+t.fg+'" data-nav="'+t.k+'">'+
+      '<span class="ic">'+t.ic+'</span><span class="lb">'+t.lb+'</span></button>';
+  }).join('');
+  return appbar('Health Decoder','') +
+    '<div class="screen-body"><div class="pad">' +
+      '<div class="greetrow"><span class="greet">🧪 Hello, Aisha (Demo)</span><span class="refresh">↻</span></div>' +
+      '<div class="demobanner"><b>🧪 You’re viewing sample demo data</b>This isn’t real. Everything here runs in this browser only.</div>' +
+      '<div class="tipcard"><span class="eb">Personalized for you</span><h4>Your hemoglobin ran low</h4>' +
+      '<p>Iron-rich foods — leafy greens, jaggery, dates, pomegranate, and lean meat if you eat non-veg — support healthy levels.</p>' +
+      '<a data-nav="records">Learn more →</a></div>' +
+      '<div class="tilegrid">'+tiles+'</div>' +
+      '<div class="bannerlink" data-nav="lens"><span class="ic">🔬</span><div><b>Try Smart Health Lens</b><span>Live camera scan — point and get instant answers</span></div></div>' +
+    '</div></div>' + bottomNav('home');
+}
+
+/* ---------------- RECORDS ---------------- */
+function recordsScreen(){
+  if (state.reportOpen) return reportDetail(state.reportOpen);
+  var rows = reports.slice().reverse().map(function(r){
+    var tags = r.params.filter(function(p){return p.status!=='Normal';}).slice(0,2).map(function(p){
+      return '<span class="pill '+p.status.toLowerCase()+'">'+p.status.toUpperCase()+' · '+p.name+'</span>';
+    }).join('');
+    return '<div class="reportrow" data-open-report="'+r.id+'"><div class="rtitle">'+r.type+'</div>' +
+      '<div class="rdate">'+r.date+' 2026</div><div class="rtags">'+tags+'</div></div>';
+  }).join('');
+  return appbar('Records','2 reports on this device') +
+    '<div class="screen-body"><div class="pad">'+rows+'</div></div>' + bottomNav('home');
+}
+
+function reportDetail(id){
+  var r = reports.filter(function(x){return x.id===id;})[0];
+  var params = r.params.map(function(p){
+    return '<div class="paramrow"><div><div class="pname">'+p.name+'</div><div class="prange">Ref: '+p.range+'</div></div>' +
+      '<div><div class="pval" style="color:'+STATUS_HEX[p.status]+'">'+p.value+' <span class="punit">'+p.unit+'</span></div></div></div>';
+  }).join('');
+  var meds = r.meds.length ? '<div class="sectiontitle">Medications on this report</div>' + r.meds.map(function(m){
+    return '<div class="medrow"><div><div class="mname">'+m.name+' '+m.dose+'</div><div class="mfreq">'+m.freq+'</div></div></div>';
+  }).join('') : '';
+  return appbar('Report Detail', r.date+' 2026', 'records-back') +
+    '<div class="screen-body"><div class="pad"><div class="card">'+params+'</div>'+meds+'</div></div>' + bottomNav('home');
+}
+
+/* ---------------- SCAN (placeholder, honest about the limit) ---------------- */
+function scanScreen(){
+  return appbar('Scan Report','', 'home') +
+    '<div class="screen-body"><div class="placeholder">' +
+      '<span class="ic">📸</span><h4>This step needs a camera</h4>' +
+      '<p>In the real app, this points your camera at a printed report, reads it on-device first, then '+
+      'sends the page for AI extraction with identity details already blanked out. A browser demo can’t '+
+      'access a camera safely, so here’s what comes out the other end instead.</p>' +
+      '<div style="margin-top:16px"><button class="btn primary" data-open-report="r2">See a scanned report →</button></div>' +
+    '</div></div>' + bottomNav('home');
+}
+
+function lensScreen(){
+  return appbar('Smart Health Lens','', 'home') +
+    '<div class="screen-body"><div class="placeholder">' +
+      '<span class="ic">🔬</span><h4>Live camera scan</h4>' +
+      '<p>Points a live camera at a medicine strip and identifies it instantly. Needs a real camera, so it’s '+
+      'not part of this browser demo.</p>' +
+    '</div></div>' + bottomNav('home');
+}
+
+/* ---------------- REMINDERS / MEDICATIONS ---------------- */
+function remindersScreen(){
+  var meds = reports[1].meds;
+  var rows = meds.map(function(m,i){
+    return '<div class="medrow"><div><div class="mname">'+m.name+' '+m.dose+'</div><div class="mfreq">'+m.freq+'</div></div>' +
+      '<div class="toggle'+(m.on?' on':'')+'" data-toggle-med="'+i+'"><div class="knob"></div></div></div>';
+  }).join('');
+  return appbar('Medication Reminders','Today', 'home') +
+    '<div class="screen-body"><div class="pad">'+rows+
+    '<div class="card" style="margin-top:10px;color:#666;font-size:11.5px">Reminders were created automatically when this prescription was scanned.</div>' +
+    '</div></div>' + bottomNav('home');
+}
+
+function medicationsScreen(){
+  var meds = reports[1].meds;
+  var rows = meds.map(function(m){
+    return '<div class="medrow"><div><div class="mname">'+m.name+' '+m.dose+'</div><div class="mfreq">'+m.freq+' · Active since 18 Aug</div></div>' +
+      '<span class="pill normal">ACTIVE</span></div>';
+  }).join('');
+  return appbar('Medications','Full history & schedule', 'home') +
+    '<div class="screen-body"><div class="pad">'+rows+'</div></div>' + bottomNav('home');
+}
+
+/* ---------------- APPOINTMENTS ---------------- */
+function appointmentsScreen(){
+  return appbar('Doctor Appointments','', 'home') +
+    '<div class="screen-body"><div class="pad"><div class="card">' +
+      '<div class="rowbetween"><div><div class="rtitle">'+appointment.doctor+'</div>' +
+      '<div class="rdate">'+appointment.dept+'</div></div><span class="pill normal">'+appointment.date+'</span></div>' +
+      '<div style="margin-top:8px;font-size:12px;color:#555">'+appointment.time+'</div>' +
+    '</div></div></div>' + bottomNav('home');
+}
+
+/* ---------------- PENDING TESTS ---------------- */
+function pendingScreen(){
+  return appbar('Pending Tests','', 'home') +
+    '<div class="screen-body"><div class="pad"><div class="card">' +
+      '<div class="rowbetween"><div class="rtitle">'+pendingTest.name+'</div><span class="pill low">DUE '+pendingTest.due+'</span></div>' +
+      '<div style="margin-top:6px;font-size:11.5px;color:#666">Recommended in your 18 Aug report.</div>' +
+    '</div></div></div>' + bottomNav('home');
+}
+
+/* ---------------- DOCTOR BRIEF ---------------- */
+function briefScreen(){
+  return appbar('Doctor Visit Brief','Aisha (Demo)') +
+    '<div class="screen-body"><div class="pad"><div class="briefcard">' +
+      '<h5>Summary</h5><p>42-year-old, on Levothyroxine 50mcg for hypothyroidism and Ferrous Ascorbate for iron-deficiency anaemia.</p>' +
+      '<h5>Since last visit</h5><p>Hemoglobin 11.4 → 12.8 g/dL (still below the 12.0 floor). TSH 6.8 → 5.1 µIU/mL '+
+      '(improving, still above range). Home blood pressure has eased from 142/88 to 124/78 over the last two weeks.</p>' +
+      '<h5>Home readings, last 2 weeks</h5><p>10 blood pressure readings, average 131/82, 40% within the home target of 135/85. '+
+      '6 glucometer readings, fasting averaging 117 mg/dL.</p>' +
+      '<h5>Pending</h5><p>HbA1c recommended, due 27 Sep. Next appointment with Dr. Sample, General Medicine OPD, 16 Sep.</p>' +
+    '</div>' +
+    '<div class="briefactions"><button class="btn ghost" data-toast="Read-aloud uses the full app’s AI voice.">🔊 Read aloud</button>' +
+    '<button class="btn primary" data-toast="Sharing opens your phone’s share sheet in the full app.">Share →</button></div>' +
+    '</div></div>' + bottomNav('brief');
+}
+
+/* ---------------- COMPARE ---------------- */
+function compareScreen(){
+  var older = reports[0], newer = reports[1];
+  var oldByName = {}; older.params.forEach(function(p){ oldByName[p.name]=p; });
+
+  var matched = [], added = [];
+  newer.params.forEach(function(p){
+    var prev = oldByName[p.name];
+    if (prev) matched.push({name:p.name, prev:prev, cur:p});
+    else added.push(p);
+  });
+  var notRetested = older.params.filter(function(p){ return !newer.params.some(function(n){return n.name===p.name;}); });
+
+  var changeRows = matched.map(function(m){
+    var dir = parseFloat(m.cur.value) - parseFloat(m.prev.value);
+    var arrow = dir>0 ? '↑' : dir<0 ? '↓' : '→';
+    return '<div class="paramrow"><div><div class="pname">'+m.name+'</div>' +
+      '<div class="prange">'+m.prev.value+' → <b style="color:'+STATUS_HEX[m.cur.status]+'">'+m.cur.value+'</b> '+m.cur.unit+'</div></div>' +
+      '<div><span class="pill '+m.cur.status.toLowerCase()+'">'+arrow+' '+m.cur.status.toUpperCase()+'</span></div></div>';
+  }).join('');
+
+  var addedRows = added.length ? '<div class="sectiontitle">New in this report</div><div class="card">' +
+    added.map(function(p){ return '<div class="paramrow"><div><div class="pname">'+p.name+'</div><div class="prange">Ref: '+p.range+'</div></div>' +
+      '<div class="pval" style="color:'+STATUS_HEX[p.status]+'">'+p.value+' <span class="punit">'+p.unit+'</span></div></div>'; }).join('') +
+    '</div>' : '';
+
+  var notRetestedRows = notRetested.length ? '<div class="sectiontitle">Not retested this time</div><div class="card">' +
+    notRetested.map(function(p){ return '<div class="paramrow"><div class="pname">'+p.name+'</div><div class="prange">Last: '+p.value+' '+p.unit+' ('+older.date+')</div></div>'; }).join('') +
+    '</div>' : '';
+
+  var medRows = newer.meds.length ? '<div class="sectiontitle">Medication changes</div><div class="card">' +
+    newer.meds.map(function(m){ return '<div class="paramrow"><div class="pname">+ '+m.name+' '+m.dose+'</div>' +
+      '<span class="pill normal">ADDED</span></div>'; }).join('') +
+    '</div>' : '';
+
+  return appbar('Compare Reports', older.date+' → '+newer.date+' 2026') +
+    '<div class="screen-body"><div class="pad">' +
+      '<div class="rowbetween" style="margin-bottom:10px">' +
+        '<div class="reportrow" style="flex:1;margin:0 6px 0 0;cursor:default"><div class="rtitle" style="font-size:11.5px">'+older.type+'</div><div class="rdate">'+older.date+'</div></div>' +
+        '<span style="font-size:16px;color:#888">→</span>' +
+        '<div class="reportrow" style="flex:1;margin:0 0 0 6px;cursor:default"><div class="rtitle" style="font-size:11.5px">'+newer.type+'</div><div class="rdate">'+newer.date+'</div></div>' +
+      '</div>' +
+      '<div class="sectiontitle">What changed</div><div class="card">'+changeRows+'</div>' +
+      addedRows + notRetestedRows + medRows +
+    '</div></div>' + bottomNav('compare');
+}
+
+/* ---------------- PLACEHOLDER (chat / settings) ---------------- */
+var PLACEHOLDERS = {
+  chat: {ic:'💬', h:'Ask about your reports', p:'Chats with the AI about your actual medical history — needs a live backend, so it’s not part of this static demo.'},
+  settings: {ic:'⚙️', h:'Settings', p:'Account, backup, language and unit preferences live here in the full app.'}
+};
+function placeholderScreen(key){
+  var d = PLACEHOLDERS[key];
+  return appbar(key.charAt(0).toUpperCase()+key.slice(1),'') +
+    '<div class="screen-body"><div class="placeholder"><span class="ic">'+d.ic+'</span><h4>'+d.h+'</h4><p>'+d.p+'</p></div></div>' +
+    bottomNav(key);
+}
+
+/* ---------------- ADD READING ---------------- */
+var METRICS = [
+  {k:'sugar', ic:'🩸', lb:'Blood Sugar', unit:'mg/dL'},
+  {k:'bp', ic:'💗', lb:'BP', unit:'mmHg'},
+  {k:'pulse', ic:'❤️', lb:'Heart Rate', unit:'bpm'},
+  {k:'spo2', ic:'🫁', lb:'Oxygen', unit:'%'}
+];
+
+function latestOf(metric){
+  if (metric==='bp') return homeReadings.bp[homeReadings.bp.length-1];
+  if (metric==='sugar') return homeReadings.sugar[homeReadings.sugar.length-1];
+  if (metric==='spo2') return homeReadings.spo2[homeReadings.spo2.length-1];
+  if (metric==='pulse') return allPulse()[allPulse().length-1];
+}
+function allPulse(){
+  var out = [];
+  homeReadings.bp.forEach(function(r){ out.push({d:r.d,t:r.t,value:r.pulse}); });
+  homeReadings.spo2.forEach(function(r){ if(r.pulse) out.push({d:r.d,t:r.t,value:r.pulse}); });
+  homeReadings.pulseOnly.forEach(function(r){ out.push({d:r.d,t:r.t,value:r.value}); });
+  return out;
+}
+function recentAll(){
+  var rows = [];
+  homeReadings.bp.forEach(function(r){ rows.push({metric:'bp', ic:'💗', d:r.d, t:r.t, main:r.sys+'/'+r.dia+' mmHg', sub:(r.pulse?r.pulse+' bpm · ':'')+r.tag}); });
+  homeReadings.sugar.forEach(function(r){ rows.push({metric:'sugar', ic:'🩸', d:r.d, t:r.t, main:r.value+' mg/dL', sub:r.tag}); });
+  homeReadings.spo2.forEach(function(r){ rows.push({metric:'spo2', ic:'🫁', d:r.d, t:r.t, main:r.value+'%', sub:(r.pulse?r.pulse+' bpm · ':'')+r.tag}); });
+  homeReadings.pulseOnly.forEach(function(r){ rows.push({metric:'pulse', ic:'❤️', d:r.d, t:r.t, main:r.value+' bpm', sub:r.tag}); });
+  rows.sort(function(a,b){ return sortKey(b)-sortKey(a); });
+  return rows.slice(0,8);
+}
+function sortKey(r){ return (MONTHIDX[r.d.split(' ')[1]]*31 + parseInt(r.d)) * 1440 + timeMinutes(r.t); }
+var MONTHIDX = {Jul:6,Aug:7,Sep:8,Oct:9}; // real JS Date month indices — also used for period filtering below
+function timeMinutes(t){
+  var m = /(\d+):(\d+)\s*(AM|PM)/.exec(t); if(!m) return 0;
+  var h = parseInt(m[1])%12; if (m[3]==='PM') h+=12; return h*60+parseInt(m[2]);
+}
+
+function addReadingScreen(){
+  var tiles = METRICS.map(function(m){
+    var latest = latestOf(m.k);
+    var body = latest ?
+      '<div class="val">'+valueLabel(m.k,latest)+'</div><div class="when">'+latest.d+', '+latest.t+'</div>' :
+      '<div class="empty">No readings yet</div>';
+    return '<div class="quicktile" data-open-metric="'+m.k+'"><div class="lb">'+m.ic+' '+m.lb+'</div>'+body+
+      '<div class="logbtn">+ Log now</div></div>';
+  }).join('');
+  var recent = recentAll();
+  var recentHTML = recent.length ? recent.map(function(r){
+    return '<div class="recentrow"><span class="ic">'+r.ic+'</span><div class="main"><div class="val">'+r.main+'</div>' +
+      '<div class="when">'+r.d+', '+r.t+' · '+r.sub+'</div></div></div>';
+  }).join('') : '<div class="emptybox"><span class="ic">📈</span><b>No readings yet</b><span>Log your first reading above.</span></div>';
+
+  return appbar('Add a Reading','') +
+    '<div class="screen-body"><div class="pad">' +
+      '<div class="field" style="background:#fff"><label>Patient</label><div class="fake-input">👤 Aisha (Demo)</div></div>' +
+      '<div style="font-size:12px;color:#666;margin:8px 0">Tap a tile to log a reading</div>' +
+      '<div class="tilegrid" style="grid-template-columns:1fr 1fr">'+tiles+'</div>' +
+      '<div class="sectiontitle">Recent readings</div>' + recentHTML +
+    '</div></div>' + bottomNav('home');
+}
+
+function valueLabel(metric, r){
+  if (metric==='bp') return r.sys+'/'+r.dia+' mmHg';
+  if (metric==='sugar') return r.value+' mg/dL';
+  if (metric==='spo2') return r.value+'%';
+  return r.value+' bpm';
+}
+
+/* -------- entry modal (fully functional) -------- */
+var draft = {};
+function openMetric(k){
+  draft = { metric:k, v1:'', v2:'', v3:'', ctx:null };
+  state.modal = k; render();
+}
+var MODAL_META = {
+  sugar:{title:'Log Blood Sugar', f1:'Blood Sugar', unit:'mg/dL', ctx:['Fasting','Before meal','2h after meal','Random','Bedtime'], range:[20,800]},
+  bp:{title:'Log Blood Pressure', f1:'Upper', f2:'Lower', ctx:['Sitting','Standing','Lying','Left arm','Right arm','Before medicine','After medicine'], pulse:true, range:[60,260], range2:[30,180], hint:'Upper (systolic) over lower (diastolic) — e.g. 120 / 80'},
+  pulse:{title:'Log Heart Rate', f1:'Heart Rate', unit:'bpm', ctx:['At rest','After activity'], range:[30,220]},
+  spo2:{title:'Log Oxygen', f1:'Oxygen', unit:'%', ctx:['At rest','After walking','On oxygen'], pulse:true, range:[50,100]}
+};
+
+function modalHTML(){
+  var m = MODAL_META[state.modal];
+  var v1 = parseFloat(draft.v1), v2 = parseFloat(draft.v2);
+  var v1bad = draft.v1!=='' && (isNaN(v1) || v1<m.range[0] || v1>m.range[1]);
+  var v2bad = m.f2 && draft.v2!=='' && (isNaN(v2) || v2<m.range2[0] || v2>m.range2[1]);
+  var canSave = !isNaN(v1) && v1>=m.range[0] && v1<=m.range[1] && (!m.f2 || (!isNaN(v2)&&v2>=m.range2[0]&&v2<=m.range2[1]));
+
+  var fields = '<div class="row2"><div class="field"><label>'+m.f1+'</label>' +
+    '<input type="number" id="v1" value="'+draft.v1+'" placeholder="0">'+'</div>' +
+    (m.f2 ? '<div class="field"><label>'+m.f2+'</label><input type="number" id="v2" value="'+draft.v2+'" placeholder="0"></div>' : '') +
+    '</div>';
+  if (m.hint) fields += '<div class="hintline">'+m.hint+'</div>';
+  if (v1bad || v2bad) fields += '<div class="err">That doesn’t look like a valid reading — please check the number.</div>';
+  if (m.pulse) fields += '<div class="field"><label>Pulse (optional, bpm)</label><input type="number" id="v3" value="'+draft.v3+'" placeholder="0"></div>';
+  if (!m.f2 && m.unit) fields = fields; // unit shown inline in labels for single-value metrics, keep compact
+
+  var chips = '<div style="font-size:12px;color:#333;margin:10px 0 6px">When was this taken?</div><div class="chipsrow">' +
+    m.ctx.map(function(c){ return '<span class="chip'+(draft.ctx===c?' on':'')+'" data-ctx="'+c+'">'+c+'</span>'; }).join('') + '</div>';
+
+  return '<div class="modal-overlay" data-close-modal="1"><div class="modal" onclick="event.stopPropagation()">' +
+    '<h3>'+m.title+'</h3>' + fields + chips +
+    '<div class="field"><label>When</label><div class="fake-input" style="font-size:13px">Today, just now</div></div>' +
+    '<div class="modalbtns"><button class="cancel" data-close-modal="1">Cancel</button>' +
+    '<button class="save" '+(canSave?'':'disabled')+' data-save-reading="1">Save</button></div>' +
+    '</div></div>';
+}
+
+function saveReading(){
+  var m = state.modal;
+  var d = 'Today', t = new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+  if (m==='bp'){
+    homeReadings.bp.push({d:d,t:t,sys:parseFloat(draft.v1),dia:parseFloat(draft.v2),pulse:draft.v3?parseFloat(draft.v3):null,tag:draft.ctx||''});
+  } else if (m==='sugar'){
+    homeReadings.sugar.push({d:d,t:t,value:parseFloat(draft.v1),tag:draft.ctx||''});
+  } else if (m==='spo2'){
+    homeReadings.spo2.push({d:d,t:t,value:parseFloat(draft.v1),pulse:draft.v3?parseFloat(draft.v3):null,tag:draft.ctx||''});
+  } else if (m==='pulse'){
+    homeReadings.pulseOnly.push({d:d,t:t,value:parseFloat(draft.v1),tag:draft.ctx||''});
+  }
+  state.modal = null;
+  toast('Reading saved');
+}
+
+/* ---------------- TRENDS ---------------- */
+function periodCutoffDays(p){ return {'3M':90,'6M':180,'1Y':365,'2Y':730,'All':999999}[p]; }
+function daysAgoFromLabel(lbl){
+  // lbl like "22 Aug" / "Today" — approximate distance from TODAY for period filtering
+  if (lbl==='Today') return 0;
+  var parts = lbl.split(' '); var day = parseInt(parts[0]); var mon = MONTHIDX[parts[1]];
+  var d = new Date(2026, mon, day);
+  return Math.round((TODAY-d)/86400000);
+}
+
+function trendsScreen(){
+  var tabrow = '<div class="tabrow">' +
+    '<div class="tab'+(state.trendsMode==='lab'?' on':'')+'" data-mode="lab">🧪 Lab reports</div>' +
+    '<div class="tab'+(state.trendsMode==='home'?' on':'')+'" data-mode="home">📉 Home readings</div></div>';
+  var periods = ['3M','6M','1Y','2Y','All'];
+  var periodrow = '<div class="chipsrow">' + periods.map(function(p){
+    return '<span class="chip'+(state.trendsPeriod===p?' on':'')+'" data-period="'+p+'">'+p+'</span>';
+  }).join('') + '</div>';
+
+  var body = state.trendsMode==='lab' ? labTrends() : homeTrends();
+  return appbar('Health Trends', state.trendsMode==='lab' ? 'Tap any point to open that report' : 'Your patient-logged home readings') +
+    '<div class="screen-body"><div class="pad">' + tabrow + periodrow + body + '</div></div>' + bottomNav('trends');
+}
+
+function withinPeriod(lbl){ return daysAgoFromLabel(lbl) <= periodCutoffDays(state.trendsPeriod); }
+
+function labTrends(){
+  var latest = reports[1];
+  var overview = '<div class="chartcard"><h5>Trends Overview</h5><div class="overviewgrid">' +
+    latest.params.map(function(p){ return '<div class="ovtile"><div class="lb">'+p.name+'</div><div class="val">'+p.value+' <span style="font-size:11px;font-weight:500">'+p.unit+'</span></div></div>'; }).join('') +
+    '</div></div>';
+
+  var series = {
+    'Hemoglobin':{points:[{lbl:'28 Jul',value:11.4,status:'Low'},{lbl:'18 Aug',value:12.8,status:'Low'}], unit:'g/dL', ref:[12,15.5]},
+    'TSH':{points:[{lbl:'28 Jul',value:6.8,status:'High'},{lbl:'18 Aug',value:5.1,status:'High'}], unit:'µIU/mL', ref:[0.4,4.0]},
+    'Blood Sugar':{points:[{lbl:'18 Aug',value:94,status:'Normal'}], unit:'mg/dL', ref:[70,100]},
+    'Total Cholesterol':{points:[{lbl:'18 Aug',value:185,status:'Normal'}], unit:'mg/dL', ref:[null,200]}
+  };
+  var cards = Object.keys(series).map(function(name){
+    return chartCard(name, series[name].points, series[name].unit, series[name].ref, function(p){return p.lbl;}, true);
+  }).join('');
+  return overview + cards;
+}
+
+function homeTrends(){
+  var bp = homeReadings.bp.filter(function(r){return withinPeriod(r.d);});
+  var sugar = homeReadings.sugar.filter(function(r){return withinPeriod(r.d);});
+  var spo2 = homeReadings.spo2.filter(function(r){return withinPeriod(r.d);});
+  var pulse = allPulse().filter(function(r){return withinPeriod(r.d);});
+
+  var sysPts = bp.map(function(r){return {lbl:r.d, value:r.sys, status:systolicStatus(r.sys)};});
+  var diaPts = bp.map(function(r){return {lbl:r.d, value:r.dia, status:diastolicStatus(r.dia)};});
+  var sugarPts = sugar.map(function(r){return {lbl:r.d, value:r.value, status:sugarStatus(r.value,r.tag)};});
+  var pulsePts = pulse.map(function(r){return {lbl:r.d, value:r.value, status:pulseStatus(r.value)};});
+  var spo2Pts = spo2.map(function(r){return {lbl:r.d, value:r.value, status:spo2Status(r.value)};});
+
+  var latestSys = sysPts[sysPts.length-1], latestDia = diaPts[diaPts.length-1];
+  var overview = '<div class="chartcard"><h5>Trends Overview</h5><div class="overviewgrid">' +
+    (latestSys?'<div class="ovtile"><div class="lb">Systolic (Home)</div><div class="val">'+latestSys.value+' mmHg</div></div>':'') +
+    (latestDia?'<div class="ovtile"><div class="lb">Diastolic (Home)</div><div class="val">'+latestDia.value+' mmHg</div></div>':'') +
+    '</div></div>';
+
+  var cards = '';
+  if (sysPts.length) cards += chartCard('Systolic (Home)', sysPts, 'mmHg', [null,135], function(p){return p.lbl;}, false,
+    'The top number of a blood pressure reading. Home target is under 135, lower than the clinic’s 140.');
+  if (diaPts.length) cards += chartCard('Diastolic (Home)', diaPts, 'mmHg', [null,85], function(p){return p.lbl;}, false,
+    'The bottom number, measured between heartbeats. Home target is under 85.');
+  if (pulsePts.length) cards += chartCard('Pulse (Home)', pulsePts, 'bpm', [60,100], function(p){return p.lbl;}, false,
+    'Combines pulse logged on its own with pulse recorded alongside a BP or oxygen reading.');
+  if (sugarPts.length) cards += chartCard('Blood Sugar (Home)', sugarPts, 'mg/dL', [70,130], function(p){return p.lbl;}, false,
+    'A capillary glucometer reading — a different measurement from a lab’s venous plasma glucose.');
+  if (spo2Pts.length) cards += chartCard('Oxygen (Home)', spo2Pts, '%', [95,null], function(p){return p.lbl;}, false);
+
+  return overview + (cards || '<div class="emptybox"><span class="ic">📉</span><b>No home readings in this period</b><span>Widen the period or log a reading.</span></div>');
+}
+
+function chartCard(title, points, unit, ref, lblFn, tapToReport, desc){
+  var latest = points[points.length-1];
+  return '<div class="chartcard"><h5>'+title+'</h5>' +
+    (latest?'<div class="latest" style="color:'+STATUS_HEX[latest.status]+'">'+latest.value+' '+unit+' · '+latest.status+'</div>':'') +
+    '<div class="svgwrap">'+chartSVG(points, unit, ref, lblFn)+'</div>' +
+    (desc?'<div class="desc">'+desc+'</div>':'') +
+    '</div>';
+}
+
+/* ---- SVG line chart: thin line, rounded end, status-colored points, reference band ---- */
+function chartSVG(points, unit, ref, lblFn){
+  if (!points.length) return '';
+  var W=300, H=150, padL=30, padR=14, padT=22, padB=22;
+  var vals = points.map(function(p){return p.value;});
+  var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+  var span = (max-min) || 1; var pad = span*0.25 || 5;
+  var lo = min-pad, hi = max+pad;
+  if (ref[0]!=null && ref[0]<lo) lo = ref[0]-pad*0.4;
+  if (ref[1]!=null && ref[1]>hi) hi = ref[1]+pad*0.4;
+  if (min>=0) lo = Math.max(lo,0);
+  var range = (hi-lo)||1;
+  function x(i){ return points.length===1 ? W/2 : padL + (W-padL-padR) * i/(points.length-1); }
+  function y(v){ return padT + (H-padT-padB) * (1 - (v-lo)/range); }
+
+  var svg = '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">';
+
+  // reference band
+  if (ref[0]!=null || ref[1]!=null){
+    var yTop = y(ref[1]!=null?ref[1]:hi), yBot = y(ref[0]!=null?ref[0]:lo);
+    svg += '<rect x="'+padL+'" y="'+Math.min(yTop,yBot)+'" width="'+(W-padL-padR)+'" height="'+Math.abs(yBot-yTop)+'" fill="#2E7D32" opacity="0.08"/>';
+    [ref[0],ref[1]].forEach(function(v){ if(v==null) return; var yy=y(v);
+      svg += '<line x1="'+padL+'" y1="'+yy+'" x2="'+(W-padR)+'" y2="'+yy+'" stroke="#2E7D32" stroke-opacity="0.35" stroke-width="1" stroke-dasharray="3,3"/>';
+    });
+  }
+  // gridlines
+  [0,0.5,1].forEach(function(f){
+    var yy = padT + (H-padT-padB)*f; var v = hi - range*f;
+    svg += '<line x1="'+padL+'" y1="'+yy+'" x2="'+(W-padR)+'" y2="'+yy+'" stroke="#DCE6E4" stroke-width="1" stroke-dasharray="2,4"/>';
+    svg += '<text x="2" y="'+(yy-2)+'" font-size="7" fill="#9aa" font-family="IBM Plex Mono">'+v.toFixed(1)+'</text>';
+  });
+  // line + fill
+  var linePts = points.map(function(p,i){ return x(i)+','+y(p.value); }).join(' ');
+  if (points.length>1){
+    var fillPts = linePts + ' ' + x(points.length-1)+','+(H-padB) + ' ' + x(0)+','+(H-padB);
+    svg += '<polygon points="'+fillPts+'" fill="#1565C0" opacity="0.08"/>';
+    svg += '<polyline points="'+linePts+'" fill="none" stroke="#1565C0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+  }
+  // points + labels
+  points.forEach(function(p,i){
+    var cx=x(i), cy=y(p.value), col = STATUS_HEX[p.status]||'#1565C0';
+    svg += '<circle cx="'+cx+'" cy="'+cy+'" r="7" fill="'+col+'" opacity="0.15"/>';
+    svg += '<circle cx="'+cx+'" cy="'+cy+'" r="4" fill="'+col+'"><title>'+p.value+' '+unit+' · '+lblFn(p)+'</title></circle>';
+    svg += '<text x="'+cx+'" y="'+(cy-10)+'" font-size="8.5" font-weight="700" text-anchor="middle" fill="#222" font-family="IBM Plex Sans">'+p.value+'</text>';
+    if (points.length<=8 || i%2===0) svg += '<text x="'+cx+'" y="'+(H-6)+'" font-size="7.5" text-anchor="middle" fill="#8a9490" font-family="IBM Plex Sans">'+lblFn(p)+'</text>';
+  });
+  svg += '</svg>';
+  return svg;
+}
+
+/* ============================================================
+   SCREEN MAP + EVENTS
+   ============================================================ */
+var SCREENS = {
+  home: homeScreen, records: recordsScreen, scan: scanScreen, lens: lensScreen,
+  reminders: remindersScreen, medications: medicationsScreen, appointments: appointmentsScreen,
+  pending: pendingScreen, brief: briefScreen, addreading: addReadingScreen, trends: trendsScreen,
+  chat: function(){return placeholderScreen('chat');}, compare: compareScreen,
+  settings: function(){return placeholderScreen('settings');}, 'records-back': recordsScreen
+};
+
+function wireEvents(){
+  var el = document.getElementById('screen');
+  el.onclick = function(e){
+    var nav = e.target.closest('[data-nav]');
+    if (nav){ var k = nav.getAttribute('data-nav'); if (k==='records-back'){ state.reportOpen=null; go('records'); } else go(k); return; }
+    var openR = e.target.closest('[data-open-report]');
+    if (openR){ state.reportOpen = openR.getAttribute('data-open-report'); state.screen='records'; render(); return; }
+    var openM = e.target.closest('[data-open-metric]');
+    if (openM){ openMetric(openM.getAttribute('data-open-metric')); return; }
+    var closeM = e.target.closest('[data-close-modal]');
+    if (closeM){ state.modal=null; render(); return; }
+    var saveR = e.target.closest('[data-save-reading]');
+    if (saveR && !saveR.disabled){ saveReading(); render(); return; }
+    var ctx = e.target.closest('[data-ctx]');
+    if (ctx){ var c = ctx.getAttribute('data-ctx'); draft.ctx = draft.ctx===c?null:c; render(); return; }
+    var tgMed = e.target.closest('[data-toggle-med]');
+    if (tgMed){ var i = tgMed.getAttribute('data-toggle-med'); reports[1].meds[i].on = !reports[1].meds[i].on; render(); return; }
+    var mode = e.target.closest('[data-mode]');
+    if (mode){ state.trendsMode = mode.getAttribute('data-mode'); render(); return; }
+    var per = e.target.closest('[data-period]');
+    if (per){ state.trendsPeriod = per.getAttribute('data-period'); render(); return; }
+    var ts = e.target.closest('[data-toast]');
+    if (ts){ toast(ts.getAttribute('data-toast')); return; }
+  };
+  ['v1','v2','v3'].forEach(function(id){
+    var inp = document.getElementById(id);
+    if (inp) inp.oninput = function(){ draft[id] = inp.value; render();
+      // type=number inputs don't support setSelectionRange (throws in Chrome) — focus is enough,
+      // since a number field is typed left-to-right and the caret belongs at the end anyway.
+      var again = document.getElementById(id); if (again) again.focus(); };
+  });
+}
+
+render();
+})();
+</script>
